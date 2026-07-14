@@ -218,8 +218,8 @@ gemini
 | `/toh-test` | `/toh-t` | 🧪 **Test** - Auto test & fix จนผ่าน |
 | `/toh-protect` | `/toh-pt` | 🔐 **Security Audit** - ตรวจสอบความปลอดภัย `[NEW]` |
 | `/toh-connect` | `/toh-c` | 🔌 **เชื่อม Backend** - Supabase, Auth, RLS |
-| `/toh-line` | `/toh-l` | 💚 **LINE Mini App** - LIFF integration |
-| `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - Expo / React Native |
+| `/toh-line` | `/toh-l` | 💚 **LINE MINI App** (convert) |
+| `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - PWA / Capacitor |
 | `/toh-fix` | `/toh-f` | 🔧 **แก้ Bug** - Debug อย่างเป็นระบบ |
 | `/toh-ship` | `/toh-s` | 🚀 **Deploy** - Vercel, พร้อม Production |
 | `/toh-help` | `/toh-h` | ❓ **Help** - แสดงคำสั่งทั้งหมด |

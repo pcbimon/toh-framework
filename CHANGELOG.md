@@ -2,6 +2,32 @@
 
 All notable changes to Toh Framework will be documented in this file.
 
+## [2.0.0-beta.3] - 2026-07-14
+
+### 📱 Platform Commands: LINE MINI App & PWA-first Mobile
+
+Reframed the two platform commands around current, doc-driven stacks - convert-to-LINE-MINI-App and PWA-first mobile with Capacitor - and stripped the frozen SDK snippets in favor of pulling the current APIs from official docs.
+
+#### Changed
+
+- **`/toh-line` reframed to convert-to-LINE-MINI-App** - now a doc-driven conversion flow. Frames the channel as the newer **LINE MINI App** channel type (replacing the old LINE Login channel + separately-registered LIFF app; Thailand can create it since Mar 2026) while still using the **LIFF SDK (`@line/liff`)**. No frozen SDK version or pasted snippets - the current API is pulled from developers.line.biz.
+- **`/toh-mobile` switched from Expo to PWA-first + Capacitor** - default track is now an installable, offline-capable PWA that reuses the existing web app, then wraps it with **Capacitor** for native iOS/Android builds. Expo / React Native is demoted to a legacy note (only for an explicit fully-native rewrite).
+- **`platform-specialist` skill overhauled** to doc-pull checklists - removed the frozen LIFF / Expo / Tauri-v1 code and demoted Expo to a legacy note.
+- **`platform-adapter` agents updated** to the new platforms (LINE MINI App, PWA / Capacitor).
+
+#### Added
+
+- **Doc-driven rule** on both platform commands - pull the current SDK/API from official docs (developers.line.biz, capacitorjs.com) instead of freezing a version.
+- **PWA-first mobile track** - web app manifest + service worker path before any native wrapper.
+
+#### Technical Details
+
+- Propagated the new platform wording across the **Antigravity workflows** (`toh-line.md`, `toh-mobile.md`, `toh-help.md`), **Gemini CLI commands** (`line.toml`, `mobile.toml`, `help.toml`), routing skills (`vibe-orchestrator`, `smart-routing`), docs/help tables (README.md, docs/README-TH.md, `src/commands/toh-help.md`, `src/commands/README.md`, `USAGE-GUIDE.md`), and the installer handlers (`list.js`, `claude-code.js`, `cursor.js`, `codex.js`, `gemini-cli.js`).
+- Command / skill / agent counts unchanged (**14 / 23 / 8**) - this phase reframes existing commands, it adds none.
+- Version bumped to **2.0.0-beta.3**.
+
+---
+
 ## [2.0.0-beta.2] - 2026-07-14
 
 ### 🎨 Modern Stack & Principle-Based Design

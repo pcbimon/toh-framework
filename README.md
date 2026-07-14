@@ -238,8 +238,8 @@ gemini
 | `/toh-test` | `/toh-t` | 🧪 **Test** - Auto test & fix until pass |
 | `/toh-protect` | `/toh-pt` | 🔐 **Security Audit** - Full security check `[NEW]` |
 | `/toh-connect` | `/toh-c` | 🔌 **Connect Backend** - Supabase, Auth, RLS |
-| `/toh-line` | `/toh-l` | 💚 **LINE Mini App** - LIFF integration |
-| `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - Expo / React Native |
+| `/toh-line` | `/toh-l` | 💚 **LINE MINI App** (convert) |
+| `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - PWA / Capacitor |
 | `/toh-fix` | `/toh-f` | 🔧 **Fix Bugs** - Systematic debugging |
 | `/toh-ship` | `/toh-s` | 🚀 **Deploy** - Vercel, Production ready |
 | `/toh-help` | `/toh-h` | ❓ **Help** - Show all commands |

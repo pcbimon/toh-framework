@@ -145,16 +145,16 @@ Build first, ask forgiveness later. The goal is WORKING UI in FIRST response.
 - **Icons:** Lucide React
 - **Database:** Supabase (when needed)
 
-### LINE Mini App
+### LINE MINI App (convert existing web app)
 - **Base:** Next.js 16 + above stack
-- **LIFF:** @line/liff SDK
-- **Auth:** LIFF Login → Supabase custom auth
+- **SDK:** LIFF (`@line/liff`) - channel type is **LINE MINI App** (not the old LINE Login + LIFF-app setup)
+- **Auth:** LIFF login → Supabase custom auth
+- **Note:** pull the current SDK/API from developers.line.biz, don't freeze a version
 
 ### Mobile App
-- **Framework:** Expo (React Native)
-- **Navigation:** Expo Router
-- **Styling:** NativeWind (Tailwind for RN)
-- **Components:** React Native Paper
+- **Track 1 (default):** PWA - reuse the web app (manifest + service worker, installable + offline)
+- **Track 2:** Capacitor - wrap the built web output for native iOS/Android + native plugins
+- **Legacy:** Expo / React Native only when a fully-native rewrite is explicitly required
 
 ### Desktop App
 - **Framework:** Tauri (reuse Next.js web code)
@@ -205,8 +205,8 @@ USER PROMPT
 ┌─────────────────────────────────────┐
 │ STEP 1: Identify Platform           │
 │                                     │
-│ • "LINE" / "LIFF" → LINE Mini App   │
-│ • "mobile" / "app" → Expo           │
+│ • "LINE" / "LIFF" → LINE MINI App   │
+│ • "mobile" / "app" → PWA/Capacitor  │
 │ • "desktop" / "mac" → Tauri         │
 │ • Otherwise → Next.js Web (default) │
 └─────────────────────────────────────┘
@@ -379,8 +379,8 @@ Example: Read ui-first-builder, dev-engineer, and design-craft skills simultaneo
 | User Says | Platform | First Action |
 |-----------|----------|--------------|
 | "create todo app" | Web | Copy template → Generate UI |
-| "make LINE app for booking" | LINE | Copy LINE template → Add LIFF |
-| "build mobile expense tracker" | Expo | Copy Expo template → Generate screens |
+| "make LINE app for booking" | LINE | Convert web app → add LIFF (LINE MINI App) |
+| "build mobile expense tracker" | Mobile | PWA-first → wrap with Capacitor |
 | "create mac app" | Tauri | Copy Tauri template → Generate UI |
 | "connect database" | - | Spawn Backend Connector |
 | "improve design" | - | Spawn Design Reviewer |

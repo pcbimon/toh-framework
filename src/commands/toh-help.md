@@ -46,8 +46,8 @@ When user calls `/toh-help`, display the following:
 | `/toh-design` | `/toh-ds` | ✨ **Polish Design** - Make it beautiful, not AI-looking |
 | `/toh-test` | `/toh-t` | 🧪 **Test** - Auto test & fix |
 | `/toh-connect` | `/toh-c` | 🔌 **Connect Backend** - Supabase, Auth, RLS |
-| `/toh-line` | `/toh-l` | 💚 **LINE Mini App** - LIFF integration |
-| `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - Expo / React Native |
+| `/toh-line` | `/toh-l` | 💚 **LINE MINI App** (convert) |
+| `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - PWA / Capacitor |
 | `/toh-fix` | `/toh-f` | 🔧 **Fix Bug** - Evidence-first debug: prove the root cause before touching code |
 | `/toh-ship` | `/toh-s` | 🚀 **Deploy** - Vercel, Production ready |
 | `/toh-protect` | `/toh-pr` | 🔐 **Security Audit** - Full security check |

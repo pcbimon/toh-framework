@@ -16,8 +16,8 @@ export async function list() {
     { cmd: '/toh-design', short: '/toh-ds', desc: 'ปรับ Design - ทำให้สวย ไม่ดูเหมือน AI', icon: '✨' },
     { cmd: '/toh-test', short: '/toh-t', desc: 'ทดสอบระบบ - Auto test & fix จนผ่าน', icon: '🧪' },
     { cmd: '/toh-connect', short: '/toh-c', desc: 'เชื่อม Backend - Supabase, Auth, RLS', icon: '🔌' },
-    { cmd: '/toh-line', short: '/toh-l', desc: 'LINE Mini App - LIFF integration', icon: '💚' },
-    { cmd: '/toh-mobile', short: '/toh-m', desc: 'Mobile App - Expo / React Native', icon: '📱' },
+    { cmd: '/toh-line', short: '/toh-l', desc: 'LINE MINI App - convert (LIFF SDK)', icon: '💚' },
+    { cmd: '/toh-mobile', short: '/toh-m', desc: 'Mobile App - PWA / Capacitor', icon: '📱' },
     { cmd: '/toh-fix', short: '/toh-f', desc: 'แก้ Bug - Debug และ fix issues', icon: '🔧' },
     { cmd: '/toh-ship', short: '/toh-s', desc: 'Deploy - Vercel, Production ready', icon: '🚀' }
   ];
@@ -57,7 +57,7 @@ export async function list() {
     { name: 'design-craft', desc: 'Principle-based design system และ anti-patterns' },
     { name: 'test-engineer', desc: 'Testing strategy และ Playwright' },
     { name: 'backend-engineer', desc: 'Supabase, RLS, Auth' },
-    { name: 'platform-specialist', desc: 'LINE, Expo, Tauri' }
+    { name: 'platform-specialist', desc: 'LINE MINI App, PWA/Capacitor, Tauri' }
   ];
 
   for (const s of skills) {

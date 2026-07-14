@@ -344,8 +344,8 @@ If user writes in Thai, respond in Thai.
 | \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve design |
 | \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Auto test & fix |
 | \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Supabase |
-| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE Mini App |
-| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Expo / React Native |
+| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App (convert) |
+| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | PWA / Capacitor |
 | \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
 | \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
 | \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
@@ -394,8 +394,8 @@ User: toh ui dashboard
 | \`/toh-design\` | Improve Design - Make it look professional |
 | \`/toh-test\` | Test system - Auto test & fix until passing |
 | \`/toh-connect\` | Connect Backend - Supabase, Auth, RLS |
-| \`/toh-line\` | LINE Mini App - LIFF integration |
-| \`/toh-mobile\` | Mobile App - Expo / React Native |
+| \`/toh-line\` | LINE MINI App - convert (LIFF SDK) |
+| \`/toh-mobile\` | Mobile App - PWA / Capacitor |
 | \`/toh-fix\` | Fix bugs - Debug and fix issues |
 | \`/toh-ship\` | Deploy - Vercel, Production ready |
 | \`/toh-protect\` | Security audit - Full security check |
@@ -649,8 +649,8 @@ If user types in English, respond in English
 | \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve design |
 | \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Auto test & fix |
 | \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Supabase |
-| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE Mini App |
-| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App |
+| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App (convert) |
+| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App (PWA / Capacitor) |
 | \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
 | \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
 | \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
@@ -699,8 +699,8 @@ User: toh ui dashboard
 | \`/toh-design\` | Polish Design - Make it beautiful, not AI-looking |
 | \`/toh-test\` | Test system - Auto test & fix until pass |
 | \`/toh-connect\` | Connect Backend - Supabase, Auth, RLS |
-| \`/toh-line\` | LINE Mini App - LIFF integration |
-| \`/toh-mobile\` | Mobile App - Expo / React Native |
+| \`/toh-line\` | LINE MINI App - convert (LIFF SDK) |
+| \`/toh-mobile\` | Mobile App - PWA / Capacitor |
 | \`/toh-fix\` | Fix Bug - Debug and fix issues |
 | \`/toh-ship\` | Deploy - Vercel, Production ready |
 | \`/toh-protect\` | 🔐 Security Audit - Full security check |

@@ -1,11 +1,16 @@
 ---
 name: root-cause-debugger
-type: sub-agent
-description: >
+description: |
   Investigation specialist that finds and PROVES the root cause of a bug before any code is changed.
-  Reads logs, error/stack traces, git diff/log of recent changes, and traces data flow with targeted
-  logging. Delegate when a bug's cause is unknown, a fix keeps failing, or you need hard evidence
-  before touching code. Reports the root cause with evidence and where to fix it - does NOT edit code itself.
+  Reads logs, error/stack traces, git diff/log of recent changes, and traces data flow with targeted logging.
+  Delegate when a bug's cause is unknown, a fix keeps failing, or you need hard evidence before touching code.
+  Reports the root cause with evidence and where to fix it - does NOT edit code itself.
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
+model: sonnet
 skills:
   - debug-protocol
   - error-handling

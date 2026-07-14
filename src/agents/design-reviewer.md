@@ -7,8 +7,7 @@ description: >
   AI-generated UIs look human-crafted. Self-correcting and meticulous.
   Now includes PREMIUM verification: animations, multi-page, zero errors.
 skills:
-  - design-excellence         # Core design principles
-  - design-mastery           # 🎨 Smart design by business type
+  - design-craft             # 🎨 Universal design principles + Anti-AI
   - premium-experience       # 🌟 Multi-page, animations, WOW factor
   - response-format          # 📝 MANDATORY: 3-section response format
   - smart-suggestions        # 💡 Next step suggestions
@@ -191,27 +190,26 @@ Confirm: "✅ Memory saved"
 ┌─────────────────────────────────────────────────────────────────┐
 │ PHASE 0: LOAD DESIGN PROFILE (CRITICAL!)                        │
 ├─────────────────────────────────────────────────────────────────┤
-│ 🎨 MUST read design-mastery skill FIRST!                        │
+│ 🎨 MUST read design-craft skill FIRST!                          │
 │                                                                 │
-│ 1. Read Design Mastery Skill                                    │
-│    └── src/skills/design-mastery/SKILL.md                       │
+│ 1. Read Design Craft Skill                                      │
+│    └── src/skills/design-craft/SKILL.md                         │
 │                                                                 │
-│ 2. Detect Business Type from Memory/Project                     │
+│ 2. Understand Business Context (analysis angle, NOT a lookup)   │
 │    ├── Check .toh/memory/summary.md → project description       │
-│    ├── Extract keywords (e.g., "shop", "dashboard", "AI")       │
-│    └── Match to Business Profile Registry                       │
+│    ├── Brand mood + audience + job-to-be-done                   │
+│    └── References: how do real apps in this space look?         │
 │                                                                 │
-│ 3. Load Design Profile                                          │
-│    ├── Colors → profile.tokens.colors                           │
-│    ├── Typography → profile.tokens.typography                   │
-│    ├── Patterns → profile.patterns                              │
-│    └── Anti-patterns → profile.anti_patterns                    │
+│ 3. Apply the 6 Principles                                       │
+│    ├── Typography-first hierarchy (weight/size, not color)      │
+│    ├── Neutral surface + ONE accent (~90% neutral)              │
+│    ├── Restraint = premium · Density to match real work         │
+│    └── Real content · Craft details (focus/empty/loading/error) │
 │                                                                 │
 │ Example:                                                        │
-│    Project: "ร้านกาแฟ online"                                   │
-│    Keywords: ["ร้าน", "กาแฟ"]                                   │
-│    Profile: food-restaurant                                     │
-│    Expected: Red primary, Playfair font, warm feel              │
+│    Project: "ร้านกาแฟ online" → warm, appetite, welcoming       │
+│    Decision: pick ONE warm accent + real menu content,          │
+│              NOT a cloned "food = orange" template look          │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -244,7 +242,7 @@ Confirm: "✅ Memory saved"
 │ □ Layout follows profile patterns?                              │
 │ □ Profile-specific anti-patterns avoided?                       │
 │                                                                 │
-│ AI Red Flags Checklist (from design-mastery):                   │
+│ AI Red Flags Checklist (from design-craft):                     │
 │ □ Purple/violet used as primary? (unless gaming/creative)       │
 │ □ Gradient on white background?                                 │
 │ □ rounded-3xl everywhere?                                       │
@@ -348,6 +346,42 @@ Confirm: "✅ Memory saved"
 │ ⚠️ NEVER skip any section! User must know exactly what to do.  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+## Anti-AI Checklist
+
+Scan the UI and flag **every** item below. For each hit, point to the exact file/line and
+say **why it reads as AI** — then fix it. This supersedes the inline PHASE-2 red-flags box.
+
+```text
+□ Generic purple / purple-blue gradient as primary
+   → ลายเซ็น AI ชัดสุด. Every AI tool ships this. Use ONE brand-fit accent (solid).
+
+□ Glassmorphism (backdrop-blur + bg-white/10 floating panels)
+   → trend เกร่อ + perf แย่. Use a solid surface + thin border.
+
+□ Heavy / over-complicated shadows (stacked, dark, shadow-2xl everywhere)
+   → bootstrap-era. Use shadow-sm, hover → shadow-md.
+
+□ Border-radius over 12px (rounded-3xl on every container)
+   → thoughtless. Vary: inputs rounded-md, cards rounded-lg/xl, avatars rounded-full.
+
+□ Emoji in UI headers (<h1>Dashboard 🚀</h1>)
+   → looks unprofessional. Plain text headings.
+
+□ Over-the-top marketing copy ("Supercharge your workflow!")
+   → demo-speak. Use real, specific product language.
+
+□ Animation longer than 200ms / bounce / heavy spring
+   → feels cheap. 150-200ms ease-out, subtle.
+
+□ Pure black text (#000 / text-black)
+   → harsh. Use --foreground / neutral-900.
+
+□ Lorem ipsum / placeholder content ("Item 1", "Welcome back, User!")
+   → screams template. Use realistic domain content + designed empty states.
+```
+
+If a design passes ALL boxes above AND the design-craft review checklist → it's ready.
 
 ## AI Red Flags & Fixes
 

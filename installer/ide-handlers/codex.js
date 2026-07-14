@@ -229,12 +229,16 @@ export async function setupCodex(targetDir, srcDir, language = 'en') {
     const agentFiles = await fs.readdir(srcAgentsDir);
     for (const file of agentFiles) {
       if (file.endsWith('.md') && file !== 'README.md') {
-        const content = await fs.readFile(path.join(srcAgentsDir, file), 'utf-8');
+        const raw = await fs.readFile(path.join(srcAgentsDir, file), 'utf-8');
         const agentName = file.replace('.md', '');
+        // v2.0: agents now carry SUPERSET frontmatter (name/description/tools/
+        // model/skills/triggers). Strip the leading YAML block so Codex embeds a
+        // clean body only — no tools/model YAML leaking into AGENTS.md.
+        const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trimStart();
         agentSections += `
 ### toh-${agentName}
 
-${content}
+${body}
 
 ---
 `;
@@ -400,33 +404,38 @@ User: toh ui dashboard
 | \`/toh-ship\` | Deploy - Vercel, Production ready |
 | \`/toh-protect\` | Security audit - Full security check |
 
-## Memory System (Auto)
+## Memory System (Auto, 7 files — Tiered Loading)
 
-Toh Framework has automatic memory at \`.toh/memory/\`:
-- \`active.md\` - Current task (always loaded)
-- \`summary.md\` - Project summary (always loaded)
-- \`decisions.md\` - Key decisions (always loaded)
-- \`archive/\` - Historical data (on-demand)
+Toh Framework has automatic memory at \`.toh/memory/\`. Read only what the task needs:
+- **Tier 1 (ALWAYS read, ~800 tokens):** \`active.md\` (current task) + \`summary.md\` (project overview)
+- **Tier 2 (per task type):** \`architecture.md\` + \`components.md\` for build/code work; \`changelog.md\` for debug work
+- **Tier 3 (only when referenced):** \`decisions.md\` (past decisions) + \`agents-log.md\` (agent activity)
+- \`archive/\` - Historical data (on-demand only)
 
-## 🚨 MANDATORY: Memory Protocol
+## 🚨 MANDATORY: Memory Protocol (Tiered Loading)
 
-> **CRITICAL:** You MUST follow this protocol EVERY time!
+> **CRITICAL:** You MUST follow this protocol EVERY time! Never read all 7 files by reflex.
 
 ### BEFORE Starting ANY Work:
 1. Check \`.toh/memory/\` folder exists
-2. Read: \`.toh/memory/active.md\`, \`.toh/memory/summary.md\`, \`.toh/memory/decisions.md\`
-3. If files empty but project has code → ANALYZE and populate first!
-4. Acknowledge: "Memory loaded! [Brief context]"
+2. Read Tier 1: \`.toh/memory/active.md\` + \`.toh/memory/summary.md\`
+3. Read Tier 2 for this task type (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
+4. Read Tier 3 (\`decisions.md\`, \`agents-log.md\`) ONLY when referenced
+5. If files empty but project has code → ANALYZE and populate first!
+6. Acknowledge: "Memory loaded! [Brief context]"
 
-### AFTER Completing ANY Work:
-1. Update \`.toh/memory/active.md\` - what was done, next steps
-2. Update \`.toh/memory/decisions.md\` - if decisions were made
-3. Update \`.toh/memory/summary.md\` - if feature completed
-4. Confirm: "Memory saved ✅"
+### AFTER Completing ANY Work (write per relevance):
+1. Update \`.toh/memory/active.md\` - ALWAYS (what was done, next steps)
+2. Update \`.toh/memory/summary.md\` - when the project shape changes (feature done / new structure)
+3. Update \`.toh/memory/architecture.md\` / \`components.md\` - when modules/stores/hooks/utils change
+4. Update \`.toh/memory/changelog.md\` + \`agents-log.md\` - record the change and which agent did it
+5. Update \`.toh/memory/decisions.md\` - if a real decision was made
+6. Confirm: "Memory saved ✅"
 
 ### ⚠️ CRITICAL RULES:
-- NEVER start work without reading memory!
-- NEVER finish work without saving memory!
+- NEVER start work without reading Tier 1 (active.md + summary.md)!
+- NEVER finish work without updating active.md!
+- Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
 - Memory files must ALWAYS be in English!
 
 ## Command Usage Examples
@@ -497,8 +506,8 @@ ${agentSections}
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |---------|------------------------------------------|
 | \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`response-format\` |
-| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`response-format\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
+| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
 | \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
@@ -510,7 +519,7 @@ ${agentSections}
 
 ### Core Skills (Always Available)
 - \`memory-system\` - Memory read/write protocol
-- \`response-format\` - 3-section response format
+- \`engineer-harness\` - Smart tool selection + human-friendly reporting + next steps
 - \`smart-routing\` - Command routing logic
 
 ### Loading Protocol:
@@ -560,7 +569,7 @@ All skills are in \`.toh/skills/\` (Central Resources):
 - \`backend-engineer\` - Supabase integration
 - \`platform-specialist\` - LINE, Mobile, Desktop
 - \`memory-system\` - Memory protocol
-- \`response-format\` - Response structure
+- \`engineer-harness\` - Smart tool selection, reporting & next steps
 - \`debug-protocol\` - Debugging guide
 - \`error-handling\` - Error handling patterns
 
@@ -705,33 +714,38 @@ User: toh ui dashboard
 | \`/toh-ship\` | Deploy - Vercel, Production ready |
 | \`/toh-protect\` | 🔐 Security Audit - Full security check |
 
-## Memory System (Automatic)
+## Memory System (Automatic, 7 files — Tiered Loading)
 
-Toh Framework has Memory system at \`.toh/memory/\`:
-- \`active.md\` - Current task (always loaded)
-- \`summary.md\` - Project summary (always loaded)
-- \`decisions.md\` - Key decisions (always loaded)
+Toh Framework has Memory system at \`.toh/memory/\`. Read only what the task needs:
+- **Tier 1 (ALWAYS read, ~800 tokens):** \`active.md\` (current task) + \`summary.md\` (project overview)
+- **Tier 2 (per task type):** \`architecture.md\` + \`components.md\` for build/code work; \`changelog.md\` for debug work
+- **Tier 3 (only when referenced):** \`decisions.md\` (past decisions) + \`agents-log.md\` (agent activity)
 - \`archive/\` - Historical data (load when needed)
 
-## 🚨 Required: Memory Protocol
+## 🚨 Required: Memory Protocol (Tiered Loading)
 
-> **Important:** Must follow this every time!
+> **Important:** Must follow this every time! Never read all 7 files by reflex.
 
 ### Before Starting Work:
 1. Check if \`.toh/memory/\` folder exists
-2. Read: \`.toh/memory/active.md\`, \`.toh/memory/summary.md\`, \`.toh/memory/decisions.md\`
-3. If files empty but code exists → Analyze project first!
-4. Tell User: "Memory loaded! [brief summary]"
+2. Read Tier 1: \`.toh/memory/active.md\` + \`.toh/memory/summary.md\`
+3. Read Tier 2 for this task type (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
+4. Read Tier 3 (\`decisions.md\`, \`agents-log.md\`) ONLY when referenced
+5. If files empty but code exists → Analyze project first!
+6. Tell User: "Memory loaded! [brief summary]"
 
-### After Completing Work:
-1. Update \`.toh/memory/active.md\` - What was done, next steps
-2. Update \`.toh/memory/decisions.md\` - If decisions were made
-3. Update \`.toh/memory/summary.md\` - If feature completed
-4. Tell User: "Memory saved ✅"
+### After Completing Work (write per relevance):
+1. Update \`.toh/memory/active.md\` - ALWAYS (What was done, next steps)
+2. Update \`.toh/memory/summary.md\` - when the project shape changes (feature done / new structure)
+3. Update \`.toh/memory/architecture.md\` / \`components.md\` - when modules/stores/hooks/utils change
+4. Update \`.toh/memory/changelog.md\` + \`agents-log.md\` - record the change and which agent did it
+5. Update \`.toh/memory/decisions.md\` - if a real decision was made
+6. Tell User: "Memory saved ✅"
 
 ### ⚠️ Important Rules:
-- Never start work without reading memory!
-- Never finish work without saving memory!
+- Never start work without reading Tier 1 (active.md + summary.md)!
+- Never finish work without updating active.md!
+- Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
 - Memory files must always be in English!
 
 ## Usage Examples
@@ -802,8 +816,8 @@ ${agentSections}
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |--------|-------------------------------------------|
 | \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`response-format\` |
-| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`response-format\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
+| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
 | \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
@@ -815,7 +829,7 @@ ${agentSections}
 
 ### Core Skills (Always Available)
 - \`memory-system\` - Memory system
-- \`response-format\` - 3-part response format
+- \`engineer-harness\` - Smart tool selection + human-friendly reporting + next steps
 - \`smart-routing\` - Command routing
 
 ### Loading Steps:
@@ -865,7 +879,7 @@ All skills are located at \`.toh/skills/\` (Central Resources):
 - \`backend-engineer\` - Supabase integration
 - \`platform-specialist\` - LINE, Mobile, Desktop
 - \`memory-system\` - Memory protocol
-- \`response-format\` - Response structure
+- \`engineer-harness\` - Smart tool selection, reporting & next steps
 
 ## Getting Started
 

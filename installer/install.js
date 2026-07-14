@@ -554,7 +554,7 @@ function printNextSteps(config) {
   console.log(mid);
   console.log(row(chalk.bold.yellow(pad("  What's New in v1.8.1:"))));
   console.log(row(chalk.white(pad('  * Google Antigravity Workflows - Full support!'))));
-  console.log(row(chalk.white(pad('  * 7-File Memory System - changelog + agents-log'))));
+  console.log(row(chalk.white(pad('  * 7-File Memory System - tiered loading'))));
   console.log(row(chalk.white(pad('  * Agent Announcements - See which agent is working'))));
   console.log(bot);
   console.log('');

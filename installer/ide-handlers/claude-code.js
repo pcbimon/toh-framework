@@ -6,6 +6,7 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import fs from 'fs-extra';
+import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -36,24 +37,61 @@ export async function setupClaudeCode(targetDir, language = 'en') {
       await fs.copy(join(tohDir, 'skills'), join(claudeDir, 'skills'), { overwrite: true });
     }
     
-    // v4.0: Copy subagents (Claude Code native format) to .claude/agents/
-    // Subagents are in .toh/agents/subagents/ and need to be at root of .claude/agents/
-    const subagentsDir = join(tohDir, 'agents', 'subagents');
-    if (fs.existsSync(subagentsDir)) {
-      // Copy subagent files directly to .claude/agents/ (not in a subfolder)
-      const subagentFiles = await fs.readdir(subagentsDir);
-      for (const file of subagentFiles) {
-        if (file.endsWith('.md')) {
-          await fs.copy(
-            join(subagentsDir, file),
-            join(claudeDir, 'agents', file),
-            { overwrite: true }
+    // v2.0: Agents are now a SINGLE source in .toh/agents/*.md. Each file carries
+    // a SUPERSET frontmatter (name, description, tools, model, skills, triggers).
+    // The old nested per-IDE agent folder no longer exists. Claude Code only
+    // understands the NATIVE keys, so transform every top-level agent file:
+    //   1. read the file and split off the YAML frontmatter
+    //   2. parse it with js-yaml
+    //   3. keep ONLY name/description/tools/model (DROP type/skills/triggers)
+    //   4. re-serialize with js-yaml (multi-line description stays a block scalar)
+    //   5. write .claude/agents/<name>.md with the native frontmatter + body
+    // NOTE: never inject a default tool list — that would widen restricted agents
+    // like root-cause-debugger (Read/Grep/Glob/Bash, no Write/Edit).
+    const agentsSrcDir = join(tohDir, 'agents');
+    if (fs.existsSync(agentsSrcDir)) {
+      const agentFiles = await fs.readdir(agentsSrcDir);
+      for (const file of agentFiles) {
+        // Only top-level agent .md files (skip README + any nested dirs)
+        if (!file.endsWith('.md') || file === 'README.md') continue;
+        const srcPath = join(agentsSrcDir, file);
+        if (!(await fs.stat(srcPath)).isFile()) continue;
+
+        const raw = await fs.readFile(srcPath, 'utf8');
+        const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+
+        // No frontmatter → copy through unchanged (defensive)
+        if (!fmMatch) {
+          await fs.writeFile(join(claudeDir, 'agents', file), raw);
+          continue;
+        }
+
+        // Per-file guard: a single malformed agent frontmatter must NOT abort the
+        // whole Claude Code install. On parse/transform failure, copy through the
+        // original file unchanged so the remaining agents (and every later install
+        // step) still complete.
+        try {
+          const parsed = yaml.load(fmMatch[1]) || {};
+          const body = fmMatch[2];
+
+          // Keep ONLY Claude-native keys, in order: name, description, tools, model.
+          const nativeFm = {};
+          if (parsed.name !== undefined) nativeFm.name = parsed.name;
+          if (parsed.description !== undefined) nativeFm.description = parsed.description;
+          if (parsed.tools !== undefined) nativeFm.tools = parsed.tools; // omit if absent (never widen)
+          nativeFm.model = parsed.model || 'sonnet';                     // default sonnet if missing
+
+          const fmYaml = yaml.dump(nativeFm, { lineWidth: -1, noRefs: true }).trimEnd();
+          const outName = `${parsed.name || file.replace(/\.md$/, '')}.md`;
+          await fs.writeFile(
+            join(claudeDir, 'agents', outName),
+            `---\n${fmYaml}\n---\n${body}`
           );
+        } catch (agentErr) {
+          // Fallback: copy-through unchanged so one bad agent can't break install.
+          await fs.writeFile(join(claudeDir, 'agents', file), raw);
         }
       }
-    } else if (fs.existsSync(join(tohDir, 'agents'))) {
-      // Fallback: copy all agents if no subagents folder
-      await fs.copy(join(tohDir, 'agents'), join(claudeDir, 'agents'), { overwrite: true });
     }
     if (fs.existsSync(join(tohDir, 'commands'))) {
       await fs.copy(join(tohDir, 'commands'), join(claudeDir, 'commands'), { overwrite: true });
@@ -534,9 +572,10 @@ User: /toh-p create an e-commerce platform
 → Execute /toh-plan command to analyze and plan the project
 \`\`\`
 
-## 🚨 MANDATORY: Memory Protocol
+## 🚨 MANDATORY: Memory Protocol (Tiered Loading)
 
-> **CRITICAL:** You MUST follow this protocol EVERY time. No exceptions!
+> **CRITICAL:** You MUST follow this protocol EVERY time. Read only what the task
+> needs — never read all 7 files by reflex.
 
 ### BEFORE Starting ANY Work:
 
@@ -553,51 +592,54 @@ STEP 2: Check if memory files have real data
         │   └── Then continue working
         └── Files have data? → Continue to Step 3
 
-STEP 3: Selective Read (load these 3 files)
-        ├── .claude/memory/active.md     (~500 tokens)
-        ├── .claude/memory/summary.md    (~1,000 tokens)
-        └── .claude/memory/decisions.md  (~500 tokens)
+STEP 3: Tiered Read (load only what the task needs)
+        ├── Tier 1 — ALWAYS read (~800 tokens)
+        │   ├── .claude/memory/active.md    (current task)
+        │   └── .claude/memory/summary.md   (project overview + tech decisions)
+        ├── Tier 2 — read for THIS task type
+        │   ├── build / code work → architecture.md + components.md
+        │   └── debug work         → changelog.md
+        └── Tier 3 — read ONLY when referenced
+            ├── decisions.md    (past decisions — when a decision is questioned)
+            └── agents-log.md   (other agents' activity — when coordinating)
         ⚠️ DO NOT read archive/ unless user asks about history!
 
 STEP 4: Acknowledge to User
         (Use appropriate language based on project settings)
 \`\`\`
 
-### AFTER Completing ANY Work:
+### AFTER Completing ANY Work (write per relevance):
 
 \`\`\`
-STEP 1: Update active.md (ALWAYS!)
-        ├── Current Focus → What was just done
-        ├── In Progress → [x] Mark completed items
-        ├── Just Completed → Add what you just finished
-        └── Next Steps → What should be done next
-
-STEP 2: Update decisions.md (if any decisions were made)
-        └── Add row: | Date | Decision | Reason |
-
-STEP 3: Update summary.md (if feature completed)
-        └── Add to Completed Features list
-
-STEP 4: Confirm to User
-        └── Confirm memory was saved (in project's language)
+active.md      → ALWAYS (Current Focus, Just Completed, Next Steps)
+summary.md     → when the project shape changes (feature done, new structure)
+architecture.md / components.md → when modules / stores / hooks / utils change
+changelog.md   → record the change made this session
+agents-log.md  → record which agent did what
+decisions.md   → when a real decision was made
 \`\`\`
 
 ### ⚠️ CRITICAL RULES:
 
-1. **NEVER start work without reading memory first!**
-2. **NEVER finish work without saving memory!**
+1. **NEVER start work without reading Tier 1 (active.md + summary.md) first!**
+2. **NEVER finish work without updating active.md!**
 3. **NEVER ask user "should I save memory?" - just do it automatically!**
 4. **If memory files are empty but project has code → ANALYZE and populate first!**
+5. **Read Tier 2 / Tier 3 only when the task type or a reference calls for it.**
 
-### Memory Structure:
+### Memory Structure (7 files, tiered reads):
 
 \`\`\`
 .claude/
 └── memory/
-    ├── active.md     # Current task (always loaded)
-    ├── summary.md    # Project summary (always loaded)
-    ├── decisions.md  # Key decisions (always loaded)
-    └── archive/      # Historical data (on-demand only)
+    ├── active.md        # Tier 1 — always read (current task)
+    ├── summary.md       # Tier 1 — always read (project overview)
+    ├── architecture.md  # Tier 2 — build/code work
+    ├── components.md    # Tier 2 — build/code work
+    ├── changelog.md     # Tier 2 — debug work
+    ├── decisions.md     # Tier 3 — read when referenced
+    ├── agents-log.md    # Tier 3 — read when referenced
+    └── archive/         # Historical data (on-demand only)
 \`\`\`
 
 ## Behavior Rules
@@ -763,8 +805,8 @@ After Vibe Mode completes, user gets:
 | Command | Load These Skills (from \`.claude/skills/\`) | Delegate To (from \`.claude/agents/\`) |
 |---------|------------------------------------------|-----------------------------------|
 | \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\` | \`ui-builder.md\` + \`dev-builder.md\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`response-format\` | \`ui-builder.md\` |
-| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`response-format\` | \`dev-builder.md\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` | \`ui-builder.md\` |
+| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` | \`dev-builder.md\` |
 | \`/toh-design\` | \`design-craft\`, \`premium-experience\` | \`design-reviewer.md\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` | \`test-runner.md\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` | \`backend-connector.md\` |
@@ -777,7 +819,7 @@ After Vibe Mode completes, user gets:
 ### Core Skills (Always Available)
 These skills apply to ALL commands:
 - \`memory-system\` - Memory read/write protocol
-- \`response-format\` - 3-section response format
+- \`engineer-harness\` - Smart tool selection + human-friendly reporting + next steps
 - \`smart-routing\` - Command routing logic
 
 ### Loading Protocol:
@@ -797,7 +839,7 @@ STEP 3: Read the corresponding agent file(s)
         ↓
 STEP 4: Execute following skill + agent instructions
         ↓
-STEP 5: Use 3-section response format (from response-format skill)
+STEP 5: Report using the engineer-harness skill (human-friendly report + next steps)
         ↓
 STEP 6: Save memory (from memory-system skill)
 \`\`\`

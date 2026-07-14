@@ -223,7 +223,7 @@ AI should adapt the template based on user's additional input.
 
 This skill works with:
 - `ui-first-builder` - Creates UI based on business template
-- `smart-suggestions` - Suggests next steps based on business type
+- `engineer-harness` - Suggests next steps based on business type
 - `integrations` - Recommends relevant integrations (e.g., payment for e-commerce)
 
 ---

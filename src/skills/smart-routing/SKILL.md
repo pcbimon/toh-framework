@@ -225,17 +225,17 @@ Request arrives
 
 | Detected Intent | Skills to Load |
 |-----------------|----------------|
-| New Project | vibe-orchestrator, design-craft, business-context, response-format |
-| Create UI | ui-first-builder, design-craft, response-format |
-| Add Logic | dev-engineer, error-handling, response-format |
-| Fix Bug | debug-protocol, error-handling, response-format |
-| Connect Backend | backend-engineer, integrations, response-format |
-| Improve Design | design-craft, response-format |
-| AI/Chatbot | prompt-optimizer, dev-engineer, response-format |
-| Testing | test-engineer, error-handling, response-format |
-| Planning | plan-orchestrator, business-context, response-format |
+| New Project | vibe-orchestrator, design-craft, business-context, engineer-harness |
+| Create UI | ui-first-builder, design-craft, engineer-harness |
+| Add Logic | dev-engineer, error-handling, engineer-harness |
+| Fix Bug | debug-protocol, error-handling, engineer-harness |
+| Connect Backend | backend-engineer, integrations, engineer-harness |
+| Improve Design | design-craft, engineer-harness |
+| AI/Chatbot | prompt-optimizer, dev-engineer, engineer-harness |
+| Testing | test-engineer, error-handling, engineer-harness |
+| Planning | plan-orchestrator, business-context, engineer-harness |
 
-**Note:** `response-format` skill is ALWAYS loaded for proper output formatting.
+**Note:** `engineer-harness` skill is ALWAYS loaded for proper output formatting and next-step suggestions.
 
 ---
 
@@ -341,7 +341,7 @@ Action: Ask "What would you like me to fix? Please describe the issue."
 2. **Confidence drives action** - Trust the scoring system
 3. **Plan Agent is your friend** - When in doubt, route to Plan
 4. **IDE awareness matters** - Parallel only in Claude Code
-5. **response-format always loaded** - Every response needs 3 sections
+5. **engineer-harness always loaded** - Every response needs 3 sections + next steps
 
 ---
 

@@ -10,7 +10,7 @@ description: >
 related_skills:
   - design-craft           # Principle-based design (system + business fit)
   - premium-experience     # Multi-page, animations, WOW factor
-  - response-format        # 3-section response
+  - engineer-harness       # 3-section response + tool rules + next steps
 ---
 
 # Vibe Orchestrator v2.0
@@ -44,7 +44,7 @@ Master brain for Lovable-style development workflow. Transform any idea into a
 Before ANY work, read these skills in parallel:
 1. `src/skills/premium-experience/SKILL.md` - Multi-page & animations
 2. `src/skills/design-craft/SKILL.md` - Principle-based design (system + business fit)
-3. `src/skills/response-format/SKILL.md` - 3-section response
+3. `src/skills/engineer-harness/SKILL.md` - 3-section response + tool rules + next steps
 </premium_philosophy>
 
 <memory_protocol>

@@ -150,7 +150,7 @@ Symptom → สืบหาสาเหตุ → พิสูจน์ (ไม�
 | Skill | ใช้ร่วมกันยังไง |
 |-------|----------------|
 | `error-handling` | debug สำหรับ error ที่ auto-fix ไม่ได้ |
-| `response-format` | รายงานผล: Problem → Root cause → Fix → Proof → Prevention |
+| `engineer-harness` | รายงานผล: Problem → Root cause → Fix → Proof → Prevention |
 | agent `root-cause-debugger` | delegate การสืบสวนเมื่อร่องรอยตัน |
 
 ---

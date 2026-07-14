@@ -2,6 +2,32 @@
 
 All notable changes to Toh Framework will be documented in this file.
 
+## [2.0.0-beta.2] - 2026-07-14
+
+### 🎨 Modern Stack & Principle-Based Design
+
+Refreshed the default template stack to the current generation and collapsed two overlapping design skills into a single principle-based one.
+
+#### Changed
+
+- **Template stack upgraded** to **Next.js 16 / React 19 / Tailwind 4** - `globals.css` migrated to the Tailwind 4 `@theme` directive and `forwardRef` removed (React 19 passes `ref` as a regular prop).
+- **`design-mastery` + `design-excellence` merged** into a single principle-based **`design-craft`** skill - dropped the hardcoded per-business color registry in favor of deriving design personality from business context.
+
+#### Added
+
+- **`design-craft` skill** - one principle-based design skill covering design system, anti-patterns, and business-appropriate fit.
+- **Anti-AI checklist** in `design-reviewer` to catch generic "AI generated" tells.
+- **`dev-engineer` rule** to check the latest stable version (`npm view`) before pinning dependencies instead of hardcoding versions.
+
+#### Technical Details
+
+- Skill count updated **24 → 23** (two design skills merged into one) across README.md, docs/README-TH.md, and `src/commands/toh-help.md`.
+- All `design-mastery` / `design-excellence` references repointed to **`design-craft`** across agents, commands, skills, Antigravity workflows, Gemini CLI commands, and the installer handlers.
+- Stale `Next.js 14` stack mentions updated to `Next.js 16`.
+- Version bumped to **2.0.0-beta.2**.
+
+---
+
 ## [2.0.0-beta.1] - 2026-07-14
 
 ### 🎯 Intent-Based Orchestration & Evidence-First Debugging

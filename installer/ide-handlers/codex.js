@@ -496,10 +496,10 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |---------|------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-mastery\`, \`ui-first-builder\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-excellence\`, \`response-format\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`response-format\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`response-format\` |
-| \`/toh-design\` | \`design-mastery\`, \`design-excellence\`, \`premium-experience\` |
+| \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
 | \`/toh-plan\` | \`plan-orchestrator\`, \`business-context\`, \`smart-routing\` |
@@ -554,8 +554,7 @@ All skills are in \`.toh/skills/\` (Central Resources):
 - \`vibe-orchestrator\` - Core methodology
 - \`ui-first-builder\` - UI patterns
 - \`dev-engineer\` - TypeScript, State, Forms
-- \`design-excellence\` - Design system
-- \`design-mastery\` - 13 business design profiles
+- \`design-craft\` - Design system, anti-patterns & business-appropriate fit
 - \`premium-experience\` - Premium multi-page apps
 - \`test-engineer\` - Testing with Playwright
 - \`backend-engineer\` - Supabase integration
@@ -802,10 +801,10 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |--------|-------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-mastery\`, \`ui-first-builder\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-excellence\`, \`response-format\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`response-format\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`response-format\` |
-| \`/toh-design\` | \`design-mastery\`, \`design-excellence\`, \`premium-experience\` |
+| \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
 | \`/toh-plan\` | \`plan-orchestrator\`, \`business-context\`, \`smart-routing\` |
@@ -860,8 +859,7 @@ All skills are located at \`.toh/skills/\` (Central Resources):
 - \`vibe-orchestrator\` - Core methodology
 - \`ui-first-builder\` - UI patterns
 - \`dev-engineer\` - TypeScript, State, Forms
-- \`design-excellence\` - Design system
-- \`design-mastery\` - 13 business design profiles
+- \`design-craft\` - Design system, anti-patterns & business-appropriate fit
 - \`premium-experience\` - Premium multi-page apps
 - \`test-engineer\` - Testing with Playwright
 - \`backend-engineer\` - Supabase integration

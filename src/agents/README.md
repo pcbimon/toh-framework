@@ -30,7 +30,7 @@ description: >
   Expert UI builder...
 skills:
   - ui-first-builder
-  - design-excellence
+  - design-craft
 triggers:
   - /toh-ui command
 ```
@@ -188,7 +188,7 @@ USER: /toh-vibe expense tracker
 สร้าง UI ทันทีจาก description ไม่ต้องรอ backend
 
 **Specialties:**
-- Next.js 14 pages
+- Next.js 16 pages
 - shadcn/ui components
 - Thai mock data
 - Responsive design

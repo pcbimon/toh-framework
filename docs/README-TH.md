@@ -299,7 +299,7 @@ Orchestrator:
 
 - 🤖 **8 Sub-Agents** - เชี่ยวชาญเฉพาะทาง
 - 🎯 **15 Commands** - ตั้งแต่วางแผนถึง deployment `[NEW: /toh-protect]`
-- 📚 **24 Skills** - ความสามารถ AI ครบครัน `[NEW: Security Engineer]`
+- 📚 **23 Skills** - ความสามารถ AI ครบครัน `[NEW: Security Engineer]`
 - 🎨 **13 Design Profiles** - Design เหมาะกับธุรกิจ
 - 📦 **15 Component Templates** - Premium components พร้อมใช้
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex

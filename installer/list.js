@@ -54,7 +54,7 @@ export async function list() {
     { name: 'vibe-orchestrator', desc: 'Core methodology และ workflow' },
     { name: 'ui-first-builder', desc: 'UI patterns และ component library' },
     { name: 'dev-engineer', desc: 'TypeScript, Zustand, Forms' },
-    { name: 'design-excellence', desc: 'Design system และ anti-patterns' },
+    { name: 'design-craft', desc: 'Principle-based design system และ anti-patterns' },
     { name: 'test-engineer', desc: 'Testing strategy และ Playwright' },
     { name: 'backend-engineer', desc: 'Supabase, RLS, Auth' },
     { name: 'platform-specialist', desc: 'LINE, Expo, Tauri' }

@@ -72,7 +72,7 @@
 ## Project Overview
 - Name: [Project name]
 - Type: [Type e.g. SaaS, E-commerce]
-- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 
 ## Completed Features
 - ✅ Feature 1 - [Short description]

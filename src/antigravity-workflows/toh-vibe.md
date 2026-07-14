@@ -11,7 +11,7 @@ Same axis as `/toh`: **Intent → Route → Verify → Report** - but the scope 
 ## CRITICAL: Read Skills First
 - `.gemini/skills/vibe-orchestrator/SKILL.md`
 - `.gemini/skills/premium-experience/SKILL.md`
-- `.gemini/skills/design-mastery/SKILL.md`
+- `.gemini/skills/design-craft/SKILL.md`
 - `.gemini/skills/ui-first-builder/SKILL.md`
 
 ## Memory Protocol (MANDATORY)

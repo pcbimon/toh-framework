@@ -103,7 +103,7 @@ Every response from Toh includes:
 
 ### 🏗️ Tech Stack (Fixed)
 
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Styling:** Tailwind CSS + shadcn/ui
 - **State:** Zustand
 - **Forms:** React Hook Form + Zod
@@ -136,7 +136,7 @@ Every response from Toh includes:
 
 - 🤖 **8 Sub-Agents v2.1** - UI, Dev, Design, Test, Connect, Plan, Platform, root-cause-debugger
 - 🎯 **15 Commands** - Including `/toh` smart command & `/toh-protect`
-- 📚 **24 Skills** - Including Security Engineer
+- 📚 **23 Skills** - Including Security Engineer
 - 🎨 **13 Design Profiles** - Business-appropriate design
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Gemini, Antigravity, Codex

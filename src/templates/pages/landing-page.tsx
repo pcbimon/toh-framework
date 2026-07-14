@@ -280,7 +280,7 @@ export function CTASection() {
     <section className="py-20 md:py-32">
       <div className="container">
         <FadeInUp>
-          <div className="bg-primary text-primary-foreground rounded-2xl p-8 md:p-16 text-center">
+          <div className="bg-primary text-primary-foreground rounded-xl p-8 md:p-16 text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
               Ready to get started?
             </h2>

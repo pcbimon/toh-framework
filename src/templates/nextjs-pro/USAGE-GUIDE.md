@@ -47,7 +47,7 @@ skills/
 ├── vibe-orchestrator/
 ├── ui-first-builder/
 ├── dev-engineer/
-├── design-excellence/
+├── design-craft/
 ├── backend-engineer/
 └── platform-specialist/
 

@@ -62,8 +62,9 @@ model: sonnet
 | **test-runner** | 362 | Testing/Auto-fix Loop | `/toh-test`, `/toh-fix` |
 | **plan-orchestrator** | 636 | Analysis/Planning/Coordination | `/toh-plan`, `/toh-ship` |
 | **platform-adapter** | 603 | LINE/Expo/Tauri | `/toh-line`, `/toh-mobile` |
+| **root-cause-debugger** | 94 | Root-Cause Investigation (Read-only) | `/toh-fix` (investigate) |
 
-**Total: 7 Agents, ~3,965 lines**
+**Total: 8 Agents, ~4,059 lines**
 
 ## 📦 Installation Paths
 
@@ -85,7 +86,8 @@ When installed, agents are copied to:
 ├── design-reviewer.md
 ├── test-runner.md
 ├── plan-orchestrator.md
-└── platform-adapter.md
+├── platform-adapter.md
+└── root-cause-debugger.md
 ```
 
 ### Other IDEs Installation
@@ -98,6 +100,7 @@ When installed, agents are copied to:
 ├── test-runner.md
 ├── plan-orchestrator.md
 ├── platform-adapter.md
+├── root-cause-debugger.md
 └── subagents/            ← Also available
 ```
 
@@ -296,7 +299,8 @@ Agents ถูกเรียกใช้ผ่าน `/toh-` commands หรื�
 | test-runner | 362 |
 | plan-orchestrator | 636 |
 | platform-adapter | 603 |
-| **Total** | **3,965** |
+| root-cause-debugger | 94 |
+| **Total** | **4,059** |
 
 Combined with Skills (~2,720 lines) and Commands (~966 lines):
-**Grand Total: ~7,651 lines** of expert-level documentation
+**Grand Total: ~7,745 lines** of expert-level documentation

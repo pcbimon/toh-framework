@@ -2,6 +2,32 @@
 
 All notable changes to Toh Framework will be documented in this file.
 
+## [2.0.0-beta.1] - 2026-07-14
+
+### 🎯 Intent-Based Orchestration & Evidence-First Debugging
+
+A ground-up rewrite of the flagship commands around real intent and real proof - cutting the status theater and treating debugging as an investigation.
+
+#### Changed
+
+- **`/toh` rewritten intent-based** - now runs on a single **Intent → Route → Verify → Report** axis. Understands what the user actually wants, acts immediately on small work (≤3 tasks, no plan shown), shows a short plan only for bigger work, delegates independent pieces by agent description, verifies with a real build, and reports in human language. No mapping tables, no confidence %, no status theater.
+- **`/toh-vibe` rewritten intent-based** - same Intent → Route → Verify → Report axis scoped to greenfield. "Type Once, Have it all!" - one line in, a multi-page running app out. Design personality is delegated to the design agent from business context; no hardcoded palettes or purple-blue gradient.
+- **`/toh-fix` rebuilt evidence-first** - replaced the old "Common Fixes" cookbook with **Common Root Causes**. New protocol **REPRODUCE → EVIDENCE → DIAGNOSE → FIX → PROVE**: no code change until the root cause is proven, differential diagnosis over easy guesses, and proof by re-running the failing path before reporting.
+- **`debug-protocol` skill synced** - targeted logging at the point of failure, `git bisect` for regressions, and differential diagnosis.
+
+#### Added
+
+- **`root-cause-debugger` agent (8th agent)** - an investigate-only specialist (Read/Grep/Glob/Bash, no writes) that finds and *proves* a bug's root cause before any code is touched, then reports where to fix it. `/toh` and `/toh-fix` delegate to it when a cause is unknown or a fix keeps failing.
+- **Antigravity `/toh` workflow** - Antigravity now has a native `/toh` orchestrator workflow (it previously only had the sub-commands).
+
+#### Technical Details
+
+- Agent count updated **7 → 8** across README.md, docs/README-TH.md, `src/commands/toh-help.md`, and `src/agents/README.md`.
+- Synced the rewritten intent/evidence-first content into the **Antigravity workflows** (`toh.md`, `toh-fix.md`, `toh-vibe.md`) and the **Gemini CLI commands** (`fix.toml`, `vibe.toml`).
+- Version bumped to **2.0.0-beta.1**.
+
+---
+
 ## [1.8.1] - 2026-01-11
 
 ### 🌐 Google Antigravity Workflows Support

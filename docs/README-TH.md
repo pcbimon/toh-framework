@@ -65,7 +65,7 @@ AI จำโครงสร้าง project ของคุณได้ทั�
 - Level 1 (Quick): Secrets, dangerous code, auth issues
 - Level 2 (Full): Injection, auth flaws, AI risks, config
 
-### 🤖 7 Sub-Agents
+### 🤖 8 Sub-Agents
 
 | Agent | ความเชี่ยวชาญ |
 |-------|---------------|
@@ -76,6 +76,7 @@ AI จำโครงสร้าง project ของคุณได้ทั�
 | 🧪 **test-runner** | Auto test & fix |
 | 🧠 **plan-orchestrator** | วิเคราะห์, วางแผน |
 | 📱 **platform-adapter** | LINE, Mobile, Desktop |
+| 🔍 **root-cause-debugger** | สืบหาและพิสูจน์ต้นตอ bug |
 
 ### 🔄 Multi-Agent Orchestration
 
@@ -103,7 +104,7 @@ AI จำโครงสร้าง project ของคุณได้ทั�
 | Feature | รายละเอียด |
 |---------|------------|
 | **`/toh` Smart Command** | พิมพ์อะไรก็ได้ AI เลือก agent ให้ |
-| **Sub-Agents** | 7 agents เชี่ยวชาญเฉพาะทาง |
+| **Sub-Agents** | 8 agents เชี่ยวชาญเฉพาะทาง |
 | **Multi-Agent Orchestration** | Workflow ซับซ้อนพร้อมความโปร่งใส |
 | **Premium Experience** | 5+ หน้าพร้อม animations ในคำสั่งเดียว |
 | **Design Mastery** | 13 business profiles สำหรับ design อัจฉริยะ |
@@ -296,7 +297,7 @@ Orchestrator:
 
 ## 📊 สถิติ Framework
 
-- 🤖 **7 Sub-Agents** - เชี่ยวชาญเฉพาะทาง
+- 🤖 **8 Sub-Agents** - เชี่ยวชาญเฉพาะทาง
 - 🎯 **15 Commands** - ตั้งแต่วางแผนถึง deployment `[NEW: /toh-protect]`
 - 📚 **24 Skills** - ความสามารถ AI ครบครัน `[NEW: Security Engineer]`
 - 🎨 **13 Design Profiles** - Design เหมาะกับธุรกิจ

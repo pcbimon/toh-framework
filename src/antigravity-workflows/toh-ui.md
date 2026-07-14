@@ -10,7 +10,7 @@ Create UI based on user's request.
 ## CRITICAL: Read Skills First
 - `.gemini/skills/ui-first-builder/SKILL.md`
 - `.gemini/skills/design-craft/SKILL.md`
-- `.gemini/skills/response-format/SKILL.md`
+- `.gemini/skills/engineer-harness/SKILL.md`
 
 ## Memory Protocol (MANDATORY)
 

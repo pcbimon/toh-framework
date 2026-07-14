@@ -319,7 +319,7 @@ Orchestrator:
 
 - 🤖 **8 Sub-Agents** - Specialized for different tasks
 - 🎯 **15 Commands** - From planning to deployment `[NEW: /toh-protect]`
-- 📚 **23 Skills** - Comprehensive AI capabilities `[NEW: Security Engineer]`
+- 📚 **22 Skills** - Comprehensive AI capabilities `[NEW: Security Engineer]`
 - 🎨 **13 Design Profiles** - Business-appropriate design
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex

@@ -61,8 +61,8 @@ Intelligent routing engine for the `/toh` smart command. Routes any natural lang
 | **Testing** | test, check, verify | test, ทดสอบ, เช็ค | Test Agent | HIGH |
 | **Connect Backend** | connect, database, Supabase, API, backend | เชื่อม, database, Supabase | Connect Agent | HIGH |
 | **Deploy** | deploy, ship, production, publish | deploy, ship, ขึ้น production | Ship Agent | HIGH |
-| **LINE Platform** | LINE, LIFF, Mini App | LINE, LIFF | LINE Agent | HIGH |
-| **Mobile Platform** | mobile, iOS, Android, Expo, React Native | mobile, มือถือ | Mobile Agent | HIGH |
+| **LINE Platform** | LINE, LIFF, LINE MINI App | LINE, LIFF | LINE Agent | HIGH |
+| **Mobile Platform** | mobile, iOS, Android, PWA, Capacitor | mobile, มือถือ | Mobile Agent | HIGH |
 | **New Project** | new project, start, build app, create system | project ใหม่, สร้าง app | Vibe Agent | HIGH |
 | **Planning** | plan, analyze, PRD, architecture | วางแผน, วิเคราะห์ | Plan Agent | HIGH |
 | **AI/Prompt** | prompt, AI, chatbot, system prompt | prompt, AI, chatbot | Dev Agent + prompt-optimizer | HIGH |

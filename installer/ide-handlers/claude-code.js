@@ -487,8 +487,8 @@ ${langInstructions}
 | \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve design |
 | \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Auto test & fix |
 | \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Supabase |
-| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE Mini App |
-| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Expo / React Native |
+| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App (convert) |
+| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | PWA / Capacitor |
 | \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
 | \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
 
@@ -516,8 +516,8 @@ When user types ONLY the command (no description), respond with a friendly promp
 | \`/toh-connect\` | "I'm the **Connect Agent** 🔌 - I integrate with Supabase backend. What should I connect?" |
 | \`/toh-plan\` | "I'm the **Plan Agent** 🧠 - I analyze requirements and orchestrate all agents. What project should I plan?" |
 | \`/toh-fix\` | "I'm the **Fix Agent** 🔧 - I debug and fix issues. What problem should I solve?" |
-| \`/toh-line\` | "I'm the **LINE Agent** 💚 - I integrate LINE Mini App features. What LINE feature do you need?" |
-| \`/toh-mobile\` | "I'm the **Mobile Agent** 📱 - I create Expo/React Native apps. What mobile feature should I build?" |
+| \`/toh-line\` | "I'm the **LINE Agent** 💚 - I convert web apps into LINE MINI Apps using the LIFF SDK. What LINE feature do you need?" |
+| \`/toh-mobile\` | "I'm the **Mobile Agent** 📱 - I ship apps to mobile PWA-first, then wrap with Capacitor for native builds. What mobile feature should I build?" |
 | \`/toh-ship\` | "I'm the **Ship Agent** 🚀 - I deploy to production. Where should I deploy?" |
 | \`/toh-help\` | (Always show help immediately - no description needed) |
 

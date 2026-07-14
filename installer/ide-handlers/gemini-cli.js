@@ -115,8 +115,8 @@ Use these native slash commands:
 | \`/toh:connect [description]\` | Connect to Supabase backend |
 | \`/toh:fix [description]\` | Debug and fix issues |
 | \`/toh:ship\` | Deploy to production |
-| \`/toh:line [description]\` | LINE Mini App integration |
-| \`/toh:mobile [description]\` | Expo / React Native app |
+| \`/toh:line [description]\` | Convert to LINE MINI App |
+| \`/toh:mobile [description]\` | Mobile app - PWA / Capacitor |
 | \`/toh:protect\` | Security audit |
 
 ## Quick Start
@@ -211,8 +211,8 @@ function generateGeminiMdTH() {
 | \`/toh:connect [รายละเอียด]\` | เชื่อมต่อ Supabase backend |
 | \`/toh:fix [รายละเอียด]\` | Debug และแก้ไขปัญหา |
 | \`/toh:ship\` | Deploy ขึ้น production |
-| \`/toh:line [รายละเอียด]\` | LINE Mini App integration |
-| \`/toh:mobile [รายละเอียด]\` | Expo / React Native app |
+| \`/toh:line [รายละเอียด]\` | Convert to LINE MINI App |
+| \`/toh:mobile [รายละเอียด]\` | Mobile app - PWA / Capacitor |
 | \`/toh:protect\` | Security audit |
 
 ## เริ่มต้นใช้งาน

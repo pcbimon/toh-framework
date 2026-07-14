@@ -82,7 +82,7 @@ Analyze and plan the project based on user's request.
 ### Tech Decisions
 | Decision | Choice | Reason |
 |----------|--------|--------|
-| Framework | Next.js 14 | App Router, best DX |
+| Framework | Next.js 16 | App Router, best DX |
 | Styling | Tailwind + shadcn | Rapid UI development |
 | State | Zustand | Simple, performant |
 

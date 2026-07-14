@@ -8,7 +8,7 @@ description: >
   app ideas, MVP, prototype, or any development request.
   This skill MUST be read first for any development task.
 related_skills:
-  - design-mastery         # Business-appropriate design
+  - design-craft           # Principle-based design (system + business fit)
   - premium-experience     # Multi-page, animations, WOW factor
   - response-format        # 3-section response
 ---
@@ -43,7 +43,7 @@ Master brain for Lovable-style development workflow. Transform any idea into a
 ### Must Read Skills
 Before ANY work, read these skills in parallel:
 1. `src/skills/premium-experience/SKILL.md` - Multi-page & animations
-2. `src/skills/design-mastery/SKILL.md` - Business-appropriate design
+2. `src/skills/design-craft/SKILL.md` - Principle-based design (system + business fit)
 3. `src/skills/response-format/SKILL.md` - 3-section response
 </premium_philosophy>
 
@@ -134,8 +134,10 @@ Build first, ask forgiveness later. The goal is WORKING UI in FIRST response.
 <fixed_tech_stack>
 ## Tech Stack Decisions (FIXED - No Choices)
 
+> ⚠️ **Version note:** Before scaffolding, verify the latest stable versions with `npm view <pkg> version` and pin to current stable — don't blindly copy the numbers below.
+
 ### Web App (Default)
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Styling:** Tailwind CSS + shadcn/ui
 - **State:** Zustand (simple) or React Query (server state)
 - **Forms:** React Hook Form + Zod
@@ -144,7 +146,7 @@ Build first, ask forgiveness later. The goal is WORKING UI in FIRST response.
 - **Database:** Supabase (when needed)
 
 ### LINE Mini App
-- **Base:** Next.js 14 + above stack
+- **Base:** Next.js 16 + above stack
 - **LIFF:** @line/liff SDK
 - **Auth:** LIFF Login → Supabase custom auth
 
@@ -180,8 +182,8 @@ USER PROMPT
 │ 🎨 STEP 0.5: DESIGN PROFILE         │
 │    (MANDATORY - NEW!)               │
 │                                     │
-│ 1. Read design-mastery skill        │
-│    └── src/skills/design-mastery/   │
+│ 1. Read design-craft skill          │
+│    └── src/skills/design-craft/     │
 │                                     │
 │ 2. Extract keywords from request    │
 │    └── "ร้านกาแฟ" → ["ร้าน","กาแฟ"] │
@@ -265,7 +267,7 @@ Create PREMIUM UI for [user's request]
 
 CRITICAL - Read These Skills First:
 1. src/skills/premium-experience/SKILL.md (Multi-page + Animations)
-2. src/skills/design-mastery/SKILL.md (Design profile)
+2. src/skills/design-craft/SKILL.md (Design profile)
 3. src/skills/ui-first-builder/SKILL.md (Core patterns)
 
 Design Profile:
@@ -318,9 +320,8 @@ CRITICAL - Verify:
 6. Anti-AI checklist passed
 
 Skills to Read:
-- src/skills/design-mastery/SKILL.md
+- src/skills/design-craft/SKILL.md
 - src/skills/premium-experience/SKILL.md
-- src/skills/design-excellence/SKILL.md
 
 If ANY check fails → Fix immediately, don't report to user
 ```
@@ -359,7 +360,7 @@ If ANY check fails → Fix immediately, don't report to user
 - [List key components]
 
 ### Tech Stack:
-- Next.js 14 + Tailwind + shadcn/ui
+- Next.js 16 + Tailwind + shadcn/ui
 - [Other relevant tech]
 
 ### Next steps:
@@ -370,7 +371,7 @@ If ANY check fails → Fix immediately, don't report to user
 
 <use_parallel_tool_calls>
 When reading multiple skill files or creating multiple components, execute in parallel.
-Example: Read ui-first-builder, dev-engineer, and design-excellence skills simultaneously.
+Example: Read ui-first-builder, dev-engineer, and design-craft skills simultaneously.
 </use_parallel_tool_calls>
 
 ## Quick Reference

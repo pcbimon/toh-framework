@@ -147,7 +147,7 @@ export function LoginPage() {
               transition={{ duration: 0.5 }}
               className="mb-8"
             >
-              <div className="w-24 h-24 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center">
+              <div className="w-24 h-24 mx-auto bg-primary/10 rounded-xl flex items-center justify-center">
                 <span className="text-4xl font-bold text-primary">T</span>
               </div>
             </motion.div>
@@ -188,7 +188,7 @@ export function RegisterPage() {
               transition={{ duration: 0.5 }}
               className="mb-8"
             >
-              <div className="w-24 h-24 mx-auto bg-primary/10 rounded-2xl flex items-center justify-center">
+              <div className="w-24 h-24 mx-auto bg-primary/10 rounded-xl flex items-center justify-center">
                 <span className="text-4xl font-bold text-primary">T</span>
               </div>
             </motion.div>

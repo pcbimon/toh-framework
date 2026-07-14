@@ -167,7 +167,7 @@ Memory files at \`.toh/memory/\`:
 
 Skills are located at \`.gemini/skills/\`:
 - \`vibe-orchestrator\` - Master workflow
-- \`design-mastery\` - Business-appropriate design
+- \`design-craft\` - Principle-based design (system + business fit)
 - \`premium-experience\` - Multi-page, animations
 - \`ui-first-builder\` - UI creation patterns
 - And more...
@@ -263,7 +263,7 @@ function generateGeminiMdTH() {
 
 Skills อยู่ที่ \`.gemini/skills/\`:
 - \`vibe-orchestrator\` - Master workflow
-- \`design-mastery\` - Design ตาม business type
+- \`design-craft\` - Principle-based design (system + business fit)
 - \`premium-experience\` - Multi-page, animations
 - \`ui-first-builder\` - สร้าง UI
 - และอื่นๆ...

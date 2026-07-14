@@ -9,7 +9,7 @@ Create UI based on user's request.
 
 ## CRITICAL: Read Skills First
 - `.gemini/skills/ui-first-builder/SKILL.md`
-- `.gemini/skills/design-excellence/SKILL.md`
+- `.gemini/skills/design-craft/SKILL.md`
 - `.gemini/skills/response-format/SKILL.md`
 
 ## Memory Protocol (MANDATORY)
@@ -31,7 +31,7 @@ Create UI based on user's request.
 ## UI Building Rules
 
 ### Must Follow
-- Use Next.js 14 App Router
+- Use Next.js 16 App Router
 - Use shadcn/ui components
 - Use Tailwind CSS for styling
 - Create responsive designs (mobile-first)

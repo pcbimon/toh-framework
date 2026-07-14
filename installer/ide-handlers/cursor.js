@@ -444,7 +444,7 @@ types/                # TypeScript types
 ## Central Resources (.toh/)
 
 All Toh Framework resources are in the \`.toh/\` folder:
-- \`@.toh/skills/\` - Technical skills (design-mastery, premium-experience, etc.)
+- \`@.toh/skills/\` - Technical skills (design-craft, premium-experience, etc.)
 - \`@.toh/agents/\` - Specialized AI agents
 - \`@.toh/commands/\` - Command definitions
 - \`@.toh/memory/\` - Memory system files
@@ -457,10 +457,10 @@ All Toh Framework resources are in the \`.toh/\` folder:
 
 | Command | Load These Skills | Load Agent |
 |---------|------------------|------------|
-| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-mastery/SKILL.md\`, \`@.toh/skills/ui-first-builder/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
-| \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-excellence/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
+| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/ui-first-builder/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
+| \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
 | \`/toh-dev\` | \`@.toh/skills/dev-engineer/SKILL.md\`, \`@.toh/skills/backend-engineer/SKILL.md\` | \`@.toh/agents/dev-builder.md\` |
-| \`/toh-design\` | \`@.toh/skills/design-mastery/SKILL.md\`, \`@.toh/skills/design-excellence/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
+| \`/toh-design\` | \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
 | \`/toh-test\` | \`@.toh/skills/test-engineer/SKILL.md\`, \`@.toh/skills/debug-protocol/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 | \`/toh-connect\` | \`@.toh/skills/backend-engineer/SKILL.md\`, \`@.toh/skills/integrations/SKILL.md\` | \`@.toh/agents/backend-connector.md\` |
 | \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
@@ -511,8 +511,7 @@ Skills contain CRITICAL best practices, design tokens, and rules.
 
 \`\`\`markdown
 📚 **Skills Loaded:**
-- design-mastery ✅ (13 business profiles, design tokens)
-- design-excellence ✅ (anti-patterns to avoid, spacing rules)
+- design-craft ✅ (design system, anti-patterns to avoid, business-appropriate fit)
 
 🤖 **Agent:** design-reviewer
 
@@ -729,7 +728,7 @@ types/                # TypeScript types
 ## Central Resources (.toh/)
 
 All Toh Framework resources are in \`.toh/\`:
-- \`@.toh/skills/\` - Specialized skills (design-mastery, premium-experience, etc.)
+- \`@.toh/skills/\` - Specialized skills (design-craft, premium-experience, etc.)
 - \`@.toh/agents/\` - Specialized AI Agents
 - \`@.toh/commands/\` - Commands
 - \`@.toh/memory/\` - Memory System files
@@ -742,10 +741,10 @@ All Toh Framework resources are in \`.toh/\`:
 
 | Command | Load Skills | Load Agent |
 |--------|------------|------------|
-| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-mastery/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
-| \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-excellence/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
+| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
+| \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
 | \`/toh-dev\` | \`@.toh/skills/dev-engineer/SKILL.md\`, \`@.toh/skills/backend-engineer/SKILL.md\` | \`@.toh/agents/dev-builder.md\` |
-| \`/toh-design\` | \`@.toh/skills/design-mastery/SKILL.md\`, \`@.toh/skills/design-excellence/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
+| \`/toh-design\` | \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
 | \`/toh-test\` | \`@.toh/skills/test-engineer/SKILL.md\`, \`@.toh/skills/debug-protocol/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 | \`/toh-connect\` | \`@.toh/skills/backend-engineer/SKILL.md\`, \`@.toh/skills/integrations/SKILL.md\` | \`@.toh/agents/backend-connector.md\` |
 | \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |

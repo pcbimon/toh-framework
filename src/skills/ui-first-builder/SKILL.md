@@ -2,7 +2,7 @@
 name: ui-first-builder
 description: >
   Creates production-ready UI immediately from any description. Generates complete 
-  pages, components, and realistic mock data in FIRST response. Uses Next.js 14 + 
+  pages, components, and realistic mock data in FIRST response. Uses Next.js 16 + 
   Tailwind + shadcn/ui. Never asks questions - infers everything from context.
   Triggers: UI creation, page building, component generation, build interface, 
   screen design, layout requests.
@@ -35,7 +35,7 @@ ALWAYS do:
 </default_to_action>
 
 <component_architecture>
-## File Structure (Next.js 14 App Router)
+## File Structure (Next.js 16 App Router)
 
 ```
 src/

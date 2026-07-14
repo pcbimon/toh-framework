@@ -222,7 +222,7 @@
 
 ## Project Overview
 - Name: [ชื่อโปรเจค]
-- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 
 ## Completed Features
 - (ยังไม่มี)

@@ -762,10 +762,10 @@ After Vibe Mode completes, user gets:
 
 | Command | Load These Skills (from \`.claude/skills/\`) | Delegate To (from \`.claude/agents/\`) |
 |---------|------------------------------------------|-----------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-mastery\` | \`ui-builder.md\` + \`dev-builder.md\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-excellence\`, \`response-format\` | \`ui-builder.md\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\` | \`ui-builder.md\` + \`dev-builder.md\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`response-format\` | \`ui-builder.md\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`response-format\` | \`dev-builder.md\` |
-| \`/toh-design\` | \`design-mastery\`, \`design-excellence\`, \`premium-experience\` | \`design-reviewer.md\` |
+| \`/toh-design\` | \`design-craft\`, \`premium-experience\` | \`design-reviewer.md\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` | \`test-runner.md\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` | \`backend-connector.md\` |
 | \`/toh-plan\` | \`plan-orchestrator\`, \`business-context\`, \`smart-routing\` | \`plan-orchestrator.md\` |
@@ -789,7 +789,7 @@ STEP 2: IMMEDIATELY read required skills from table above
         Example: /toh-vibe → Read 4 skill files:
         - .claude/skills/vibe-orchestrator/SKILL.md
         - .claude/skills/premium-experience/SKILL.md
-        - .claude/skills/design-mastery/SKILL.md
+        - .claude/skills/design-craft/SKILL.md
         - .claude/skills/ui-first-builder/SKILL.md
         ↓
 STEP 3: Read the corresponding agent file(s)

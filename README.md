@@ -89,7 +89,7 @@ Before executing, see why AI chose specific agents:
 | Connect DB | 🔌 Connect | 95% |
 ```
 
-### 🤖 7 Sub-Agents v2.1
+### 🤖 8 Sub-Agents v2.1
 
 | Agent | Specialty |
 |-------|-----------|
@@ -100,6 +100,7 @@ Before executing, see why AI chose specific agents:
 | 🧪 **test-runner** | Auto test & fix |
 | 🧠 **plan-orchestrator** | Analyze, Plan |
 | 📱 **platform-adapter** | LINE, Mobile, Desktop |
+| 🔍 **root-cause-debugger** | Investigate & prove bug root cause |
 
 ### 📜 Previous Versions
 
@@ -123,7 +124,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 | Feature | Description |
 |---------|-------------|
 | **`/toh` Smart Command** | Type anything, AI picks the right agent |
-| **Sub-Agents** | 7 specialized agents for different tasks |
+| **Sub-Agents** | 8 specialized agents for different tasks |
 | **Multi-Agent Orchestration** | Complex workflows with full visibility |
 | **Premium Experience** | 5+ pages with animations in one prompt |
 | **Design Mastery** | 13 business profiles for smart design |
@@ -316,9 +317,9 @@ Orchestrator:
 
 ## 📊 Framework Stats
 
-- 🤖 **7 Sub-Agents** - Specialized for different tasks
+- 🤖 **8 Sub-Agents** - Specialized for different tasks
 - 🎯 **15 Commands** - From planning to deployment `[NEW: /toh-protect]`
-- 📚 **24 Skills** - Comprehensive AI capabilities `[NEW: Security Engineer]`
+- 📚 **23 Skills** - Comprehensive AI capabilities `[NEW: Security Engineer]`
 - 🎨 **13 Design Profiles** - Business-appropriate design
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex

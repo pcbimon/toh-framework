@@ -226,7 +226,7 @@ STEP 7: Confirm
 
 ## Project Overview
 - Name: [Project Name]
-- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 
 ## Completed Features
 - (None yet)

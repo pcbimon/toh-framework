@@ -9,7 +9,7 @@ description: Display all Toh Framework commands and quick usage guide
 When user calls `/toh-help`, display the following:
 
 <help_response>
-## 🎯 Toh Framework v1.8.1
+## 🎯 Toh Framework v2.0.0-beta.1
 
 **"Type anything, AI does it for you"** - AI-Orchestration Driven Development
 
@@ -48,7 +48,7 @@ When user calls `/toh-help`, display the following:
 | `/toh-connect` | `/toh-c` | 🔌 **Connect Backend** - Supabase, Auth, RLS |
 | `/toh-line` | `/toh-l` | 💚 **LINE Mini App** - LIFF integration |
 | `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - Expo / React Native |
-| `/toh-fix` | `/toh-f` | 🔧 **Fix Bug** - Debug with 3-5-Rewrite Rule |
+| `/toh-fix` | `/toh-f` | 🔧 **Fix Bug** - Evidence-first debug: prove the root cause before touching code |
 | `/toh-ship` | `/toh-s` | 🚀 **Deploy** - Vercel, Production ready |
 | `/toh-protect` | `/toh-pr` | 🔐 **Security Audit** - Full security check |
 
@@ -103,7 +103,7 @@ Every response from Toh includes:
 
 ### 🏗️ Tech Stack (Fixed)
 
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Styling:** Tailwind CSS + shadcn/ui
 - **State:** Zustand
 - **Forms:** React Hook Form + Zod
@@ -123,6 +123,7 @@ Every response from Toh includes:
 | 🧪 Test Runner | `test-runner.md` | Auto test & fix |
 | 🧠 Plan Orchestrator | `plan-orchestrator.md` | Analyze, Plan |
 | 📱 Platform Adapter | `platform-adapter.md` | LINE, Mobile, Desktop |
+| 🔍 Root Cause Debugger | `root-cause-debugger.md` | Investigate & prove bug root cause (read-only) |
 
 **Vibe Mode** = Orchestration Pattern (not an agent)
 ```
@@ -133,9 +134,9 @@ Every response from Toh includes:
 
 ### 📊 Framework Stats
 
-- 🤖 **7 Sub-Agents v2.1** - UI, Dev, Design, Test, Connect, Plan, Platform
+- 🤖 **8 Sub-Agents v2.1** - UI, Dev, Design, Test, Connect, Plan, Platform, root-cause-debugger
 - 🎯 **15 Commands** - Including `/toh` smart command & `/toh-protect`
-- 📚 **24 Skills** - Including Security Engineer
+- 📚 **23 Skills** - Including Security Engineer
 - 🎨 **13 Design Profiles** - Business-appropriate design
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Gemini, Antigravity, Codex

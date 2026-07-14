@@ -8,8 +8,7 @@ description: >
   Now with PREMIUM MODE: multi-page, animations, zero errors.
 skills:
   - ui-first-builder            # Core UI building
-  - design-excellence           # Design principles
-  - design-mastery              # 🎨 Smart design by business type
+  - design-craft                # 🎨 Principle-based design (system + business fit)
   - premium-experience          # 🌟 Multi-page, animations, WOW factor
   - response-format             # 📝 MANDATORY: 3-section response format
   - smart-suggestions           # 💡 Next step suggestions
@@ -189,8 +188,7 @@ decisions.md (if decisions made):
 ├─────────────────────────────────────────────────────────────────┤
 │ 1. Read Skills (parallel)                                       │
 │    ├── src/skills/ui-first-builder/SKILL.md                     │
-│    ├── src/skills/design-excellence/SKILL.md                    │
-│    └── src/skills/design-mastery/SKILL.md (IMPORTANT!)          │
+│    └── src/skills/design-craft/SKILL.md (IMPORTANT!)            │
 │                                                                 │
 │ 2. Read Project Context (parallel)                              │
 │    ├── components/ → What exists, what's reusable               │

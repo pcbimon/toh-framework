@@ -27,7 +27,7 @@ trigger: /toh-design or /toh-ds
    └── .toh/memory/components.md  (existing components)
 
 1. READ Skills
-   └── ~/.claude/skills/design-excellence/SKILL.md
+   └── ~/.claude/skills/design-craft/SKILL.md
 
 2. AUDIT Current Design
    ├── Check color usage (one accent only?)

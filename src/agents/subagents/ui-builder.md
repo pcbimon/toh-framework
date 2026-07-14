@@ -198,8 +198,7 @@ components.md (if components created):
 ├─────────────────────────────────────────────────────────────────┤
 │ 1. Read Skills (parallel)                                       │
 │    ├── src/skills/ui-first-builder/SKILL.md                     │
-│    ├── src/skills/design-excellence/SKILL.md                    │
-│    └── src/skills/design-mastery/SKILL.md (IMPORTANT!)          │
+│    └── src/skills/design-craft/SKILL.md (IMPORTANT!)            │
 │                                                                 │
 │ 2. Read Project Context (parallel)                              │
 │    ├── components/ → What exists, what's reusable               │
@@ -508,8 +507,7 @@ UI Builder uses these skills to enhance capabilities:
 | Skill | Purpose |
 |-------|---------|
 | `ui-first-builder` | Core UI building methodology |
-| `design-excellence` | Design principles & standards |
-| `design-mastery` | Smart design by business type |
+| `design-craft` | Principle-based design (system, anti-patterns, business fit) |
 | `premium-experience` | Multi-page, animations, WOW factor |
 | `response-format` | MANDATORY 3-section response format |
 | `smart-suggestions` | Next step suggestions |

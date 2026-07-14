@@ -28,7 +28,7 @@ trigger: /toh-ui or /toh-u followed by description
 
 1. READ Skills
    ├── ~/.claude/skills/ui-first-builder/SKILL.md
-   └── ~/.claude/skills/design-excellence/SKILL.md
+   └── ~/.claude/skills/design-craft/SKILL.md
 
 2. ANALYZE Request
    ├── New page? → Create in app/[name]/page.tsx

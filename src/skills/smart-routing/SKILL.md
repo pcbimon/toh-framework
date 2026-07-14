@@ -225,12 +225,12 @@ Request arrives
 
 | Detected Intent | Skills to Load |
 |-----------------|----------------|
-| New Project | vibe-orchestrator, design-mastery, business-context, response-format |
-| Create UI | ui-first-builder, design-excellence, response-format |
+| New Project | vibe-orchestrator, design-craft, business-context, response-format |
+| Create UI | ui-first-builder, design-craft, response-format |
 | Add Logic | dev-engineer, error-handling, response-format |
 | Fix Bug | debug-protocol, error-handling, response-format |
 | Connect Backend | backend-engineer, integrations, response-format |
-| Improve Design | design-excellence, design-mastery, response-format |
+| Improve Design | design-craft, response-format |
 | AI/Chatbot | prompt-optimizer, dev-engineer, response-format |
 | Testing | test-engineer, error-handling, response-format |
 | Planning | plan-orchestrator, business-context, response-format |

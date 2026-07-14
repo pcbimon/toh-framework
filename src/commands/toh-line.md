@@ -5,7 +5,7 @@ description: Convert web app to LINE Mini App or create new LIFF integration
 trigger: /toh-line or /toh-l
 skills:
   - platform-specialist
-  - response-format
+  - engineer-harness
 ---
 
 # /toh-line — Convert to LINE MINI App 💚

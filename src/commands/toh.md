@@ -2,6 +2,9 @@
 command: /toh
 description: Type anything in plain language → understand it, do it, verify it, report back short
 trigger: /toh followed by anything you want done
+skills:
+  - smart-routing
+  - engineer-harness
 ---
 
 # /toh - Orchestrator v5.0

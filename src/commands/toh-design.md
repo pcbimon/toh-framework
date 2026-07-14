@@ -17,14 +17,17 @@ trigger: /toh-design or /toh-ds
 ## What Happens
 
 ```
-0. 🚨 READ MEMORY (MANDATORY - ALL 7 FILES!)
-   ├── .toh/memory/active.md      (current task)
-   ├── .toh/memory/summary.md     (project overview)
-   ├── .toh/memory/decisions.md   (past decisions)
-   ├── .toh/memory/changelog.md   (session changes)
-   ├── .toh/memory/agents-log.md  (agent activity)
-   ├── .toh/memory/architecture.md (project structure)
-   └── .toh/memory/components.md  (existing components)
+0. 🚨 READ MEMORY (Tiered Loading — don't blind-read all 7)
+   ├── Tier 1 · ALWAYS at start (~800 tokens)
+   │   ├── .toh/memory/active.md   (current task)
+   │   └── .toh/memory/summary.md  (project overview)
+   ├── Tier 2 · read per task type
+   │   ├── .toh/memory/architecture.md (structure — build/code work)
+   │   ├── .toh/memory/components.md   (existing components — build/code work)
+   │   └── .toh/memory/changelog.md    (recent changes — debug work)
+   └── Tier 3 · read ONLY when referenced
+       ├── .toh/memory/decisions.md    (past decisions)
+       └── .toh/memory/agents-log.md   (agent activity)
 
 1. READ Skills
    └── ~/.claude/skills/design-craft/SKILL.md
@@ -45,12 +48,13 @@ trigger: /toh-design or /toh-ds
 
 4. REPORT Changes
 
-5. 🚨 SAVE MEMORY (MANDATORY!)
-   ├── Update active.md (current state)
+5. 🚨 SAVE MEMORY
+   ├── Update active.md (ALWAYS — current state)
+   ├── Update summary.md (if project shape changed)
+   ├── Update components.md (if UI changed)
    ├── Update changelog.md (design changes)
-   ├── Update agents-log.md (agent activity)
    ├── Update decisions.md (design decisions)
-   └── Update components.md (if UI changed)
+   └── Update agents-log.md (if agents delegated)
 ```
 
 ## Example Prompts

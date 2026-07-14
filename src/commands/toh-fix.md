@@ -6,7 +6,7 @@ trigger: /toh-fix or /toh-f followed by an error or problem
 skills:
   - debug-protocol
   - error-handling
-  - response-format
+  - engineer-harness
 ---
 
 # /toh-fix — Evidence-First Bug Fixing 🔧

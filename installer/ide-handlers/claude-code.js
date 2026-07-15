@@ -4,7 +4,6 @@
  */
 
 import chalk from 'chalk';
-import ora from 'ora';
 import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { join, dirname } from 'path';
@@ -17,8 +16,9 @@ const pkg = JSON.parse(fs.readFileSync(join(__dirname, '../../package.json'), 'u
 const VERSION = pkg.version;
 
 export async function setupClaudeCode(targetDir, language = 'en') {
-  const spinner = ora('Configuring Claude Code...').start();
-  
+  // No spinner here — the caller (setupIDEWithSpinner) owns the spinner so the
+  // "Configuring Claude Code..." line isn't printed twice. We just return a
+  // short detail string describing the CLAUDE.md outcome for it to display.
   try {
     // v1.4.0: Claude Code needs .claude/ folder for slash commands to work
     // Copy resources from .toh/ to .claude/
@@ -114,20 +114,17 @@ export async function setupClaudeCode(targetDir, language = 'en') {
       const existing = await fs.readFile(claudeMdPath, 'utf8');
       if (!existing.includes('Toh Framework')) {
         await fs.appendFile(claudeMdPath, '\n\n' + claudeMdContent);
-        spinner.succeed('Claude Code configured (appended to existing CLAUDE.md)');
-      } else {
-        spinner.succeed('Claude Code configured (already set up)');
+        return 'appended to existing CLAUDE.md';
       }
-    } else {
-      // Create new CLAUDE.md
-      await fs.writeFile(claudeMdPath, claudeMdContent);
-      spinner.succeed('Claude Code configured (created CLAUDE.md)');
+      return 'already set up';
     }
 
-    return true;
+    // Create new CLAUDE.md
+    await fs.writeFile(claudeMdPath, claudeMdContent);
+    return 'created CLAUDE.md';
   } catch (error) {
-    spinner.fail(`Claude Code setup failed: ${error.message}`);
-    return false;
+    // Re-throw so the caller's spinner reports the failure (no duplicate spinner).
+    throw error;
   }
 }
 

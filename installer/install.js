@@ -230,8 +230,8 @@ async function cleanExistingInstall(targetDir) {
 async function setupIDEWithSpinner(ideName, setupFn) {
   const spinner = ora(`Configuring ${ideName}...`).start();
   try {
-    await setupFn();
-    const configFile = getIDEConfigFile(ideName);
+    const detail = await setupFn();
+    const configFile = (typeof detail === 'string' && detail) ? detail : getIDEConfigFile(ideName);
     spinner.succeed(`${ideName} configured (${configFile})`);
   } catch (error) {
     spinner.fail(`Failed to configure ${ideName}: ${error.message}`);
@@ -363,7 +363,7 @@ async function setupMemoryFolder(targetDir) {
 ## Project Info
 - **Name:** [Not specified]
 - **Type:** [Not specified]
-- **Stack:** Next.js 14 + Tailwind + shadcn/ui + Zustand + Supabase
+- **Stack:** Next.js 16 + Tailwind + shadcn/ui + Zustand + Supabase
 
 ## Completed Features
 [None yet]
@@ -509,8 +509,8 @@ function printNextSteps(config) {
 
   if (config.ides.includes('claude') || config.ides.includes('claude-code')) {
     console.log(row(chalk.white(pad('  Claude Code:'))));
-    // 13 chars green + 47 chars gray = 60
-    console.log(row(chalk.green('    /toh-plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
+    // /toh flagship: 8 green + 52 gray = 60 ; others: 13 green + 47 gray = 60
+    console.log(row(chalk.green('    /toh') + chalk.gray(' - Type anything in plain language'.padEnd(52))));
     console.log(row(chalk.green('    /toh-vibe') + chalk.gray(' - Create new project'.padEnd(47))));
     console.log(row(chalk.green('    /toh-help') + chalk.gray(' - Show all commands'.padEnd(47))));
     console.log(empty);
@@ -552,10 +552,11 @@ function printNextSteps(config) {
   console.log(row(chalk.white(pad('  Documentation:'))));
   console.log(row(chalk.blue(pad('    https://github.com/wasintoh/toh-framework'))));
   console.log(mid);
-  console.log(row(chalk.bold.yellow(pad("  What's New in v1.8.1:"))));
-  console.log(row(chalk.white(pad('  * Google Antigravity Workflows - Full support!'))));
-  console.log(row(chalk.white(pad('  * 7-File Memory System - tiered loading'))));
-  console.log(row(chalk.white(pad('  * Agent Announcements - See which agent is working'))));
+  console.log(row(chalk.bold.yellow(pad(`  What's New in v${VERSION}:`))));
+  console.log(row(chalk.white(pad('  * Smarter /toh + evidence-first /toh-fix'))));
+  console.log(row(chalk.white(pad('  * Modern stack: Next 16 / React 19 / Tailwind 4'))));
+  console.log(row(chalk.white(pad('  * LINE MINI App + PWA/Capacitor - one command'))));
+  console.log(row(chalk.white(pad('  * Single-source agents + tiered memory (lighter)'))));
   console.log(bot);
   console.log('');
 }

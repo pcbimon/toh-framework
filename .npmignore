@@ -9,3 +9,6 @@ coverage/
 
 # Claude Project (private docs)
 claude-project/
+
+# Big binaries stay on GitHub only (README uses absolute raw URLs)
+docs/assets/

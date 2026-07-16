@@ -2,7 +2,7 @@
   "name": "toh-framework",
   "version": "2.0.0",
   "type": "module",
-  "description": "AI-Orchestration Driven Development Framework - Type Once, Have it all!",
+  "description": "AI-Orchestration Driven Development - Type Once, Have it all! Approve once and the TOH LOOP builds, tests, and fixes a whole app until verified DONE. For Claude Code, Cursor, Codex, Gemini CLI, and Antigravity.",
   "author": {
     "name": "Wasin Treesinthuros",
     "email": "dr.wasin@gmail.com"

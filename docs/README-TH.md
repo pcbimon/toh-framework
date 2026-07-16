@@ -1,6 +1,10 @@
-# 🎯 Toh Framework
+<p align="center">
+  <img src="https://raw.githubusercontent.com/wasintoh/toh-framework/main/docs/assets/toh-framework-banner.png" alt="Toh Framework 2.0" width="760" />
+</p>
 
-> **"พิมพ์ครั้งเดียว ได้ครบ!"** - AI-Orchestration Driven Development
+<h3 align="center">"พิมพ์ครั้งเดียว ได้ครบ!" — AI-Orchestration Driven Development</h3>
+
+<p align="center">อนุมัติครั้งเดียว เดินไปกินกาแฟ กลับมาเจอแอปเสร็จพร้อมตรวจแล้ว</p>
 
 [![npm version](https://img.shields.io/npm/v/toh-framework.svg?style=flat-square)](https://www.npmjs.com/package/toh-framework)
 [![npm downloads](https://img.shields.io/npm/dt/toh-framework.svg?style=flat-square)](https://www.npmjs.com/package/toh-framework)
@@ -32,70 +36,25 @@ Toh Framework ช่วยให้คุณ:
 - 👀 **เห็นผลทันที** - ไม่ต้องรอ ไม่ต้องตอบคำถาม
 - 🚀 **พร้อมใช้งานจริง** - ไม่ใช่แค่ prototype
 
-## 🆕 มีอะไรใหม่ใน v1.7.0
+## 🆕 มีอะไรใหม่ใน v2.0.0
 
-### 🏗️ Code Architecture Tracking
+> **รุ่น "เลิกเฝ้า AI ได้เลย"** — อนุมัติครั้งเดียว ได้แอปเสร็จทั้งระบบ
 
-AI จำโครงสร้าง project ของคุณได้ทันที:
+| ฟีเจอร์ | คุณได้อะไร |
+|---------|-----------|
+| 🚀 **One-Go Build** | อนุมัติครั้งเดียว ได้แอปเสร็จทั้งระบบ — `/toh-plan` เขียนแผนลงไฟล์ พิมพ์ **"Go"** แล้วสร้างรวดจนจบ ไม่ต้องนั่งกดต่อทีละขั้น |
+| 🔁 **TOH LOOP** | พิมพ์แล้วลืมได้เลย — สร้าง ตรวจ แก้เองจนผ่านทีละงาน **ไม่ถาม "ทำต่อไหม?"** คั่นกลางอีกแล้ว |
+| 🛡️ **Stop Hook** | ไม่ยอมเลิกงานจนกว่าทุกข้อจะ**เสร็จจริงแบบพิสูจน์ได้** — ยึดผลรันจริงเป็นหลักฐานเท่านั้น (Claude Code) |
+| 🎨 **Design Identity** | ดูไม่ออกว่า AI ทำ — ทุกโปรเจคได้ `DESIGN.md` บุคลิกของตัวเอง (สี ฟอนต์ เมนู จุดเด่นเฉพาะตัว) + **AVOID-LIST** ฆ่าลุค AI ทุกรูปแบบ |
+| ⏯️ **Auto-Resume** | หยุดเมื่อไหร่ก็ได้ — `/clear` ปิดเครื่อง หรือย้าย IDE กลับมา**ทำต่อจากจุดเดิมเป๊ะ** จาก `.toh/plan.md` |
 
-| Memory File | หน้าที่ |
-|-------------|---------|
-| `architecture.md` | โครงสร้าง project, routes, data flow |
-| `components.md` | รายการ components พร้อม props |
+### และใน 2.0.0 ยังมี
 
-**ประโยชน์:**
-- ไม่ต้อง scan codebase ทุก session
-- AI รู้ว่าอะไรอยู่ตรงไหน
-- 5 memory files (เดิม 3), ~3,000 tokens
-
-### 🔐 Security Engineer System
-
-ระบบ security สำหรับ AI-generated code:
-
-```bash
-# Full security audit
-/toh-protect
-
-# Quick checks ใน /toh-dev และ /toh-test
-/toh-dev เพิ่ม payment form  # → Security check ก่อน & หลัง
-/toh-test                    # → Security check ก่อน test
-```
-
-**Security Checks:**
-- Level 1 (Quick): Secrets, dangerous code, auth issues
-- Level 2 (Full): Injection, auth flaws, AI risks, config
-
-### 🤖 8 Sub-Agents
-
-| Agent | ความเชี่ยวชาญ |
-|-------|---------------|
-| 🎨 **ui-builder** | Pages, Components, Layouts |
-| ⚙️ **dev-builder** | Logic, State, API |
-| 🔌 **backend-connector** | Supabase, Auth, RLS |
-| ✨ **design-reviewer** | ขัดเกลา, Animation |
-| 🧪 **test-runner** | Auto test & fix |
-| 🧠 **plan-orchestrator** | วิเคราะห์, วางแผน |
-| 📱 **platform-adapter** | LINE, Mobile, Desktop |
-| 🔍 **root-cause-debugger** | สืบหาและพิสูจน์ต้นตอ bug |
-
-### 🔄 Multi-Agent Orchestration
-
-**`/toh` v4.0** - Smart Command พร้อมความโปร่งใส:
-
-```bash
-/toh สร้างระบบจัดการร้านกาแฟ
-
-# AI แสดงแผน:
-📋 Workflow Plan:
-├── 1. plan-orchestrator → วิเคราะห์ requirements
-├── 2. ui-builder → สร้างหน้าทั้งหมด + components
-├── 3. dev-builder → เพิ่ม state + forms + API
-├── 4. design-reviewer → ขัดเกลาให้สวย
-├── 5. test-runner → Test จนผ่าน
-└── 6. security-check → ตรวจสอบก่อน deploy [NEW]
-
-🚀 กำลังทำ...
-```
+- 🧠 **`/toh` v5** — เข้าใจเจตนา สำรวจเครื่องมือที่มี จัดทีม+เลือกโมเดลเอง ตรวจก่อนรายงาน
+- 🔬 **`/toh-fix`** — พิสูจน์ต้นตอด้วยหลักฐานจริงก่อนแก้เสมอ (ห้ามแก้มั่ว)
+- ⚡ **Stack ใหม่** — Next.js 16 / React 19 / Tailwind CSS 4 (build ผ่านจริง)
+- 💚 **`/toh-line` + `/toh-mobile`** — แปลงเป็น LINE MINI App หรือทำ PWA/Capacitor ในคำสั่งเดียว
+- 🤖 **Agents ชุดเดียว** — แปลงให้เหมาะกับแต่ละ IDE ตอนติดตั้ง + เลือกโมเดลตามหน้าที่ (opus/sonnet/haiku)
 
 ---
 
@@ -103,13 +62,13 @@ AI จำโครงสร้าง project ของคุณได้ทั�
 
 | Feature | รายละเอียด |
 |---------|------------|
-| **`/toh` Smart Command** | พิมพ์อะไรก็ได้ AI เลือก agent ให้ |
-| **Sub-Agents** | 8 agents เชี่ยวชาญเฉพาะทาง |
-| **Multi-Agent Orchestration** | Workflow ซับซ้อนพร้อมความโปร่งใส |
-| **Premium Experience** | 5+ หน้าพร้อม animations ในคำสั่งเดียว |
-| **Design Mastery** | Design identity ประจำโปรเจคใน DESIGN.md + AVOID-LIST แบบมีเวอร์ชัน |
+| **One-Go Build** | `/toh-plan` → อนุมัติครั้งเดียว → ได้ทั้งแอปแบบอัตโนมัติ |
+| **TOH LOOP** | สร้าง ตรวจ แก้เองจนทุกงานเสร็จจริงแบบพิสูจน์ได้ |
+| **`/toh` Smart Command** | พิมพ์อะไรก็ได้ AI เลือก agents และโมเดลให้ |
+| **Design Identity** | `DESIGN.md` ประจำโปรเจค + AVOID-LIST — ไม่มีลุค AI |
+| **Auto-Resume** | `.toh/plan.md` รอด `/clear` ปิดเครื่อง และย้าย IDE |
+| **Sub-Agents** | 8 agents เชี่ยวชาญเฉพาะทาง พร้อม model tiers |
 | **Auto Memory** | Context คงอยู่ข้าม sessions และ IDEs |
-| **Auto Testing** | Test & fix loop จนผ่านหมด |
 
 ---
 
@@ -232,8 +191,8 @@ gemini
 
 | หมวด | เทคโนโลยี |
 |------|-----------|
-| Framework | Next.js 14 (App Router) |
-| Styling | Tailwind CSS + shadcn/ui |
+| Framework | Next.js 16 (App Router) + React 19 |
+| Styling | Tailwind CSS 4 + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
 | Backend | Supabase |

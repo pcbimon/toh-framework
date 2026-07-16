@@ -650,10 +650,11 @@ function printNextSteps(config) {
   console.log(row(chalk.blue(pad('    https://github.com/wasintoh/toh-framework'))));
   console.log(mid);
   console.log(row(chalk.bold.yellow(pad(`  What's New in v${VERSION}:`))));
-  console.log(row(chalk.white(pad('  * Smarter /toh + evidence-first /toh-fix'))));
-  console.log(row(chalk.white(pad('  * Modern stack: Next 16 / React 19 / Tailwind 4'))));
-  console.log(row(chalk.white(pad('  * LINE MINI App + PWA/Capacitor - one command'))));
-  console.log(row(chalk.white(pad('  * Single-source agents + tiered memory (lighter)'))));
+  console.log(row(chalk.white(pad('  * One-Go Build: approve once, get a whole finished app'))));
+  console.log(row(chalk.white(pad('  * TOH LOOP: Type & Forget - builds, tests, fixes itself'))));
+  console.log(row(chalk.white(pad('  * Stop Hook: refuses to quit until verified DONE'))));
+  console.log(row(chalk.white(pad('  * Design Identity: no one can tell AI made it'))));
+  console.log(row(chalk.white(pad('  * Auto-Resume: quit anytime, it continues where it left'))));
   console.log(bot);
   console.log('');
 }

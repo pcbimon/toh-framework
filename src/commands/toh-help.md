@@ -151,11 +151,11 @@ Every response from Toh includes:
 
 ### 🆕 What's New in v2.0.0
 
-- 🔗 **Plan → Vibe link** - `/toh-plan` writes `.toh/plan.md`, one "Go" builds the whole plan; `/toh-vibe` resumes any unfinished plan at the first unchecked task
-- 🔁 **THE TOH LOOP** - new `orchestration-protocol` skill: autonomous plan-execute-verify with quoted checkpoint output, no "continue?" prompts
-- 🎨 **Design Identity** - per-project root `DESIGN.md` generated before any UI; `design-craft` AVOID-LIST kills AI-looking patterns
-- 🧠 **Tiered Memory** - Tier 1 always-read is ~800 tokens; deeper tiers load on demand
-- ⚙️ **Installer upgrades** - per-IDE command transform, `.toh/capabilities.json`, Claude Code Stop hook + loop heartbeat
+- 🚀 **One-Go Build** - approve once, get a whole finished app: `/toh-plan` writes `.toh/plan.md`, one "Go" builds the entire plan with zero babysitting (อนุมัติครั้งเดียว ได้ทั้งแอป)
+- 🔁 **TOH LOOP** - Type & Forget: builds, tests, and fixes itself until every task is verified DONE — no "continue?" prompts, ever (พิมพ์แล้วลืมได้เลย)
+- 🛡️ **Stop Hook** - refuses to quit while the plan has unfinished work; quoted checkpoint output is the only proof of done (ยามที่ไม่ยอมให้เลิกงานก่อนเสร็จ)
+- 🎨 **Design Identity** - no one can tell AI made it: per-project root `DESIGN.md` + versioned AVOID-LIST kill the AI look (แต่ละแอปมีบุคลิกของตัวเอง)
+- ⏯️ **Auto-Resume** - quit anytime, it continues exactly where it left off — `/clear`, new terminal, or even a different IDE (ปิดเครื่องแล้วกลับมาทำต่อได้)
 
 ---
 

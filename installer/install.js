@@ -120,7 +120,7 @@ export async function install(options) {
     switch (ideName.toLowerCase()) {
       case 'claude':
       case 'claude-code':
-        await setupIDEWithSpinner('Claude Code', () => setupClaudeCode(config.targetDir, config.language));
+        await setupIDEWithSpinner('Claude Code', () => setupClaudeCode(config.targetDir, SRC_DIR, config.language));
         break;
       case 'cursor':
         await setupIDEWithSpinner('Cursor', () => setupCursor(config.targetDir, config.language));
@@ -139,9 +139,10 @@ export async function install(options) {
   }
 
   // v2.0.0: transform the shared .toh/commands copy to the UNIVERSAL variant
-  // (drop tfw:claude blocks, unwrap tfw:fallback). This MUST run AFTER the IDE
-  // loop — claude-code.js needs the marker-bearing source to build its own
-  // .claude/commands variant. Idempotent: no markers left = no-op.
+  // (drop tfw:claude blocks, unwrap tfw:fallback). Runs AFTER the IDE loop.
+  // v2.0.0-r2: claude-code.js builds .claude/commands from the PACKAGE's
+  // src/commands (marker-bearing), falling back to .toh/commands only when the
+  // package source is unavailable. Idempotent: no markers left = no-op.
   await normalizeUniversalCommands(config.targetDir);
 
   // Generate manifest + machine-readable capability declaration
@@ -558,8 +559,10 @@ Created: ${today} by toh-framework installer
 > (writes it) and \`/toh-vibe\` (executes it). Full schema + loop protocol:
 > \`.toh/skills/orchestration-protocol/SKILL.md\` (Section D).
 >
-> Task-line grammar: \`- [ ] T001 [P] agent — description in app/exact/path.tsx\`
-> — exact file path mandatory · \`[P]\` = parallel-safe (disjoint files only)
+> Task-line grammar (example shown pre-ticked so this doc line can never be
+> read as a real open task): \`- [x] T001 [P] agent — description in app/exact/path.tsx\`
+> — real open tasks use \`[ ]\` in place of \`[x]\` · exact file path mandatory
+> · \`[P]\` = parallel-safe (disjoint files only)
 > · blocked tasks flip to \`- [!]\` + \`BLOCKED: <one-line diagnosis>\`
 > · flip to \`- [x]\` only after a quoted passing Checkpoint run.
 

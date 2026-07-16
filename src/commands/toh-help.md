@@ -143,7 +143,7 @@ Every response from Toh includes:
 - 🤖 **8 Sub-Agents v2.1** - UI, Dev, Design, Test, Connect, Plan, Platform, root-cause-debugger
 - 🎯 **14 Commands** - Including `/toh` smart command & `/toh-protect`
 - 📚 **23 Skills** - Including Orchestration Protocol & Security Engineer
-- 🎨 **13 Design Profiles** - Business-appropriate design
+- 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Gemini, Antigravity, Codex
 

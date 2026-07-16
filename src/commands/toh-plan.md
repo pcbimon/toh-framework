@@ -50,7 +50,7 @@ skills:
 <!-- tfw:claude -->
 **Claude Code เสริมพลังหลัง Go:**
 - `/loop` — babysitter เบื้องหลังที่ไล่ปิด task ให้จนหมดแผน (กด Esc เพื่อหยุด)
-- `/goal all stories in .toh/plan.md checked and build passes — or stop after 40 turns` — ตั้งเส้นชัยให้ระบบคุมเอง (Claude Code >= 2.1.139)
+- `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns` — ตั้งเส้นชัยให้ระบบคุมเอง (Claude Code >= 2.1.139)
 <!-- /tfw:claude -->
 
 ---

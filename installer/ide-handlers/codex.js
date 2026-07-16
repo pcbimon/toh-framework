@@ -516,13 +516,13 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |---------|------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
 | \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
 | \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
-| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\` |
+| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
 | \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
 | \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
 | \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
@@ -830,13 +830,13 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |--------|-------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
 | \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
 | \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
-| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\` |
+| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
 | \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
 | \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
 | \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |

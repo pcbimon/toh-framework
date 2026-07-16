@@ -475,13 +475,13 @@ All Toh Framework resources are in the \`.toh/\` folder:
 
 | Command | Load These Skills | Load Agent |
 |---------|------------------|------------|
-| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/ui-first-builder/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
+| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/engineer-harness/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
 | \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
 | \`/toh-dev\` | \`@.toh/skills/dev-engineer/SKILL.md\`, \`@.toh/skills/backend-engineer/SKILL.md\` | \`@.toh/agents/dev-builder.md\` |
 | \`/toh-design\` | \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
 | \`/toh-test\` | \`@.toh/skills/test-engineer/SKILL.md\`, \`@.toh/skills/debug-protocol/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 | \`/toh-connect\` | \`@.toh/skills/backend-engineer/SKILL.md\`, \`@.toh/skills/integrations/SKILL.md\` | \`@.toh/agents/backend-connector.md\` |
-| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
+| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\`, \`@.toh/skills/engineer-harness/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
 | \`/toh-fix\` | \`@.toh/skills/debug-protocol/SKILL.md\`, \`@.toh/skills/error-handling/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 
 ### Core Skills (Always Available)
@@ -772,13 +772,13 @@ All Toh Framework resources are in \`.toh/\`:
 
 | Command | Load Skills | Load Agent |
 |--------|------------|------------|
-| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
+| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/engineer-harness/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
 | \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
 | \`/toh-dev\` | \`@.toh/skills/dev-engineer/SKILL.md\`, \`@.toh/skills/backend-engineer/SKILL.md\` | \`@.toh/agents/dev-builder.md\` |
 | \`/toh-design\` | \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
 | \`/toh-test\` | \`@.toh/skills/test-engineer/SKILL.md\`, \`@.toh/skills/debug-protocol/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 | \`/toh-connect\` | \`@.toh/skills/backend-engineer/SKILL.md\`, \`@.toh/skills/integrations/SKILL.md\` | \`@.toh/agents/backend-connector.md\` |
-| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
+| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\`, \`@.toh/skills/engineer-harness/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
 | \`/toh-fix\` | \`@.toh/skills/debug-protocol/SKILL.md\`, \`@.toh/skills/error-handling/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 
 ### Core Skills (Always Available)

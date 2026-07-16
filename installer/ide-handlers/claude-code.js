@@ -16,7 +16,7 @@ const __dirname = dirname(__filename);
 const pkg = JSON.parse(fs.readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
 const VERSION = pkg.version;
 
-export async function setupClaudeCode(targetDir, language = 'en') {
+export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
   // No spinner here — the caller (setupIDEWithSpinner) owns the spinner so the
   // "Configuring Claude Code..." line isn't printed twice. We just return a
   // short detail string describing the CLAUDE.md outcome for it to display.
@@ -103,10 +103,41 @@ export async function setupClaudeCode(targetDir, language = 'en') {
     }
     // v2.0.0: commands are single-source with per-IDE marker blocks. The Claude
     // variant KEEPS <!-- tfw:claude --> content and DROPS <!-- tfw:fallback -->
-    // blocks (markers always stripped). Runs before install.js normalizes the
-    // shared .toh/commands copy to the universal variant.
+    // blocks (markers always stripped).
+    //
+    // v2.0.0-r2: source the transform from the PACKAGE's src/commands (the same
+    // SRC_DIR install.js hands codex.js/gemini-cli.js), NOT the target's
+    // .toh/commands. install.js normalizes .toh/commands to the UNIVERSAL
+    // variant at the end of every run, so on a later Quick Update with the
+    // Commands component unchecked, .toh/commands no longer carries the
+    // tfw:claude blocks — copying it would silently drop the Claude-only
+    // content (/goal, /loop, teams). Fall back to .toh/commands only when the
+    // package source is unavailable.
     if (fs.existsSync(join(tohDir, 'commands'))) {
-      await copyCommandsTransformed(join(tohDir, 'commands'), join(claudeDir, 'commands'));
+      const pkgCommandsDir = srcDir
+        ? join(srcDir, 'commands')
+        : join(__dirname, '..', '..', 'src', 'commands');
+      if (fs.existsSync(pkgCommandsDir)) {
+        await copyCommandsTransformed(pkgCommandsDir, join(claudeDir, 'commands'));
+      } else {
+        // Fallback: transform is idempotent, so re-running on already-universal
+        // content can't double-strip — the real risk is MISSING Claude content.
+        // preserveExistingWhenNoMarkers keeps a previously-installed Claude
+        // variant instead of clobbering it with the stripped universal copy.
+        const sawMarkers = await copyCommandsTransformed(
+          join(tohDir, 'commands'),
+          join(claudeDir, 'commands'),
+          true
+        );
+        if (!sawMarkers) {
+          console.log(chalk.yellow(
+            '\n  ⚠️  .toh/commands is already normalized to the universal variant and the ' +
+            'package source (src/commands) is unavailable — .claude/commands may be missing ' +
+            'Claude Code-only content (/goal, /loop, teams). Run a full reinstall with the ' +
+            'Commands component selected to restore it.'
+          ));
+        }
+      }
     }
     if (fs.existsSync(join(tohDir, 'templates'))) {
       await fs.copy(join(tohDir, 'templates'), join(claudeDir, 'templates'), { overwrite: true });
@@ -148,26 +179,41 @@ export async function setupClaudeCode(targetDir, language = 'en') {
 }
 
 /**
- * v2.0.0: Copy .toh/commands -> .claude/commands, transforming every .md
+ * v2.0.0: Copy a commands dir -> .claude/commands, transforming every .md
  * through transformCommand(content, 'claude-code') so Claude Code keeps the
  * tfw:claude blocks and drops the tfw:fallback blocks. Non-.md files and
  * nested folders copy through unchanged.
+ *
+ * v2.0.0-r2: returns true if any .md carried tfw: markers. With
+ * preserveExistingWhenNoMarkers (fallback mode, source = .toh/commands), a
+ * markerless .md — i.e. one already normalized to the universal variant —
+ * never overwrites an existing dest file, which may still hold the richer
+ * Claude variant from a previous install.
  */
-async function copyCommandsTransformed(srcDir, destDir) {
+async function copyCommandsTransformed(srcDir, destDir, preserveExistingWhenNoMarkers = false) {
   await fs.ensureDir(destDir);
+  let sawMarkers = false;
   const entries = await fs.readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
     const srcPath = join(srcDir, entry.name);
     const destPath = join(destDir, entry.name);
     if (entry.isDirectory()) {
-      await copyCommandsTransformed(srcPath, destPath);
+      if (await copyCommandsTransformed(srcPath, destPath, preserveExistingWhenNoMarkers)) {
+        sawMarkers = true;
+      }
     } else if (entry.name.endsWith('.md')) {
       const raw = await fs.readFile(srcPath, 'utf8');
+      const hasMarkers = raw.includes('tfw:');
+      if (hasMarkers) sawMarkers = true;
+      if (!hasMarkers && preserveExistingWhenNoMarkers && fs.existsSync(destPath)) {
+        continue; // transform is a no-op and dest may be the good Claude variant — keep it
+      }
       await fs.writeFile(destPath, transformCommand(raw, 'claude-code'));
     } else {
       await fs.copy(srcPath, destPath, { overwrite: true });
     }
   }
+  return sawMarkers;
 }
 
 // Idempotence marker for the TFW Stop hook — a reinstall appends the hook only
@@ -179,8 +225,9 @@ const TFW_STOP_HOOK_PROMPT =
   "('- [ ]' without '[!]') or the last QC run in the transcript failed, return " +
   '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
   'If stop_hook_active is true and no progress was made since the last block, ' +
-  'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done, ' +
-  'return {"ok": true}.';
+  'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done/' +
+  'Status: draft, return {"ok": true}. These ok:true conditions take precedence ' +
+  'even if the last QC run in the transcript failed.';
 
 /**
  * v2.0.0: Deep-merge the TFW Stop hook into .claude/settings.json.

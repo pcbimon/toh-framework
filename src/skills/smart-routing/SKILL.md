@@ -52,6 +52,8 @@ Intelligent routing engine for the `/toh` smart command. Routes any natural lang
 
 ## 📊 Intent Classification Matrix
 
+> Illustrative heuristics only — native agent-description matching makes the actual call (see /toh); do not compute or display confidence scores.
+
 ### Primary Patterns → Agent Mapping
 
 | Pattern Category | Keywords (EN) | Keywords (TH) | Primary Agent | Confidence |
@@ -75,6 +77,8 @@ Intelligent routing engine for the `/toh` smart command. Routes any natural lang
 ---
 
 ## 🎯 Confidence Scoring Algorithm
+
+> Illustrative heuristics only — native agent-description matching makes the actual call (see /toh); do not compute or display confidence scores.
 
 ```typescript
 interface ConfidenceFactors {

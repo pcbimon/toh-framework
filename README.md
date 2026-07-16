@@ -127,7 +127,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 | **Sub-Agents** | 8 specialized agents for different tasks |
 | **Multi-Agent Orchestration** | Complex workflows with full visibility |
 | **Premium Experience** | 5+ pages with animations in one prompt |
-| **Design Mastery** | 13 business profiles for smart design |
+| **Design Mastery** | Per-project DESIGN.md design identity + versioned AVOID-LIST |
 | **Auto Memory** | Context persists across sessions and IDEs |
 | **Auto Testing** | Test & fix loop until all pass |
 
@@ -291,6 +291,8 @@ The plan is a **file**, never chat state:
 - `/toh-plan` writes `.toh/plan.md` → you approve **once** ("Go") → the whole plan is built autonomously, verified checkpoint by checkpoint.
 - `/toh-vibe` resumes any unfinished plan: it reads `.toh/plan.md` first and continues from the first unchecked task — in any session, any IDE.
 
+Note: autonomous-loop *enforcement* (the Stop hook, `/goal`, `/loop`) is Claude Code-only — other IDEs follow the same loop as instructions, with checkbox-resume in `.toh/plan.md` as the recovery mechanism.
+
 **Unattended builds** — kick off a full build headless (Claude Code):
 
 ```bash
@@ -333,7 +335,7 @@ claude -p "/toh-vibe coffee shop management system" --permission-mode acceptEdit
 - 🤖 **8 Sub-Agents** - Specialized for different tasks
 - 🎯 **14 Commands** - From planning to deployment
 - 📚 **23 Skills** - Comprehensive AI capabilities `[NEW: Orchestration Protocol]`
-- 🎨 **13 Design Profiles** - Business-appropriate design
+- 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex
 

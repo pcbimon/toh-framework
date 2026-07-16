@@ -3,6 +3,8 @@ command: /toh-ship
 aliases: ["/toh-s"]
 description: Deploy app to production (Vercel, Netlify, and more)
 trigger: /toh-ship or /toh-s
+skills:
+  - engineer-harness
 ---
 
 # /toh-ship - Deploy to Production
@@ -92,20 +94,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 NEXT_PUBLIC_LIFF_ID=xxx (if using LINE)
 ```
 
-### Next Steps:
+### Closing:
 
-1. **Set Environment Variables**
-   - Go to Vercel Dashboard → Settings → Environment Variables
-   - Add the variables above
+Close per **engineer-harness Section C** (announce block: Status / Result / Evidence + exactly 3 next actions). Default trio for the shipped stage:
 
-2. **Custom Domain (optional)**
-   - Go to Settings → Domains
-   - Add your domain
-
-3. **Test**
-   - Open production URL
-   - Test main features
-   - Check mobile view
+1. `/toh-test` — regression safety net ← recommended
+2. `/toh-plan <new feature>` — next feature
+3. business-type fit (F&B → payments, receipts · E-commerce → Stripe, order emails · Booking → calendar sync · SaaS → user roles, billing)
 ```
 
 ## Supported Platforms

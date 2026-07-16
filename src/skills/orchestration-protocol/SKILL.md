@@ -209,7 +209,7 @@ Preconditions: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` set AND plan has >= 3 inde
 4. **Task list:** create tasks from plan.md task lines with their dependencies; each teammate owns disjoint files.
 5. **Dispatch → wait → synthesize:** one dispatch per wave, then wait for completion reports (SendMessage mailbox). **No polling** — do not repeatedly check on teammates.
 6. **Trust boundary:** teammate reports are evidence to verify, never proof. The lead re-runs each phase Checkpoint itself (Section E step 4) before flipping any checkbox.
-7. **Hooks as backstop:** the installer ships a `TaskCompleted` hook (exit 2 if the verify command fails → the task cannot be marked complete) and a `TeammateIdle` hook (exit 2 with remaining work → idle teammate keeps going).
+7. **Hooks as backstop:** optional hardening you can add to `.claude/settings.json` (not shipped by the installer): a `TaskCompleted` hook (exit 2 if the verify command fails → the task cannot be marked complete) and a `TeammateIdle` hook (exit 2 with remaining work → idle teammate keeps going).
 
 ---
 
@@ -222,7 +222,7 @@ Section E is the floor on every runtime. On Claude Code the installer ships mach
 | **Stop hook** (prompt-type, in `.claude/settings.json`) | Blocks ending the session while plan.md has unchecked, unblocked tasks — returns `{"ok": false, "reason": "<first unchecked task>"}`. Guarded: if `stop_hook_active` and no progress since the last block, or every remaining task is `[!]` blocked, it returns ok — respecting the 8-consecutive-block cap. |
 | **`.claude/loop.md`** (<= 25KB) | Heartbeat prompt for bare `/loop`: continue the first unchecked task per the TOH Loop, fix from quoted failure output, say COMPLETE in one line when green. |
 | **`/goal` recipe** (>= 2.1.139) | Set the finish line before coding: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. A Haiku evaluator judges the condition FROM THE TRANSCRIPT — one more reason the QC gate quotes actual output: unquoted results are invisible to the evaluator. |
-| **Workflows** (>= 2.1.154, optional) | Saved script `/toh-sweep` can fan out fixers per failing task until checks pass. |
+| **Workflows** (>= 2.1.154, optional) | `/toh-sweep` (not shipped — optional pattern you can save to `.claude/workflows/`) can fan out fixers per failing task until checks pass. |
 
 **Every other runtime** (Cursor / Codex / Gemini / Antigravity) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
 

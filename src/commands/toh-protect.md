@@ -3,6 +3,8 @@ command: /toh-protect
 aliases: ["/toh-p", "/toh-security", "/toh-audit"]
 description: Full security audit for AI-generated code - scan for vulnerabilities before deploy
 trigger: /toh-protect or /toh-p
+skills:
+  - engineer-harness
 ---
 
 # /toh-protect - Security Audit
@@ -177,6 +179,14 @@ RECOMMENDATIONS
 Full report: .toh/security-audit-2024-12-26.md
 ====================================
 ```
+
+## Closing
+
+Close per **engineer-harness Section C** (announce block: Status / Result / Evidence + exactly 3 next actions). Default post-audit trio:
+
+1. `/toh-fix <critical finding>` — fix the critical findings first ← recommended
+2. `/toh-test` — verify nothing broke after the fixes
+3. `/toh-ship` — deploy once the audit is clean
 
 ## Auto-Fix Support
 

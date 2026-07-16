@@ -169,7 +169,7 @@ The announce block is the skeleton the 3-Section Report hangs on — one closing
 
 **Filling a free slot — fit the business type:** F&B → payments, receipts · E-commerce → Stripe, order emails · Booking → calendar sync, reminders · SaaS → user roles, billing.
 
-**Continuation option (capability ladder, top rung first — if unavailable, fall back one rung):** when unchecked plan tasks remain, on Claude Code one option may be `/loop` — background babysitter that keeps finishing stories (Esc stops) — or the `/goal` recipe: `/goal all stories in .toh/plan.md checked and build passes — or stop after 40 turns`. Where those don't exist, substitute: `re-run /toh-vibe to continue from .toh/plan.md`.
+**Continuation option (capability ladder, top rung first — if unavailable, fall back one rung):** when unchecked plan tasks remain, on Claude Code one option may be `/loop` — background babysitter that keeps finishing stories (Esc stops) — or the `/goal` recipe: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. Where those don't exist, substitute: `re-run /toh-vibe to continue from .toh/plan.md`.
 
 ### Handling the reply
 

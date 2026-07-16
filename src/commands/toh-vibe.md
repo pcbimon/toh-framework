@@ -47,7 +47,7 @@ skills:
 
 <!-- tfw:claude -->
 **ก่อนเริ่ม build ใหญ่ (Claude Code):**
-- Claude Code >= 2.1.139 → ตั้งเส้นชัยก่อนเขียนโค้ด: `/goal ทุก story ใน .toh/plan.md checked และ build ผ่าน — or stop after 40 turns`
+- Claude Code >= 2.1.139 → ตั้งเส้นชัยก่อนเขียนโค้ด: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`
 - env `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` เปิด + แผนมี >= 3 โมดูลอิสระ → ใช้ teams recipe จาก orchestration-protocol
 - แนะนำ `/loop` เป็น babysitter เบื้องหลังได้ — คอยทำ story ที่ค้างต่อจนจบ (Esc = หยุด)
 <!-- /tfw:claude -->

@@ -107,7 +107,7 @@ AI จำโครงสร้าง project ของคุณได้ทั�
 | **Sub-Agents** | 8 agents เชี่ยวชาญเฉพาะทาง |
 | **Multi-Agent Orchestration** | Workflow ซับซ้อนพร้อมความโปร่งใส |
 | **Premium Experience** | 5+ หน้าพร้อม animations ในคำสั่งเดียว |
-| **Design Mastery** | 13 business profiles สำหรับ design อัจฉริยะ |
+| **Design Mastery** | Design identity ประจำโปรเจคใน DESIGN.md + AVOID-LIST แบบมีเวอร์ชัน |
 | **Auto Memory** | Context คงอยู่ข้าม sessions และ IDEs |
 | **Auto Testing** | Test & fix loop จนผ่านหมด |
 
@@ -271,6 +271,8 @@ Orchestrator:
 - `/toh-plan` เขียนแผนลง `.toh/plan.md` → อนุมัติ**ครั้งเดียว** ("Go") → AI สร้างทั้งแผนอัตโนมัติ ตรวจสอบทุก checkpoint เอง
 - `/toh-vibe` ทำแผนค้างต่อได้เสมอ: อ่าน `.toh/plan.md` ก่อน แล้วทำต่อจาก task แรกที่ยังไม่ติ๊ก — ข้าม session ข้าม IDE ได้
 
+หมายเหตุ: กลไก*บังคับ* loop อัตโนมัติ (Stop hook, `/goal`, `/loop`) มีเฉพาะบน Claude Code เท่านั้น — IDE อื่นรัน loop เดียวกันในรูปแบบคำสั่งในเอกสาร (instructions) โดยมี checkbox-resume ใน `.toh/plan.md` เป็นกลไกกู้คืน
+
 **สั่ง build แบบไม่ต้องเฝ้า** — รันแบบ headless (Claude Code):
 
 ```bash
@@ -313,7 +315,7 @@ claude -p "/toh-vibe ระบบจัดการร้านกาแฟ" --p
 - 🤖 **8 Sub-Agents** - เชี่ยวชาญเฉพาะทาง
 - 🎯 **14 Commands** - ตั้งแต่วางแผนถึง deployment
 - 📚 **23 Skills** - ความสามารถ AI ครบครัน `[NEW: Orchestration Protocol]`
-- 🎨 **13 Design Profiles** - Design เหมาะกับธุรกิจ
+- 🎨 **Design Identity** - DESIGN.md ประจำโปรเจค + AVOID-LIST แบบมีเวอร์ชัน
 - 📦 **15 Component Templates** - Premium components พร้อมใช้
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex
 

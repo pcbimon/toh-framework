@@ -43,6 +43,7 @@
     "installer",
     "src",
     "docs",
+    "!docs/assets",
     "dist"
   ],
   "scripts": {

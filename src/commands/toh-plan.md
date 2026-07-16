@@ -337,36 +337,39 @@ When presenting a plan, use this structured format:
 
 ---
 
-## 🔄 Memory Integration (7 Files)
+## 🔄 Memory Integration (Tiered Loading)
 
 ```text
-🚨 MANDATORY - Must do every time!
+🚨 Read smart, not all 7 blindly — the 7 files still exist, load them by tier.
 
-BEFORE Planning (Read ALL 7 files):
-├── .toh/memory/active.md      (current task)
-├── .toh/memory/summary.md     (project overview)
-├── .toh/memory/decisions.md   (past decisions)
-├── .toh/memory/changelog.md   (session changes)
-├── .toh/memory/agents-log.md  (agent activity)
-├── .toh/memory/architecture.md (project structure)
-└── .toh/memory/components.md  (existing components)
+BEFORE Planning:
+├── Tier 1 · ALWAYS at start (~800 tokens)
+│   ├── .toh/memory/active.md   (current task)
+│   └── .toh/memory/summary.md  (project overview)
+├── Tier 2 · read per task type
+│   ├── .toh/memory/architecture.md (structure — build/code work)
+│   ├── .toh/memory/components.md   (existing components — build/code work)
+│   └── .toh/memory/changelog.md    (recent changes — debug work)
+└── Tier 3 · read ONLY when referenced
+    ├── .toh/memory/decisions.md    (past decisions)
+    └── .toh/memory/agents-log.md   (agent activity)
 
 AFTER Each Phase (Save relevant files):
-├── Update active.md (completed work)
-├── Update agents-log.md (agent activity)
+├── Update active.md (ALWAYS — completed work)
 ├── Update changelog.md (changes made)
+├── Update agents-log.md (if agents delegated)
 └── Confirm: "✅ Memory saved"
 
-AFTER Complete (Full Save - all 7 files):
-├── Update summary.md (features created)
-├── Update decisions.md (new decisions)
+AFTER Complete (Save per relevance):
+├── Update active.md (ALWAYS — next steps)
+├── Update summary.md (if project shape changed — features created)
 ├── Update architecture.md (new structure)
 ├── Update components.md (new components)
 ├── Update changelog.md (full session log)
-├── Update agents-log.md (final agent summary)
-└── Update active.md (next steps)
+├── Update decisions.md (new decisions)
+└── Update agents-log.md (final agent summary)
 
-⚠️ Never finish without saving memory!
+⚠️ Never finish without saving active.md!
 ```
 
 ---

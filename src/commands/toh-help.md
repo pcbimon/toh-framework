@@ -73,19 +73,25 @@ When user calls `/toh-help`, display the following:
 
 ---
 
-### 💾 Memory System (7 Files)
+### 💾 Memory System (7 Files · Tiered Loading)
 
 ```
 .toh/memory/
-├── active.md       # Current task
-├── summary.md      # Project summary
-├── decisions.md    # Key decisions
-├── changelog.md    # Session changes
-├── agents-log.md   # Agent activity
-├── architecture.md # Project structure
-├── components.md   # Component registry
-└── archive/        # Historical data
+├── Tier 1 · ALWAYS read at start (~800 tokens)
+│   ├── active.md       # Current task
+│   └── summary.md      # Project summary
+├── Tier 2 · read per task type
+│   ├── architecture.md # Project structure  (build/code work)
+│   ├── components.md   # Component registry  (build/code work)
+│   └── changelog.md    # Session changes     (debug work)
+├── Tier 3 · read only when referenced
+│   ├── decisions.md    # Key decisions
+│   └── agents-log.md   # Agent activity
+└── archive/            # Historical data
 ```
+
+**Writes:** always update `active.md`; update `summary.md` when the project
+shape changes; update the rest per relevance.
 
 ---
 
@@ -136,7 +142,7 @@ Every response from Toh includes:
 
 - 🤖 **8 Sub-Agents v2.1** - UI, Dev, Design, Test, Connect, Plan, Platform, root-cause-debugger
 - 🎯 **15 Commands** - Including `/toh` smart command & `/toh-protect`
-- 📚 **23 Skills** - Including Security Engineer
+- 📚 **22 Skills** - Including Security Engineer
 - 🎨 **13 Design Profiles** - Business-appropriate design
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Gemini, Antigravity, Codex

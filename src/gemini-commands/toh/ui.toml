@@ -10,7 +10,7 @@ Create UI for: {{args}}
 ## CRITICAL: Read Skills First
 @{.gemini/skills/ui-first-builder/SKILL.md}
 @{.gemini/skills/design-craft/SKILL.md}
-@{.gemini/skills/response-format/SKILL.md}
+@{.gemini/skills/engineer-harness/SKILL.md}
 
 ## Memory Protocol (MANDATORY)
 1. Read `.toh/memory/active.md` - current project state

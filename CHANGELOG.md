@@ -2,6 +2,33 @@
 
 All notable changes to Toh Framework will be documented in this file.
 
+## [2.0.0] - 2026-07-14
+
+### 🚀 v2.0.0 Final: Single-Source Agents, Merged Harness & Tiered Memory
+
+The v2.0.0 final release closes the whole v2 upgrade. Phase 4 consolidates the framework to one source of truth: agents live in a single set that the installer transforms into each IDE format, the response skills collapse into one harness, and memory loading gets dramatically lighter.
+
+#### Changed
+
+- **Agents consolidated to a single source** - deleted the duplicate `src/agents/subagents/` set. Agents now live in one place and the installer transforms that single source into each IDE's format (Claude Code, Cursor, Gemini CLI, Antigravity) instead of maintaining parallel copies.
+- **Per-agent model tiers** - each agent now declares its own model tier: **opus** for the heavy reasoners (`plan-orchestrator`, `design-reviewer`), **haiku** for the fast/cheap path (`test-runner`), and the balanced default elsewhere.
+- **Memory switched to tiered loading** - Tier 1 (`active.md` + `summary.md`) is always loaded at ~800 tokens, replacing the old unconditional ~3000-token 7-file read. Deeper tiers load on demand only when the task needs them.
+
+#### Added
+
+- **`engineer-harness` skill** - merges `response-format` + `smart-suggestions` into a single skill, and adds **Tool Selection Rules** (when to reach for which tool) plus a **Non-dev Communication Mode** for speaking plainly to non-technical users.
+- **Installer agent transform** - one agent source is now rewritten into per-IDE frontmatter/format at install time, including the per-agent model tier.
+
+#### Technical
+
+- Skill count reduced **23 → 22** (`response-format` + `smart-suggestions` merged into `engineer-harness`, net -1) across README.md, docs/README-TH.md, and `src/commands/toh-help.md`.
+- Repointed all `response-format` path references to `engineer-harness` across the Antigravity workflows (`toh.md`, `toh-ui.md`, `toh-dev.md`) and Gemini CLI commands (`toh.toml`, `ui.toml`, `dev.toml`).
+- Added **`js-yaml` `^4.1.0`** dependency - used by the installer to parse/rewrite agent frontmatter during the single-source transform.
+- Agent count (**8**) and command count (**14**) unchanged.
+- Version bumped from **2.0.0-beta.3** to **2.0.0**.
+
+---
+
 ## [2.0.0-beta.3] - 2026-07-14
 
 ### 📱 Platform Commands: LINE MINI App & PWA-first Mobile

@@ -10,7 +10,7 @@ Add functionality based on user's request.
 ## CRITICAL: Read Skills First
 - `.gemini/skills/dev-engineer/SKILL.md`
 - `.gemini/skills/backend-engineer/SKILL.md`
-- `.gemini/skills/response-format/SKILL.md`
+- `.gemini/skills/engineer-harness/SKILL.md`
 
 ## Memory Protocol (MANDATORY)
 

@@ -144,24 +144,26 @@ Use these native slash commands:
 | Testing | Playwright |
 | Language | TypeScript (strict) |
 
-## Memory System
+## Memory System (7 files — Tiered Loading)
 
-Memory files at \`.toh/memory/\`:
-- \`active.md\` - Current task
-- \`summary.md\` - Project summary
-- \`decisions.md\` - Key decisions
-- \`architecture.md\` - Project structure
-- \`components.md\` - Component registry
+Memory files at \`.toh/memory/\`. Read only what the task needs:
+- **Tier 1 (ALWAYS read, ~800 tokens):** \`active.md\` (current task) + \`summary.md\` (project overview)
+- **Tier 2 (per task type):** \`architecture.md\` + \`components.md\` for build/code work; \`changelog.md\` for debug work
+- **Tier 3 (only when referenced):** \`decisions.md\` (past decisions) + \`agents-log.md\` (agent activity)
 
-### Memory Protocol
+### Memory Protocol (Tiered)
 
 **Before Work:**
-1. Read memory files
-2. Acknowledge: "Memory loaded!"
+1. Read Tier 1: \`active.md\` + \`summary.md\` (always)
+2. Read Tier 2 for this task type (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
+3. Read Tier 3 (\`decisions.md\`, \`agents-log.md\`) ONLY when referenced
+4. Acknowledge: "Memory loaded!"
 
-**After Work:**
-1. Update relevant memory files
-2. Confirm: "Memory saved!"
+**After Work (write per relevance):**
+1. Update \`active.md\` - ALWAYS
+2. Update \`summary.md\` when the project shape changes; \`architecture.md\`/\`components.md\` when structure changes
+3. Record in \`changelog.md\` + \`agents-log.md\`; update \`decisions.md\` if a real decision was made
+4. Confirm: "Memory saved!"
 
 ## Skills
 
@@ -240,24 +242,26 @@ function generateGeminiMdTH() {
 | Testing | Playwright |
 | Language | TypeScript (strict) |
 
-## Memory System
+## Memory System (7 ไฟล์ — Tiered Loading)
 
-ไฟล์ Memory อยู่ที่ \`.toh/memory/\`:
-- \`active.md\` - งานปัจจุบัน
-- \`summary.md\` - สรุปโปรเจค
-- \`decisions.md\` - การตัดสินใจสำคัญ
-- \`architecture.md\` - โครงสร้างโปรเจค
-- \`components.md\` - รายการ components
+ไฟล์ Memory อยู่ที่ \`.toh/memory/\` อ่านเฉพาะที่งานต้องใช้:
+- **Tier 1 (อ่านทุกครั้ง, ~800 tokens):** \`active.md\` (งานปัจจุบัน) + \`summary.md\` (ภาพรวมโปรเจค)
+- **Tier 2 (ตามประเภทงาน):** \`architecture.md\` + \`components.md\` สำหรับงาน build/code; \`changelog.md\` สำหรับงาน debug
+- **Tier 3 (อ่านเมื่อถูกอ้างถึงเท่านั้น):** \`decisions.md\` (การตัดสินใจเดิม) + \`agents-log.md\` (กิจกรรมของ agent)
 
-### Memory Protocol
+### Memory Protocol (Tiered)
 
 **ก่อนทำงาน:**
-1. อ่าน memory files
-2. รายงาน: "Memory loaded!"
+1. อ่าน Tier 1: \`active.md\` + \`summary.md\` (ทุกครั้ง)
+2. อ่าน Tier 2 ตามประเภทงาน (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
+3. อ่าน Tier 3 (\`decisions.md\`, \`agents-log.md\`) เฉพาะเมื่อถูกอ้างถึง
+4. รายงาน: "Memory loaded!"
 
-**หลังทำงาน:**
-1. อัพเดท memory files ที่เกี่ยวข้อง
-2. ยืนยัน: "Memory saved!"
+**หลังทำงาน (เขียนตามความเกี่ยวข้อง):**
+1. อัพเดท \`active.md\` - ทุกครั้ง
+2. อัพเดท \`summary.md\` เมื่อรูปร่างโปรเจคเปลี่ยน; \`architecture.md\`/\`components.md\` เมื่อโครงสร้างเปลี่ยน
+3. บันทึกใน \`changelog.md\` + \`agents-log.md\`; อัพเดท \`decisions.md\` เมื่อมีการตัดสินใจจริง
+4. ยืนยัน: "Memory saved!"
 
 ## Skills
 

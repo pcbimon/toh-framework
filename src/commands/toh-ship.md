@@ -17,14 +17,17 @@ trigger: /toh-ship or /toh-s
 ## What Happens
 
 ```
-0. 🚨 READ MEMORY (MANDATORY - ALL 7 FILES!)
-   ├── .toh/memory/active.md      (current task)
-   ├── .toh/memory/summary.md     (project overview)
-   ├── .toh/memory/decisions.md   (past decisions)
-   ├── .toh/memory/changelog.md   (session changes)
-   ├── .toh/memory/agents-log.md  (agent activity)
-   ├── .toh/memory/architecture.md (project structure)
-   └── .toh/memory/components.md  (existing components)
+0. 🚨 READ MEMORY (Tiered Loading — don't blind-read all 7)
+   ├── Tier 1 · ALWAYS at start (~800 tokens)
+   │   ├── .toh/memory/active.md   (current task)
+   │   └── .toh/memory/summary.md  (project overview)
+   ├── Tier 2 · read per task type
+   │   ├── .toh/memory/architecture.md (structure — build/code work)
+   │   ├── .toh/memory/components.md   (existing components — build/code work)
+   │   └── .toh/memory/changelog.md    (recent changes — debug/release notes)
+   └── Tier 3 · read ONLY when referenced
+       ├── .toh/memory/decisions.md    (past decisions)
+       └── .toh/memory/agents-log.md   (agent activity)
 
 1. PRE-FLIGHT Checks
    ├── npm run build (must pass)
@@ -47,12 +50,12 @@ trigger: /toh-ship or /toh-s
    ├── Check environment variables are set
    └── Test critical flows
 
-5. 🚨 SAVE MEMORY (MANDATORY!)
-   ├── Update active.md (deployed URL)
+5. 🚨 SAVE MEMORY
+   ├── Update active.md (ALWAYS — deployed URL)
+   ├── Update summary.md (production URL — project shape changed)
    ├── Update changelog.md (deployment)
-   ├── Update agents-log.md (agent activity)
    ├── Update decisions.md (deployment config)
-   └── Update summary.md (production URL)
+   └── Update agents-log.md (if agents delegated)
 ```
 
 ## Example Prompts

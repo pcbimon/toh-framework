@@ -10,7 +10,7 @@ Add functionality for: {{args}}
 ## CRITICAL: Read Skills First
 @{.gemini/skills/dev-engineer/SKILL.md}
 @{.gemini/skills/backend-engineer/SKILL.md}
-@{.gemini/skills/response-format/SKILL.md}
+@{.gemini/skills/engineer-harness/SKILL.md}
 
 ## Memory Protocol (MANDATORY)
 1. Read `.toh/memory/active.md` - what exists

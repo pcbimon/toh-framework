@@ -5,7 +5,7 @@ description: Turn the current web app into a mobile app — PWA (default) or nat
 trigger: /toh-mobile or /toh-m
 skills:
   - platform-specialist
-  - response-format
+  - engineer-harness
 ---
 
 # /toh-mobile — Web → Mobile (one codebase) 📱

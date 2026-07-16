@@ -26,7 +26,7 @@ Result first, details after. Translate technical terms into plain language. Say 
 ## Skills to Read First
 
 - `.gemini/skills/memory-system/SKILL.md`
-- `.gemini/skills/response-format/SKILL.md`
+- `.gemini/skills/engineer-harness/SKILL.md`
 
 ## Memory (short)
 

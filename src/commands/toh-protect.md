@@ -28,14 +28,17 @@ User: /toh-protect
 +-------------------------------------------------------------+
 |  SECURITY AUDIT                                             |
 +-------------------------------------------------------------+
-|  0. READ MEMORY (MANDATORY - ALL 7 FILES!)                  |
+|  0. READ MEMORY (Tiered - not all 7)                        |
+|  Tier 1 - read ALWAYS (~800 tokens):                        |
 |     |- .toh/memory/active.md      (current task)            |
-|     |- .toh/memory/summary.md     (project overview)        |
-|     |- .toh/memory/decisions.md   (past decisions)          |
+|     +- .toh/memory/summary.md     (project overview)        |
+|  Tier 2 - read per task type:                               |
 |     |- .toh/memory/changelog.md   (session changes)         |
-|     |- .toh/memory/agents-log.md  (agent activity)          |
-|     |- .toh/memory/architecture.md (project structure)      |
-|     +- .toh/memory/components.md  (existing components)     |
+|     |- .toh/memory/components.md  (existing components)     |
+|     +- .toh/memory/architecture.md (project structure)      |
+|  Tier 3 - only when referenced:                             |
+|     |- .toh/memory/decisions.md   (past decisions)          |
+|     +- .toh/memory/agents-log.md  (agent activity)          |
 |                                                             |
 |  1. READ Skills                                             |
 |     +- ~/.toh/skills/security-engineer/SKILL.md             |
@@ -63,9 +66,10 @@ User: /toh-protect
 |  6. GENERATE REPORT                                         |
 |     +- Save to .toh/security-audit-[date].md                |
 |                                                             |
-|  7. SAVE MEMORY (MANDATORY!)                                |
-|     |- Update active.md (audit results)                     |
-|     +- Add to decisions.md (security decisions)             |
+|  7. SAVE MEMORY                                             |
+|     |- Update active.md (ALWAYS - audit results)            |
+|     |- Update summary.md (if shape changed)                 |
+|     +- Update decisions.md (security decisions)             |
 +-------------------------------------------------------------+
 ```
 

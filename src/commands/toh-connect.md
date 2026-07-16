@@ -17,14 +17,17 @@ trigger: /toh-connect or /toh-c
 ## What Happens
 
 ```
-0. 🚨 READ MEMORY (MANDATORY - ALL 7 FILES!)
-   ├── .toh/memory/active.md      (current task)
-   ├── .toh/memory/summary.md     (project overview)
-   ├── .toh/memory/decisions.md   (past decisions)
-   ├── .toh/memory/changelog.md   (session changes)
-   ├── .toh/memory/agents-log.md  (agent activity)
-   ├── .toh/memory/architecture.md (project structure)
-   └── .toh/memory/components.md  (existing components)
+0. 🚨 READ MEMORY (Tiered Loading — don't blind-read all 7)
+   ├── Tier 1 · ALWAYS at start (~800 tokens)
+   │   ├── .toh/memory/active.md   (current task)
+   │   └── .toh/memory/summary.md  (project overview)
+   ├── Tier 2 · read per task type
+   │   ├── .toh/memory/architecture.md (structure — build/code work)
+   │   ├── .toh/memory/components.md   (existing components — build/code work)
+   │   └── .toh/memory/changelog.md    (recent changes — debug work)
+   └── Tier 3 · read ONLY when referenced
+       ├── .toh/memory/decisions.md    (past decisions)
+       └── .toh/memory/agents-log.md   (agent activity)
 
 1. READ Skills
    └── ~/.claude/skills/backend-engineer/SKILL.md
@@ -50,12 +53,13 @@ trigger: /toh-connect or /toh-c
    ├── Updated API functions
    └── .env.example with required vars
 
-6. 🚨 SAVE MEMORY (MANDATORY!)
-   ├── Update active.md (current state)
+6. 🚨 SAVE MEMORY
+   ├── Update active.md (ALWAYS — current state)
+   ├── Update summary.md (if project shape changed)
+   ├── Update architecture.md (new services)
    ├── Update changelog.md (backend changes)
-   ├── Update agents-log.md (agent activity)
    ├── Update decisions.md (backend decisions)
-   └── Update architecture.md (new services)
+   └── Update agents-log.md (if agents delegated)
 ```
 
 ## Example Prompts

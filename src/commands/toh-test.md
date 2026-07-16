@@ -18,14 +18,17 @@ User: /toh-test test login page
 ┌─────────────────────────────────────────────────────┐
 │  🧪 Test Runner                                     │
 ├─────────────────────────────────────────────────────┤
-│  0. 🚨 READ MEMORY (MANDATORY - ALL 7 FILES!)       │
+│  0. 🚨 READ MEMORY (Tiered - not all 7)             │
+│  Tier 1 - read ALWAYS (~800 tokens):                │
 │     ├── .toh/memory/active.md      (current task)   │
-│     ├── .toh/memory/summary.md     (project)        │
-│     ├── .toh/memory/decisions.md   (decisions)      │
+│     └── .toh/memory/summary.md     (project)        │
+│  Tier 2 - read per task type:                       │
 │     ├── .toh/memory/changelog.md   (changes)        │
-│     ├── .toh/memory/agents-log.md  (agents)         │
-│     ├── .toh/memory/architecture.md (structure)     │
-│     └── .toh/memory/components.md  (components)     │
+│     ├── .toh/memory/components.md  (components)     │
+│     └── .toh/memory/architecture.md (structure)     │
+│  Tier 3 - only when referenced:                     │
+│     ├── .toh/memory/decisions.md   (decisions)      │
+│     └── .toh/memory/agents-log.md  (agents)         │
 │                                                     │
 │  1. 🔐 QUICK SECURITY CHECK                         │
 │     ├── Scan for hardcoded secrets                  │
@@ -41,13 +44,14 @@ User: /toh-test test login page
 │     └── Run tests again                             │
 │     └── Loop until passing (max 3 rounds)           │
 │                                                     │
-│  7. 🚨 SAVE MEMORY (MANDATORY!)                     │
-│     ├── Update active.md (test results)             │
+│  7. 🚨 SAVE MEMORY                                  │
+│     ├── Update active.md (ALWAYS)                   │
+│     ├── Update summary.md (if shape changed)        │
 │     ├── Update changelog.md (test session)          │
-│     ├── Update agents-log.md (agent activity)       │
-│     ├── Update architecture.md (if changed)         │
 │     ├── Update components.md (if new)               │
-│     └── Update decisions.md (if fixes made)         │
+│     ├── Update architecture.md (if changed)         │
+│     ├── Update decisions.md (if fixes made)         │
+│     └── Update agents-log.md (if delegated)         │
 │                                                     │
 │  8. Summary of test results                         │
 └─────────────────────────────────────────────────────┘

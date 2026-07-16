@@ -3,6 +3,9 @@ command: /toh-vibe
 aliases: ["/toh-v"]
 description: Type one line of intent → a complete, running, good-looking multi-page app
 trigger: /toh-vibe or /toh-v followed by an app description
+skills:
+  - vibe-orchestrator
+  - engineer-harness
 ---
 
 # /toh-vibe - Type Once, Have it all! ✨

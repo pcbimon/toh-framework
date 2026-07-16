@@ -3,6 +3,10 @@ command: /toh-dev
 aliases: ["/toh-d"]
 description: Add logic, state management, TypeScript types, and CRUD operations
 trigger: /toh-dev or /toh-d followed by description
+skills:
+  - dev-engineer
+  - security-engineer
+  - engineer-harness
 ---
 
 # /toh-dev - Add Logic & State
@@ -109,10 +113,13 @@ trigger: /toh-dev or /toh-d followed by description
 
 ### Memory:
 ✅ Memory saved
-
-### Next:
-- `/toh-connect` to connect real database
 ```
+
+ปิดท้ายด้วย **Section C ของ engineer-harness** (stage-aware trio) — default trio หลังเพิ่ม logic:
+
+1. `/toh-test` — ทดสอบว่า logic ที่เพิ่งเพิ่มทำงานถูกต้อง ← recommended
+2. `/toh-connect` — เชื่อม database จริงแทน mock
+3. `/toh-dev [feature ถัดไป]` — เพิ่ม logic ตัวต่อไป
 
 ## Standard Stack
 

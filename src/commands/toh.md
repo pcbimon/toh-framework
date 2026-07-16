@@ -4,12 +4,13 @@ description: Type anything in plain language → understand it, do it, verify it
 trigger: /toh followed by anything you want done
 skills:
   - smart-routing
+  - orchestration-protocol
   - engineer-harness
 ---
 
-# /toh - Orchestrator v5.0
+# /toh - Orchestrator v5.1
 
-> **Version:** 5.0.0
+> **Version:** 5.1.0
 > **Command:** `/toh [anything]`
 > **Philosophy:** Type Once, Have it all!
 
@@ -23,8 +24,9 @@ skills:
 คิดว่าพี่โต *ต้องการอะไรจริงๆ* ไม่ใช่แค่คำที่พิมพ์มา งานนี้ใหญ่แค่ไหน แตะ UI / logic / backend / design อะไรบ้าง มี dependency ระหว่างชิ้นงานไหม — คิดในหัว ไม่ต้องประกาศตารางหรือ format ใดๆ
 
 ### 2. Route — ทำเองหรือกระจายงาน
+- **เริ่มด้วย 2-step survey** ของ orchestration-protocol: ยืนยัน runtime identity แล้วไต่ capability ladder (teams / subagents / sequential) — **sequential คือ default** สำหรับงาน ≤ 3 tasks และงานแก้ไฟล์เดียวกัน/พึ่งกัน
 - **งาน ≤ 3 tasks → ลงมือเลย** ไม่ต้องโชว์แผน (นี่คือ No Questions Asked)
-- **งาน > 3 tasks → โชว์แผนสั้นๆ ก่อน** (bullet ไม่กี่บรรทัด: จะทำอะไรบ้าง ลำดับไหน) แล้วเดินหน้าทำ *จนจบ* เอง ไม่ต้องให้พี่โตจ้ำจี้
+- **งาน > 3 tasks → เขียน task list ลง `.toh/plan.md`** (โชว์สรุปสั้นๆ) แล้วรัน THE TOH LOOP (orchestration-protocol) — งานใหญ่จบเองครบทุก task โดยไม่ต้องให้พี่โตจ้ำจี้ทีละ step
 - **Delegate ชิ้นงานอิสระ** ไปที่ native subagents ทีมมี: `ui-builder` · `dev-builder` · `design-reviewer` · `test-runner` · `backend-connector` · `plan-orchestrator` · `platform-adapter` · `root-cause-debugger`
 - **เลือก agent ยังไง:** อ่าน description ของแต่ละ agent แล้วให้ Claude Code จับคู่งานเอง (native Task-tool matching) — ไม่มีตาราง mapping ตายตัว ไม่มี confidence %
 - ชิ้นที่ไม่พึ่งกัน → ยิงขนานพร้อมกัน; ชิ้นที่พึ่งผลก่อนหน้า → รอตามลำดับ
@@ -64,7 +66,7 @@ build / test *จริง* ก่อนส่งมอบเสมอ ห้า
 2 tasks. ลงมือเลย → `root-cause-debugger` หาต้นตอปุ่ม (ไม่ใช่แค่กดอาการ) + `design-reviewer` เกลาหน้าตา (ขนานได้) → test ยืนยัน → รายงานว่าปุ่มพังเพราะอะไร แก้ตรงไหน และหน้าตาเปลี่ยนยังไง
 
 ### ใหญ่ — "เชื่อม Supabase + ทำหน้า dashboard + เพิ่มระบบ login"
-> 3 tasks → โชว์แผนสั้นก่อน:
+> 3 tasks → เขียน task list ลง `.toh/plan.md` (โชว์สรุปสั้น) แล้วเข้า loop:
 > - `backend-connector` ต่อ Supabase + ตั้ง auth
 > - `ui-builder` + `dev-builder` ทำ dashboard (ขนานกับ backend)
 > - `dev-builder` ต่อ login flow (รอ auth พร้อม)
@@ -74,6 +76,6 @@ build / test *จริง* ก่อนส่งมอบเสมอ ห้า
 
 ---
 
-> 🌱 โปรเจคใหม่ (ยังไม่มีโค้ดเลย) ใช้ `/toh-vibe` แทน — สั่งบรรทัดเดียว ได้แอปหลายหน้าพร้อมรัน
+> 🌱 โปรเจคใหม่ → `/toh-vibe` · อยากเห็นแผนก่อน อนุมัติครั้งเดียวแล้วให้สร้างเองจนจบ → `/toh-plan` · มีแผนค้างใน `.toh/plan.md` → `/toh-vibe` ทำต่อจาก task ที่ค้าง
 
-*Type Once, Have it all! — v5.0.0*
+*Type Once, Have it all! — v5.1.0*

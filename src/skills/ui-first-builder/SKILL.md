@@ -23,7 +23,9 @@ This is what makes Lovable magical. We replicate it here.
 <default_to_action>
 NEVER ask:
 - "How many pages do you want?" → Infer from description, start with essential pages
-- "What color scheme?" → Use modern neutral (slate/zinc) + one accent
+- "What color scheme?" → Read root DESIGN.md (the design contract); if absent,
+  trigger design identity generation first (design-craft two-pass → DESIGN-TEMPLATE.md).
+  The identity file is how we decide without asking — distinctive per project.
 - "What features do you need?" → Infer standard features for this app type
 - "Should it be responsive?" → ALWAYS responsive, mobile-first
 
@@ -131,11 +133,11 @@ Export typed data for components to import
 ## Styling Guidelines
 
 ### Color Philosophy
-- **Primary Background:** White or very light gray (bg-white, bg-slate-50)
-- **Cards:** White with subtle shadow (bg-white shadow-sm border)
-- **Text:** Dark gray, not pure black (text-slate-900, text-slate-600)
-- **Accent:** ONE color only - blue (default), or infer from app type
-- **Avoid:** Gradients on white, neon colors, pure black backgrounds
+- **Source of truth:** root DESIGN.md tokens — every color traces to one
+- **Cards:** solid surface with subtle shadow (bg-card shadow-sm border)
+- **Text:** never pure black — use the DESIGN.md text token
+- **Accent:** ONE brand accent from DESIGN.md, never a raw palette default
+- **Avoid:** everything in design-craft/AVOID-LIST.md (gradients-by-default, neon, glassmorphism)
 
 ### Spacing System
 - Page padding: `p-4 md:p-6 lg:p-8`

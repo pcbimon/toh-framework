@@ -11,6 +11,7 @@ tools:
   - Edit
   - Bash
 model: haiku
+maxTurns: 30
 skills:
   - test-engineer        # Core testing skills
   - engineer-harness     # Human-friendly reporting + next steps
@@ -139,6 +140,7 @@ This agent MUST wait for:
    │  Report Results │   │  5. Analyze error → root cause          │
    └─────────────────┘   │  6. Auto-fix (or /toh-fix)              │
                          │  7. Re-run → loop until pass (max 5)    │
+                         │  8. Same failure 3x → [!] BLOCKED       │
                          └─────────────────────────────────────────┘
 ```
 
@@ -251,14 +253,18 @@ Read more in skill: `.claude/skills/test-engineer/SKILL.md`
 
 ```
 1. Run tests
-2. Test fails? → Analyze failure
+2. Test fails? → QUOTE the actual failing output lines FIRST
+   (engineer-harness Evidence Rule: fix what the quote shows, never a guess)
 3. Can auto-fix? → Fix immediately
 4. Run tests again
 5. Repeat until all pass (max 5 attempts)
-6. Report: "✅ ทดสอบผ่านหมดแล้วครับ!"
+6. 3-STRIKE RULE: the same failure survives 3 consecutive fix attempts
+   → STOP looping. Report `[!] BLOCKED: <one-line diagnosis>`
+   (root cause + what is needed to unblock) instead of thrashing.
+7. Report: "✅ ทดสอบผ่านหมดแล้วครับ!"
 ```
 
-**User should NEVER see test failures during the auto-fix loop.**
+**User should NEVER see test failures during the auto-fix loop** — the one exception is a `[!] BLOCKED` report, which MUST include the quoted failing output plus the diagnosis.
 
 ```
 INTERNAL (User doesn't see):

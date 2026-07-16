@@ -2,9 +2,10 @@
 name: smart-routing
 description: >
   Intelligent request routing for /toh command. Analyzes user intent,
-  assesses confidence, detects IDE environment, and routes to the 
-  appropriate agent(s). Memory-first approach ensures context awareness.
-  Triggers: /toh command, natural language requests, ambiguous inputs.
+  assesses confidence, surveys the runtime (2-step, per orchestration-protocol),
+  and routes to the appropriate agent(s). Memory-first approach ensures
+  context awareness. Triggers: /toh command, natural language requests,
+  ambiguous inputs.
 ---
 
 # Smart Routing Skill
@@ -36,9 +37,10 @@ Intelligent routing engine for the `/toh` smart command. Routes any natural lang
 │  ├── MEDIUM (50-80%) → Plan Agent first                        │
 │  └── LOW (<50%) → Ask for clarification                        │
 │                                                                 │
-│  STEP 3: IDE DETECTION                                         │
-│  ├── Claude Code → Parallel execution enabled                  │
-│  └── Other IDEs → Sequential execution only                    │
+│  STEP 3: RUNTIME SURVEY (2-step — orchestration-protocol A)    │
+│  ├── Identity: declared by loaded context file +               │
+│  │   .toh/capabilities.json                                    │
+│  └── Probe: teams env flag + version gates only                │
 │                                                                 │
 │  STEP 4: AGENT SELECTION & EXECUTION                           │
 │  └── Route to appropriate agent(s)                             │
@@ -120,47 +122,23 @@ const MEDIUM_CONFIDENCE = 50;  // Route to Plan Agent
 
 ---
 
-## 🖥️ IDE Detection
+## 🖥️ Runtime Survey (2-step — never guess the IDE)
 
-### Detection Method
+### Step 1 — Identity (declared)
 
-```typescript
-function detectIDE(): 'claude-code' | 'cursor' | 'gemini' | 'codex' | 'unknown' {
-  // Check for IDE-specific markers
-  
-  // Claude Code detection
-  if (hasClaudeCodeMarkers()) {
-    return 'claude-code';
-  }
-  
-  // Cursor detection
-  if (hasCursorRules()) {
-    return 'cursor';
-  }
-  
-  // Gemini CLI detection
-  if (hasGeminiConfig()) {
-    return 'gemini';
-  }
-  
-  // Codex CLI detection
-  if (hasCodexConfig()) {
-    return 'codex';
-  }
-  
-  return 'unknown';
-}
-```
+Your runtime identity is **declared by the platform context file that loaded you** (`CLAUDE.md` = Claude Code · `.cursor/rules/*.mdc` = Cursor · `AGENTS.md` = Codex · `GEMINI.md` = Gemini CLI / Antigravity). Confirm capabilities from `.toh/capabilities.json` (written by the installer). No detection heuristics — the identity is stated, not inferred.
 
-### Execution Strategy by IDE
+### Step 2 — Runtime probe (only what install time cannot know)
 
-| IDE | Multi-Agent Strategy | Reason |
-|-----|---------------------|--------|
-| **Claude Code** | Parallel (spawn sub-agents) | Native support for parallel tool calls |
-| **Cursor** | Sequential | More predictable, follows diff flow |
-| **Gemini CLI** | Sequential | Safer execution model |
-| **Codex CLI** | Sequential | Linear task processing |
-| **Unknown** | Sequential (default) | Safe fallback |
+Probe exactly: the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env flag, plus the Claude Code version gates for `/goal` and workflows. Nothing else.
+
+### Execution mode
+
+Choose from the **execution ladder in `orchestration-protocol` (Section B)** — the full decision table lives there, once. Summary only:
+
+- **Claude Code** → ladder: teams > subagents > sequential
+- **Cursor / Codex** → sequential TOH LOOP in-session
+- **Gemini / Antigravity** → sequential prose loop
 
 ---
 
@@ -340,7 +318,7 @@ Action: Ask "What would you like me to fix? Please describe the issue."
 1. **Memory ALWAYS first** - Never route without checking context
 2. **Confidence drives action** - Trust the scoring system
 3. **Plan Agent is your friend** - When in doubt, route to Plan
-4. **IDE awareness matters** - Parallel only in Claude Code
+4. **Survey, don't guess** - Identity is declared; execution mode comes from orchestration-protocol's ladder
 5. **engineer-harness always loaded** - Every response needs 3 sections + next steps
 
 ---

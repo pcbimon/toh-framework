@@ -3,6 +3,10 @@ command: /toh-ui
 aliases: ["/toh-u"]
 description: Create or edit UI components, pages, or layouts
 trigger: /toh-ui or /toh-u followed by description
+skills:
+  - ui-first-builder
+  - design-craft
+  - engineer-harness
 ---
 
 # /toh-ui - Create/Edit UI
@@ -32,6 +36,15 @@ trigger: /toh-ui or /toh-u followed by description
 1. READ Skills
    ├── ~/.claude/skills/ui-first-builder/SKILL.md
    └── ~/.claude/skills/design-craft/SKILL.md
+
+1.5 🎨 READ ROOT DESIGN.md FIRST (before any UI code)
+   ├── Exists → re-read it; every color/font/radius/motion value
+   │   traces to its tokens
+   └── Missing → generate it first via design-reviewer Mode A /
+       design-craft DESIGN-TEMPLATE.md
+       (compact retrofit for existing projects: infer identity from
+       current globals.css + pages, then SHOW the inferred identity
+       in the report so the user can correct it)
 
 2. ANALYZE Request
    ├── New page? → Create in app/[name]/page.tsx
@@ -90,15 +103,21 @@ View at http://localhost:3000/settings
 
 ### Memory:
 ✅ Memory saved
-
-### Next:
-- `/toh-dev` add logic to make form functional
 ```
+
+ปิดท้ายด้วย **Section C ของ engineer-harness** (announce block + stage-aware trio) — default trio หลังงาน UI:
+
+1. `/toh-dev` — ต่อ logic ให้ฟอร์ม/ปุ่มทำงานจริง ← recommended
+2. `/toh-design [หน้าที่ยังธรรมดา]` — เกลาให้ตรง DESIGN.md ยิ่งขึ้น
+3. `/toh-test` — ทดสอบหน้าที่เพิ่งสร้าง
+
+(ถ้าเพิ่ง retrofit DESIGN.md: โชว์ identity ที่ infer มาในรายงานด้วย เพื่อให้ผู้ใช้แก้ได้)
 
 ## Rules
 
 1. **ALWAYS** use shadcn/ui components
 2. **ALWAYS** add realistic mock data
 3. **ALWAYS** make responsive (mobile-first)
-4. **NEVER** ask "what style do you want?"
-5. **NEVER** create empty placeholder UI
+4. **NEVER** pick colors/fonts not declared in DESIGN.md
+5. **NEVER** ask "what style do you want?"
+6. **NEVER** create empty placeholder UI

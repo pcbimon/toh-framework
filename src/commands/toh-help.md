@@ -9,7 +9,7 @@ description: Display all Toh Framework commands and quick usage guide
 When user calls `/toh-help`, display the following:
 
 <help_response>
-## 🎯 Toh Framework v2.0.0-beta.1
+## 🎯 Toh Framework v2.0.0
 
 **"Type anything, AI does it for you"** - AI-Orchestration Driven Development
 
@@ -39,7 +39,7 @@ When user calls `/toh-help`, display the following:
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | `/toh` | - | 🧠 **Smart Command** - Type anything, AI picks the right Agent |
-| `/toh-plan` | `/toh-p` | 📋 **Plan** - Plan large projects |
+| `/toh-plan` | `/toh-p` | 📋 **Plan** - เขียน `.toh/plan.md` อนุมัติครั้งเดียว สร้างจนจบเอง |
 | `/toh-vibe` | `/toh-v` | 🎨 **Create Project** - UI + Logic + Mock Data in one command |
 | `/toh-ui` | `/toh-u` | 🖼️ **Create UI** - Pages, Components, Layouts |
 | `/toh-dev` | `/toh-d` | ⚙️ **Add Logic** - TypeScript, Zustand, Forms |
@@ -141,21 +141,21 @@ Every response from Toh includes:
 ### 📊 Framework Stats
 
 - 🤖 **8 Sub-Agents v2.1** - UI, Dev, Design, Test, Connect, Plan, Platform, root-cause-debugger
-- 🎯 **15 Commands** - Including `/toh` smart command & `/toh-protect`
-- 📚 **22 Skills** - Including Security Engineer
+- 🎯 **14 Commands** - Including `/toh` smart command & `/toh-protect`
+- 📚 **23 Skills** - Including Orchestration Protocol & Security Engineer
 - 🎨 **13 Design Profiles** - Business-appropriate design
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Gemini, Antigravity, Codex
 
 ---
 
-### 🆕 What's New in v1.8.1
+### 🆕 What's New in v2.0.0
 
-- 🌐 **Google Antigravity Workflows** - Full support! Commands appear with `/` in Antigravity
-- 🧠 **7-File Memory System** - Added `changelog.md` + `agents-log.md` for better tracking
-- 📢 **Agent Announcements** - See which agent is working on what
-- ⚡ **Parallel Execution** - Agents can work simultaneously when no dependencies
-- 🎯 **Agent Selection Reasoning** - See why AI chose specific agents
+- 🔗 **Plan → Vibe link** - `/toh-plan` writes `.toh/plan.md`, one "Go" builds the whole plan; `/toh-vibe` resumes any unfinished plan at the first unchecked task
+- 🔁 **THE TOH LOOP** - new `orchestration-protocol` skill: autonomous plan-execute-verify with quoted checkpoint output, no "continue?" prompts
+- 🎨 **Design Identity** - per-project root `DESIGN.md` generated before any UI; `design-craft` AVOID-LIST kills AI-looking patterns
+- 🧠 **Tiered Memory** - Tier 1 always-read is ~800 tokens; deeper tiers load on demand
+- ⚙️ **Installer upgrades** - per-IDE command transform, `.toh/capabilities.json`, Claude Code Stop hook + loop heartbeat
 
 ---
 

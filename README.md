@@ -230,7 +230,7 @@ gemini
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | `/toh` | - | 🧠 **Smart Command** - Type anything, AI picks agent |
-| `/toh-plan` | `/toh-p` | 📋 **Plan** - Analyze, plan, orchestrate |
+| `/toh-plan` | `/toh-p` | 📋 **Plan** - Writes `.toh/plan.md`, approve once, builds to the end |
 | `/toh-vibe` | `/toh-v` | 🎨 **Create Project** - Complete app in one command |
 | `/toh-ui` | `/toh-u` | 🖼️ **Create UI** - Pages, Components, Layouts |
 | `/toh-dev` | `/toh-d` | ⚙️ **Add Logic** - TypeScript, Zustand, Forms |
@@ -284,6 +284,19 @@ Orchestrator:
 └── ✅ Deliver working system!
 ```
 
+### 🔁 Plan → Vibe Workflow
+
+The plan is a **file**, never chat state:
+
+- `/toh-plan` writes `.toh/plan.md` → you approve **once** ("Go") → the whole plan is built autonomously, verified checkpoint by checkpoint.
+- `/toh-vibe` resumes any unfinished plan: it reads `.toh/plan.md` first and continues from the first unchecked task — in any session, any IDE.
+
+**Unattended builds** — kick off a full build headless (Claude Code):
+
+```bash
+claude -p "/toh-vibe coffee shop management system" --permission-mode acceptEdits
+```
+
 ---
 
 ## 📖 Examples
@@ -318,8 +331,8 @@ Orchestrator:
 ## 📊 Framework Stats
 
 - 🤖 **8 Sub-Agents** - Specialized for different tasks
-- 🎯 **15 Commands** - From planning to deployment `[NEW: /toh-protect]`
-- 📚 **22 Skills** - Comprehensive AI capabilities `[NEW: Security Engineer]`
+- 🎯 **14 Commands** - From planning to deployment
+- 📚 **23 Skills** - Comprehensive AI capabilities `[NEW: Orchestration Protocol]`
 - 🎨 **13 Design Profiles** - Business-appropriate design
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex

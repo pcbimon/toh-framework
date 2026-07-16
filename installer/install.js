@@ -13,6 +13,7 @@ import { setupClaudeCode } from './ide-handlers/claude-code.js';
 import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
 import { setupCodex } from './ide-handlers/codex.js';
+import { transformCommand, writeCapabilitiesJson } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -137,8 +138,15 @@ export async function install(options) {
     }
   }
 
-  // Generate manifest
+  // v2.0.0: transform the shared .toh/commands copy to the UNIVERSAL variant
+  // (drop tfw:claude blocks, unwrap tfw:fallback). This MUST run AFTER the IDE
+  // loop — claude-code.js needs the marker-bearing source to build its own
+  // .claude/commands variant. Idempotent: no markers left = no-op.
+  await normalizeUniversalCommands(config.targetDir);
+
+  // Generate manifest + machine-readable capability declaration
   await generateManifest(config);
+  await declareCapabilities(config);
 
   // Success message
   console.log(chalk.green('\n✅ Toh Framework installed successfully!\n'));
@@ -318,8 +326,57 @@ async function generateManifest(config) {
   const manifestPath = join(config.targetDir, '.toh', 'manifest.json');
   await fs.ensureDir(join(config.targetDir, '.toh'));
   await fs.writeJson(manifestPath, manifest, { spaces: 2 });
-  
+
   spinner.succeed('Manifest generated');
+}
+
+/**
+ * v2.0.0: Post-process .toh/commands/*.md into the UNIVERSAL variant.
+ * The shared copy referenced by Cursor/Codex/Gemini/Antigravity must contain
+ * only the fallback prose loop — no Claude-only blocks.
+ */
+async function normalizeUniversalCommands(targetDir) {
+  const commandsDir = join(targetDir, '.toh', 'commands');
+  if (!fs.existsSync(commandsDir)) return;
+
+  const spinner = ora('Normalizing shared commands (universal variant)...').start();
+  try {
+    let changed = 0;
+    const walk = async (dir) => {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const p = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(p);
+        } else if (entry.name.endsWith('.md')) {
+          const raw = await fs.readFile(p, 'utf8');
+          const transformed = transformCommand(raw, 'universal');
+          if (transformed !== raw) {
+            await fs.writeFile(p, transformed);
+            changed++;
+          }
+        }
+      }
+    };
+    await walk(commandsDir);
+    spinner.succeed(`Shared commands normalized (${changed} transformed)`);
+  } catch (error) {
+    spinner.fail(`Failed to normalize commands: ${error.message}`);
+  }
+}
+
+/**
+ * v2.0.0: Write .toh/capabilities.json — the machine-readable half of the
+ * orchestration-protocol 2-step survey (identity lives in each context file).
+ */
+async function declareCapabilities(config) {
+  const spinner = ora('Declaring runtime capabilities...').start();
+  try {
+    await writeCapabilitiesJson(config.targetDir, config.ides);
+    spinner.succeed('Capabilities declared (.toh/capabilities.json)');
+  } catch (error) {
+    spinner.fail(`Failed to write capabilities.json: ${error.message}`);
+  }
 }
 
 async function setupMemoryFolder(targetDir) {
@@ -487,7 +544,44 @@ async function setupMemoryFolder(targetDir) {
     await fs.writeFile(join(memoryDir, 'architecture.md'), architectureTemplate);
     await fs.writeFile(join(memoryDir, 'components.md'), componentsTemplate);
 
-    spinner.succeed('Memory System ready - 7 files (.toh/memory/)');
+    // v2.0.0: seed THE TOH LOOP artifacts — ONLY if absent (they hold live
+    // loop state; a reinstall must NEVER clobber an in-flight plan/ledger).
+    // NOTE: the seed plan deliberately contains NO real unchecked task lines,
+    // so the Claude Code Stop hook never blocks on an empty backlog.
+    const planPath = join(targetDir, '.toh', 'plan.md');
+    if (!fs.existsSync(planPath)) {
+      const planSeed = `# Plan: (no active plan yet)
+Status: draft
+Created: ${today} by toh-framework installer
+
+> This file is THE TOH LOOP's backlog — the contract between \`/toh-plan\`
+> (writes it) and \`/toh-vibe\` (executes it). Full schema + loop protocol:
+> \`.toh/skills/orchestration-protocol/SKILL.md\` (Section D).
+>
+> Task-line grammar: \`- [ ] T001 [P] agent — description in app/exact/path.tsx\`
+> — exact file path mandatory · \`[P]\` = parallel-safe (disjoint files only)
+> · blocked tasks flip to \`- [!]\` + \`BLOCKED: <one-line diagnosis>\`
+> · flip to \`- [x]\` only after a quoted passing Checkpoint run.
+
+Empty backlog — no stories yet. Run \`/toh-plan\` to draft a plan here, or
+\`/toh-vibe\` to auto-generate a mini-plan and build it.
+`;
+      await fs.writeFile(planPath, planSeed);
+    }
+
+    const progressPath = join(targetDir, '.toh', 'progress.md');
+    if (!fs.existsSync(progressPath)) {
+      const progressSeed = `# Progress Ledger
+
+> Append-only, one line per state change: \`queued → running → done/failed/blocked\`.
+> Format: \`YYYY-MM-DD HH:MM T00x <state> — <detail>\` · gotchas as \`LEARNING: <one line>\`.
+> Written by THE TOH LOOP (orchestration-protocol skill). Never rewrite history — append.
+
+`;
+      await fs.writeFile(progressPath, progressSeed);
+    }
+
+    spinner.succeed('Memory System ready - 7 files (.toh/memory/) + plan/progress artifacts');
   } catch (error) {
     spinner.fail(`Failed to setup Memory System: ${error.message}`);
   }

@@ -10,6 +10,7 @@
 import fs from 'fs-extra';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { transformCommand, renderCapabilitiesSection } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -31,17 +32,21 @@ export async function setupCursor(targetDir, language = 'en') {
   // Create memory template files
   await createMemoryFiles(memoryDir, language);
 
+  // v2.0: every generated rule passes through the shared marker transform so
+  // <!-- tfw:claude --> blocks are removed and <!-- tfw:fallback --> blocks are
+  // unwrapped for Cursor (idempotent — content without markers is untouched).
+
   // Create main Toh Framework rule (alwaysApply)
   const mainRulePath = join(cursorRulesDir, 'toh-framework.mdc');
-  await fs.writeFile(mainRulePath, generateMainRule(language));
+  await fs.writeFile(mainRulePath, transformCommand(generateMainRule(language), 'cursor'));
 
   // Create agent reference rule
   const agentRulePath = join(cursorRulesDir, 'toh-agents.mdc');
-  await fs.writeFile(agentRulePath, generateAgentRule(language));
+  await fs.writeFile(agentRulePath, transformCommand(generateAgentRule(language), 'cursor'));
 
   // Create .cursorrules (root level for backwards compatibility)
   const cursorRulesPath = join(targetDir, '.cursorrules');
-  await fs.writeFile(cursorRulesPath, generateCursorRules(language));
+  await fs.writeFile(cursorRulesPath, transformCommand(generateCursorRules(language), 'cursor'));
 
   return true;
 }
@@ -260,6 +265,10 @@ alwaysApply: true
 
 You are the **Toh Orchestrator** - an AI expert in building web applications with "Type Once, Have it all!" philosophy.
 
+${renderCapabilitiesSection('cursor')}
+
+Runtime Identity: you are running in Cursor. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+
 ## How to Invoke
 
 Users can use these patterns to invoke Toh Framework:
@@ -375,7 +384,7 @@ User: /toh-p create e-commerce
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | /toh-help | /toh-h | Show all commands |
-| /toh-plan | /toh-p | **THE BRAIN** - Analyze, plan, orchestrate all agents |
+| /toh-plan | /toh-p | **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
 | /toh-vibe | /toh-v | Create new project with UI + Logic + Mock Data |
 | /toh-ui | /toh-u | Create UI - Pages, Components, Layouts |
 | /toh-dev | /toh-d | Add Logic - TypeScript, Zustand, Forms |
@@ -466,13 +475,13 @@ All Toh Framework resources are in the \`.toh/\` folder:
 
 | Command | Load These Skills | Load Agent |
 |---------|------------------|------------|
-| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/ui-first-builder/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
+| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/ui-first-builder/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
 | \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
 | \`/toh-dev\` | \`@.toh/skills/dev-engineer/SKILL.md\`, \`@.toh/skills/backend-engineer/SKILL.md\` | \`@.toh/agents/dev-builder.md\` |
 | \`/toh-design\` | \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
 | \`/toh-test\` | \`@.toh/skills/test-engineer/SKILL.md\`, \`@.toh/skills/debug-protocol/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 | \`/toh-connect\` | \`@.toh/skills/backend-engineer/SKILL.md\`, \`@.toh/skills/integrations/SKILL.md\` | \`@.toh/agents/backend-connector.md\` |
-| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
+| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
 | \`/toh-fix\` | \`@.toh/skills/debug-protocol/SKILL.md\`, \`@.toh/skills/error-handling/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 
 ### Core Skills (Always Available)
@@ -553,6 +562,10 @@ alwaysApply: true
 # Toh Framework
 
 You are **Toh Orchestrator** - AI specialized in building web applications "Type Once, Have it all."
+
+${renderCapabilitiesSection('cursor')}
+
+Runtime Identity: you are running in Cursor. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
 
 ## How to Use
 
@@ -668,7 +681,7 @@ User: /toh-p e-commerce system
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | /toh-help | /toh-h | ❓ Show all commands |
-| /toh-plan | /toh-p | 🧠 **THE BRAIN** - Analyze, plan, orchestrate all agents |
+| /toh-plan | /toh-p | 🧠 **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
 | /toh-vibe | /toh-v | 🎨 Create new project with UI + Logic + Mock Data |
 | /toh-ui | /toh-u | 🖼️ Create UI - Pages, Components, Layouts |
 | /toh-dev | /toh-d | ⚙️ Add Logic - TypeScript, Zustand, Forms |
@@ -759,13 +772,13 @@ All Toh Framework resources are in \`.toh/\`:
 
 | Command | Load Skills | Load Agent |
 |--------|------------|------------|
-| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
+| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
 | \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
 | \`/toh-dev\` | \`@.toh/skills/dev-engineer/SKILL.md\`, \`@.toh/skills/backend-engineer/SKILL.md\` | \`@.toh/agents/dev-builder.md\` |
 | \`/toh-design\` | \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |
 | \`/toh-test\` | \`@.toh/skills/test-engineer/SKILL.md\`, \`@.toh/skills/debug-protocol/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 | \`/toh-connect\` | \`@.toh/skills/backend-engineer/SKILL.md\`, \`@.toh/skills/integrations/SKILL.md\` | \`@.toh/agents/backend-connector.md\` |
-| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
+| \`/toh-plan\` | \`@.toh/skills/plan-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/business-context/SKILL.md\` | \`@.toh/agents/plan-orchestrator.md\` |
 | \`/toh-fix\` | \`@.toh/skills/debug-protocol/SKILL.md\`, \`@.toh/skills/error-handling/SKILL.md\` | \`@.toh/agents/test-runner.md\` |
 
 ### Core Skills (Always Available)

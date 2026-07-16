@@ -210,7 +210,7 @@ gemini
 | คำสั่ง | ทางลัด | รายละเอียด |
 |--------|--------|------------|
 | `/toh` | - | 🧠 **Smart Command** - พิมพ์อะไรก็ได้ AI เลือก agent |
-| `/toh-plan` | `/toh-p` | 📋 **วางแผน** - วิเคราะห์, วางแผน, orchestrate |
+| `/toh-plan` | `/toh-p` | 📋 **วางแผน** - เขียน `.toh/plan.md` อนุมัติครั้งเดียว สร้างจนจบเอง |
 | `/toh-vibe` | `/toh-v` | 🎨 **สร้าง Project** - แอปครบในคำสั่งเดียว |
 | `/toh-ui` | `/toh-u` | 🖼️ **สร้าง UI** - Pages, Components, Layouts |
 | `/toh-dev` | `/toh-d` | ⚙️ **เพิ่ม Logic** - TypeScript, Zustand, Forms |
@@ -264,6 +264,19 @@ Orchestrator:
 └── ✅ ส่งมอบระบบพร้อมใช้!
 ```
 
+### 🔁 Plan → Vibe Workflow
+
+แผนคือ **ไฟล์** ไม่ใช่ข้อความแชท:
+
+- `/toh-plan` เขียนแผนลง `.toh/plan.md` → อนุมัติ**ครั้งเดียว** ("Go") → AI สร้างทั้งแผนอัตโนมัติ ตรวจสอบทุก checkpoint เอง
+- `/toh-vibe` ทำแผนค้างต่อได้เสมอ: อ่าน `.toh/plan.md` ก่อน แล้วทำต่อจาก task แรกที่ยังไม่ติ๊ก — ข้าม session ข้าม IDE ได้
+
+**สั่ง build แบบไม่ต้องเฝ้า** — รันแบบ headless (Claude Code):
+
+```bash
+claude -p "/toh-vibe ระบบจัดการร้านกาแฟ" --permission-mode acceptEdits
+```
+
 ---
 
 ## 📖 ตัวอย่าง
@@ -298,8 +311,8 @@ Orchestrator:
 ## 📊 สถิติ Framework
 
 - 🤖 **8 Sub-Agents** - เชี่ยวชาญเฉพาะทาง
-- 🎯 **15 Commands** - ตั้งแต่วางแผนถึง deployment `[NEW: /toh-protect]`
-- 📚 **22 Skills** - ความสามารถ AI ครบครัน `[NEW: Security Engineer]`
+- 🎯 **14 Commands** - ตั้งแต่วางแผนถึง deployment
+- 📚 **23 Skills** - ความสามารถ AI ครบครัน `[NEW: Orchestration Protocol]`
 - 🎨 **13 Design Profiles** - Design เหมาะกับธุรกิจ
 - 📦 **15 Component Templates** - Premium components พร้อมใช้
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex

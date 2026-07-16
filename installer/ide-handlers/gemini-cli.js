@@ -17,6 +17,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { transformCommand, renderCapabilitiesSection } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +48,9 @@ export async function setupGeminiCLI(targetDir, srcDir, language = 'en') {
 
   if (await fs.pathExists(geminiCommandsSrc)) {
     await fs.copy(geminiCommandsSrc, geminiCommandsDest, { overwrite: true });
+    // v2.0: strip Claude-only <!-- tfw:claude --> blocks / unwrap <!-- tfw:fallback -->
+    // blocks in the copied command prompts (idempotent — files without markers are untouched).
+    await transformCommandFilesInDir(geminiCommandsDest, 'gemini-cli', ['.toml', '.md']);
   }
 
   // v1.8.0: Copy skills to .gemini/skills/ (Auto-discovered by Gemini CLI!)
@@ -66,6 +70,8 @@ export async function setupGeminiCLI(targetDir, srcDir, language = 'en') {
   const workflowsSrc = path.join(srcDir, 'antigravity-workflows');
   if (await fs.pathExists(workflowsSrc)) {
     await fs.copy(workflowsSrc, workflowsDir, { overwrite: true });
+    // v2.0: same marker transform for Antigravity workflow markdown.
+    await transformCommandFilesInDir(workflowsDir, 'antigravity', ['.md']);
   }
 
   // Create GEMINI.md - Simplified since commands are now native
@@ -88,6 +94,28 @@ export async function setupGeminiCLI(targetDir, srcDir, language = 'en') {
   return true;
 }
 
+/**
+ * v2.0: Run the shared tfw marker transform over copied command files so
+ * Claude-only instruction blocks never leak into Gemini CLI / Antigravity
+ * prompts. Idempotent: files without markers are left byte-identical.
+ */
+async function transformCommandFilesInDir(dir, ide, extensions) {
+  if (!(await fs.pathExists(dir))) return;
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await transformCommandFilesInDir(fullPath, ide, extensions);
+    } else if (extensions.some((ext) => entry.name.endsWith(ext))) {
+      const raw = await fs.readFile(fullPath, 'utf-8');
+      const transformed = transformCommand(raw, ide);
+      if (transformed !== raw) {
+        await fs.writeFile(fullPath, transformed);
+      }
+    }
+  }
+}
+
 function generateGeminiMdEN() {
   return `# Toh Framework - Gemini CLI Integration
 
@@ -99,6 +127,10 @@ function generateGeminiMdEN() {
 
 You are the **Toh Framework Agent** - an AI that helps Solo Developers build SaaS systems by themselves.
 
+${renderCapabilitiesSection('gemini-cli')}
+
+Runtime Identity: you are running in Gemini CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+
 ## Available Commands
 
 Use these native slash commands:
@@ -107,7 +139,7 @@ Use these native slash commands:
 |---------|-------------|
 | \`/toh:help\` | Show all commands |
 | \`/toh:vibe [description]\` | Create new project with UI + Logic + Mock Data |
-| \`/toh:plan [description]\` | Analyze and plan project |
+| \`/toh:plan [description]\` | THE BRAIN — writes .toh/plan.md, one approval, then builds autonomously |
 | \`/toh:ui [description]\` | Create UI components and pages |
 | \`/toh:dev [description]\` | Add logic, state, and functionality |
 | \`/toh:design [description]\` | Improve design to professional level |
@@ -169,6 +201,7 @@ Memory files at \`.toh/memory/\`. Read only what the task needs:
 
 Skills are located at \`.gemini/skills/\`:
 - \`vibe-orchestrator\` - Master workflow
+- \`orchestration-protocol\` - Runtime survey + THE TOH LOOP (plan-driven autonomous build) — used by /toh:plan and /toh:vibe
 - \`design-craft\` - Principle-based design (system + business fit)
 - \`premium-experience\` - Multi-page, animations
 - \`ui-first-builder\` - UI creation patterns
@@ -197,6 +230,10 @@ function generateGeminiMdTH() {
 
 คุณคือ **Toh Framework Agent** - AI ที่ช่วย Solo Developers สร้างระบบ SaaS ด้วยตัวเอง
 
+${renderCapabilitiesSection('gemini-cli')}
+
+Runtime Identity: you are running in Gemini CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+
 ## คำสั่งที่ใช้ได้
 
 ใช้ slash commands เหล่านี้:
@@ -205,7 +242,7 @@ function generateGeminiMdTH() {
 |--------|----------|
 | \`/toh:help\` | แสดงคำสั่งทั้งหมด |
 | \`/toh:vibe [รายละเอียด]\` | สร้างโปรเจคใหม่พร้อม UI + Logic + Mock Data |
-| \`/toh:plan [รายละเอียด]\` | วิเคราะห์และวางแผนโปรเจค |
+| \`/toh:plan [รายละเอียด]\` | THE BRAIN — writes .toh/plan.md, one approval, then builds autonomously |
 | \`/toh:ui [รายละเอียด]\` | สร้าง UI components และ pages |
 | \`/toh:dev [รายละเอียด]\` | เพิ่ม logic, state, และ functionality |
 | \`/toh:design [รายละเอียด]\` | ปรับปรุง design ให้ professional |
@@ -267,6 +304,7 @@ function generateGeminiMdTH() {
 
 Skills อยู่ที่ \`.gemini/skills/\`:
 - \`vibe-orchestrator\` - Master workflow
+- \`orchestration-protocol\` - Runtime survey + THE TOH LOOP (สร้างตามแผนอัตโนมัติ) — ใช้กับ /toh:plan และ /toh:vibe
 - \`design-craft\` - Principle-based design (system + business fit)
 - \`premium-experience\` - Multi-page, animations
 - \`ui-first-builder\` - สร้าง UI

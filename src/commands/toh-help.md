@@ -9,7 +9,7 @@ description: Display all Toh Framework commands and quick usage guide
 When user calls `/toh-help`, display the following:
 
 <help_response>
-## 🎯 Toh Framework v2.0.0-beta.1
+## 🎯 Toh Framework v2.0.0
 
 **"Type anything, AI does it for you"** - AI-Orchestration Driven Development
 
@@ -39,7 +39,7 @@ When user calls `/toh-help`, display the following:
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | `/toh` | - | 🧠 **Smart Command** - Type anything, AI picks the right Agent |
-| `/toh-plan` | `/toh-p` | 📋 **Plan** - Plan large projects |
+| `/toh-plan` | `/toh-p` | 📋 **Plan** - เขียน `.toh/plan.md` อนุมัติครั้งเดียว สร้างจนจบเอง |
 | `/toh-vibe` | `/toh-v` | 🎨 **Create Project** - UI + Logic + Mock Data in one command |
 | `/toh-ui` | `/toh-u` | 🖼️ **Create UI** - Pages, Components, Layouts |
 | `/toh-dev` | `/toh-d` | ⚙️ **Add Logic** - TypeScript, Zustand, Forms |
@@ -141,21 +141,21 @@ Every response from Toh includes:
 ### 📊 Framework Stats
 
 - 🤖 **8 Sub-Agents v2.1** - UI, Dev, Design, Test, Connect, Plan, Platform, root-cause-debugger
-- 🎯 **15 Commands** - Including `/toh` smart command & `/toh-protect`
-- 📚 **22 Skills** - Including Security Engineer
-- 🎨 **13 Design Profiles** - Business-appropriate design
+- 🎯 **14 Commands** - Including `/toh` smart command & `/toh-protect`
+- 📚 **23 Skills** - Including Orchestration Protocol & Security Engineer
+- 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Gemini, Antigravity, Codex
 
 ---
 
-### 🆕 What's New in v1.8.1
+### 🆕 What's New in v2.0.0
 
-- 🌐 **Google Antigravity Workflows** - Full support! Commands appear with `/` in Antigravity
-- 🧠 **7-File Memory System** - Added `changelog.md` + `agents-log.md` for better tracking
-- 📢 **Agent Announcements** - See which agent is working on what
-- ⚡ **Parallel Execution** - Agents can work simultaneously when no dependencies
-- 🎯 **Agent Selection Reasoning** - See why AI chose specific agents
+- 🚀 **One-Go Build** - approve once, get a whole finished app: `/toh-plan` writes `.toh/plan.md`, one "Go" builds the entire plan with zero babysitting (อนุมัติครั้งเดียว ได้ทั้งแอป)
+- 🔁 **TOH LOOP** - Type & Forget: builds, tests, and fixes itself until every task is verified DONE — no "continue?" prompts, ever (พิมพ์แล้วลืมได้เลย)
+- 🛡️ **Stop Hook** - refuses to quit while the plan has unfinished work; quoted checkpoint output is the only proof of done (ยามที่ไม่ยอมให้เลิกงานก่อนเสร็จ)
+- 🎨 **Design Identity** - no one can tell AI made it: per-project root `DESIGN.md` + versioned AVOID-LIST kill the AI look (แต่ละแอปมีบุคลิกของตัวเอง)
+- ⏯️ **Auto-Resume** - quit anytime, it continues exactly where it left off — `/clear`, new terminal, or even a different IDE (ปิดเครื่องแล้วกลับมาทำต่อได้)
 
 ---
 

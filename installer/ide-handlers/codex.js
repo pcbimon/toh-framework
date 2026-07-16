@@ -8,6 +8,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { transformCommand, renderCapabilitiesSection } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -260,9 +261,15 @@ ${body}
     }
   }
 
-  const agentsMd = language === 'th' 
-    ? generateAgentsMdTH(commandsList, agentSections)
-    : generateAgentsMdEN(commandsList, agentSections);
+  // v2.0: run the assembled markdown through the shared marker transform so any
+  // <!-- tfw:claude --> blocks in embedded command/agent markdown are removed and
+  // <!-- tfw:fallback --> blocks are unwrapped for Codex (idempotent, additive).
+  const agentsMd = transformCommand(
+    language === 'th'
+      ? generateAgentsMdTH(commandsList, agentSections)
+      : generateAgentsMdEN(commandsList, agentSections),
+    'codex'
+  );
 
   // Check if AGENTS.md exists
   const agentsPath = path.join(targetDir, 'AGENTS.md');
@@ -301,6 +308,10 @@ This file serves as project memory for Codex CLI/Web. It contains the Toh Framew
 ## Identity
 
 You are the **Toh Framework Agent** - an AI that helps Solo Developers build SaaS systems by themselves.
+
+${renderCapabilitiesSection('codex')}
+
+Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
 
 ## Core Philosophy (AODD - AI-Orchestration Driven Development)
 
@@ -391,7 +402,7 @@ User: toh ui dashboard
 | Command | Description |
 |---------|-------------|
 | \`/toh-help\` | Show all available commands |
-| \`/toh-plan\` | **THE BRAIN** - Analyze, plan, orchestrate all agents |
+| \`/toh-plan\` | **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
 | \`/toh-vibe\` | Create new project with UI + Logic + Mock Data |
 | \`/toh-ui\` | Create UI - Pages, Components, Layouts |
 | \`/toh-dev\` | Add Logic - TypeScript, Zustand, Forms |
@@ -505,13 +516,13 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |---------|------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
 | \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
 | \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
-| \`/toh-plan\` | \`plan-orchestrator\`, \`business-context\`, \`smart-routing\` |
+| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
 | \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
 | \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
 | \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
@@ -612,6 +623,10 @@ This file is project memory for Codex CLI/Web containing Toh Framework configura
 
 You are **Toh Framework Agent** - AI that helps Solo Developers build SaaS by themselves
 
+${renderCapabilitiesSection('codex')}
+
+Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+
 ## Core Philosophy (AODD - AI-Orchestration Driven Development)
 
 1. **Human Language → Tasks** - User commands naturally, you break into tasks
@@ -701,7 +716,7 @@ User: toh ui dashboard
 | Command | Description |
 |---------|-------------|
 | \`/toh-help\` | Show all commands |
-| \`/toh-plan\` | 🧠 **THE BRAIN** - Analyze, plan, orchestrate all Agents |
+| \`/toh-plan\` | 🧠 **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
 | \`/toh-vibe\` | Create new project - UI + Logic + Mock Data |
 | \`/toh-ui\` | Create UI - Pages, Components, Layouts |
 | \`/toh-dev\` | Add Logic - TypeScript, Zustand, Forms |
@@ -815,13 +830,13 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |--------|-------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
 | \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
 | \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
-| \`/toh-plan\` | \`plan-orchestrator\`, \`business-context\`, \`smart-routing\` |
+| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
 | \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
 | \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
 | \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |

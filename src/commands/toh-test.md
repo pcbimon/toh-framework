@@ -2,6 +2,9 @@
 command: /toh-test
 aliases: ["/toh-t"]
 description: Auto test with Playwright and fix until all tests pass
+skills:
+  - test-engineer
+  - engineer-harness
 ---
 
 # /toh-test - Auto Test & Fix
@@ -191,6 +194,12 @@ If test fails:
 ║  • Products: 100%                                          ║
 ╚════════════════════════════════════════════════════════════╝
 ```
+
+ปิดท้ายด้วย **Section C ของ engineer-harness** (stage-aware trio) — default trio หลัง test ผ่านหมด:
+
+1. `/toh-connect` — เชื่อม database จริง (ถ้ายังใช้ mock) ← recommended
+2. `/toh-ship` — deploy ขึ้น production
+3. `/toh-plan [feature ใหม่]` — วางแผน feature ถัดไป
 
 ## Test Types
 

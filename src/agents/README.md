@@ -180,7 +180,7 @@ recovers sessions. Passes the relevant memory context to each sub-agent it deleg
 
 ### 🎨 ui-builder
 Builds production-ready UI immediately from a description — multi-page, animated,
-zero-error. Applies a business-appropriate design profile before building.
+zero-error. Reads (or authors) the root DESIGN.md design identity before building.
 
 ### ⚙️ dev-builder
 Adds logic, state (Zustand), forms (React Hook Form + Zod), and API integrations.

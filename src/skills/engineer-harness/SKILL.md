@@ -1,9 +1,9 @@
 # 🛠️ Engineer Harness Skill
 
 > **Purpose:** Shared harness for the main commands — pick tools like a senior engineer, talk like a human, suggest what's next
-> **Version:** 1.0.0
+> **Version:** 1.1.0
 > **For:** Toh Framework v2.0.0+
-> **Used by:** `/toh`, `/toh-fix`, `/toh-vibe` (main commands) — MANDATORY
+> **Used by:** `/toh`, `/toh-plan`, `/toh-fix`, `/toh-vibe` (main commands) — MANDATORY · pairs with `orchestration-protocol`
 > **Replaces:** the two legacy reporting skills (human report + next-step suggestions), now merged
 
 ---
@@ -14,7 +14,7 @@ Three things every engineer-grade delivery needs, in one skill:
 
 1. **Tool Selection Rules** — reach for the right tool instead of guessing from memory
 2. **Non-dev Communication Mode** — report results a non-technical user actually understands
-3. **Next-Step Suggestions** — never leave the user wondering "what now?"
+3. **Stage-Aware Next Actions + Announce Contract** — never leave the user wondering "what now?"
 
 **Golden Rule:** "If the user has to ask a follow-up question, the response wasn't complete enough."
 
@@ -33,6 +33,8 @@ Act like a senior engineer choosing tools — never fake it from memory.
 | Unfamiliar library | Assume the API shape | **Read the real `node_modules` types / README** |
 
 **Rule of thumb:** evidence over assumption, always. If a fact is checkable, check it before you write.
+
+**THE EVIDENCE RULE (verification):** Run the check. Quote the failing lines. Fix what the quote shows. Re-run. **Only a quoted passing run counts as done.** A sub-agent's "done" report is evidence to verify, never proof.
 
 ---
 
@@ -119,36 +121,70 @@ Other languages: translate the headers, keep the same three-section structure.
 
 ---
 
-## 💡 C. Next-Step Suggestions
+## 💡 C. Stage-Aware Next Actions + Announce Contract
 
-After finishing, **proactively** suggest 2-3 logical next steps the user can pick by number. Proactive, not reactive — anticipate needs before the user asks.
+**This section is the canonical contract.** Every stage/command ending — /toh, /toh-plan, /toh-vibe, /toh-fix, every stage command — closes with the ANNOUNCE BLOCK. Other commands and skills reference this section; never duplicate it.
+
+### The Announce Block
 
 ```markdown
-💡 Suggested next steps:
-1. [Most logical next step] ← recommended
-2. [Alternative option]
-3. [Another option]
+**Status:** succeeded | failed | blocked
+**Result:** [one plain-language sentence — what exists now that didn't before]
+**Evidence:** [commands run + quoted outcomes, e.g. `npm run build` → "✓ Compiled successfully"]
+
+💡 Next actions:
+1. [runnable command] — [one-line consequence] ← recommended
+2. [runnable command] — [one-line consequence]
+3. [runnable command] — [one-line consequence]
 
 Type a number, or tell me what you'd like to do next.
 ```
 
-### Choosing good suggestions
+**Hard rules:**
+- **Exactly 3 options** — never more, never fewer.
+- Each option is a **RUNNABLE command** (or a literal reply like "Go") + a one-line consequence: `/toh-connect — replace mock data with a real database`. Never vague advice ("consider improving performance").
+- **Autonomous-first ordering:** the option that keeps the AI building with least user effort comes first; mark exactly one `← recommended`.
 
-- **Fit the project stage:** UI-only → add logic / polish design · UI+logic → test / connect backend · full-stack → deploy / new features.
-- **Fit the business type:** F&B → payment, receipts · E-commerce → Stripe, order emails · Booking → calendar sync, reminders · SaaS → user roles, billing.
-- **Fit what's missing:** has UI + mock data but no real DB → suggest connecting Supabase.
+### How it composes with the 3-Section Report (B)
+
+The announce block is the skeleton the 3-Section Report hangs on — one closing, not two:
+
+| Announce field | Lives in |
+|----------------|----------|
+| Status + Result | ✅ What I Did (headline) + 🎁 What You Get |
+| Evidence | end of ✅ What I Did — commands run + quoted output |
+| 3 next actions | 👉 What You Need To Do |
+
+### Pipeline-Position Table
+
+**Source of truth for position: `.toh/plan.md` `Status:` header + checkbox state + memory summary — never vibes.** Read them, find your row, use that trio:
+
+| Position | The 3 actions |
+|----------|---------------|
+| **Plan drafted** | 1. **Go** — build the whole plan autonomously ← recommended · 2. adjust the plan · 3. build later — `/toh-vibe` resumes `.toh/plan.md` anytime |
+| **Build done + mock data** | 1. `/toh-connect` — real database · 2. `/toh-design <weakest page>` — polish the plainest page · 3. `/toh-ship` — deploy |
+| **`[!]` blocked tasks exist** | 1. show blockers — per-task diagnosis · 2. `/toh-fix <blocker>` — attack the worst one · 3. skip-and-continue — finish independent work first |
+| **Backend connected** | 1. test a real CRUD flow end-to-end · 2. `/toh-protect` — auth + security · 3. `/toh-ship` — deploy |
+| **Shipped** | 1. `/toh-test` — regression safety net · 2. `/toh-plan <new feature>` — next feature · 3. business-type fit (below) |
+
+**Filling a free slot — fit the business type:** F&B → payments, receipts · E-commerce → Stripe, order emails · Booking → calendar sync, reminders · SaaS → user roles, billing.
+
+**Continuation option (capability ladder, top rung first — if unavailable, fall back one rung):** when unchecked plan tasks remain, on Claude Code one option may be `/loop` — background babysitter that keeps finishing stories (Esc stops) — or the `/goal` recipe: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. Where those don't exist, substitute: `re-run /toh-vibe to continue from .toh/plan.md`.
 
 ### Handling the reply
 
 | User types | Action |
 |-----------|--------|
-| `1` / `2` / `3` | Execute that suggestion |
+| `1` / `2` / `3` | Execute that action |
 | `continue` / `ต่อเลย` | Execute #1 (the recommended one) |
 | anything else | Treat as a new request |
 
-### Suggestion anti-patterns
+### Anti-patterns
 
-- ❌ Too many options (offer 2-3, not 10) · ❌ Irrelevant suggestions (don't suggest "deploy" right after building bare UI) · ❌ Repeating done steps (track progress, suggest new things).
+- ❌ Generic menus ("What would you like to do next?" with no commands)
+- ❌ Repeating a completed stage — check plan.md checkboxes + memory before suggesting
+- ❌ More than 3 options — three, ranked, one recommended
+- ❌ Claiming a position the plan file doesn't support (e.g. suggesting `/toh-ship` while `[!]` blockers exist)
 
 ---
 
@@ -159,11 +195,13 @@ Before sending any completion response, verify:
 | ✔ | Check |
 |---|-------|
 | □ | Did I check real docs/types instead of guessing (Tool Rules)? |
-| □ | Did I actually build/run and look at the result before claiming done? |
+| □ | Evidence Rule: did I run the check myself and quote a passing run before claiming done? |
 | □ | Are all three sections present (What I Did / You Get / You Need To Do)? |
 | □ | Is **What You Get** in plain, user-facing language? |
 | □ | If nothing is needed, did I say so explicitly? Preview URL included if UI? |
-| □ | Did I offer 2-3 numbered next steps? |
+| □ | Announce block complete: Status / Result / Evidence with quoted output? |
+| □ | Exactly 3 next actions — runnable + consequence, autonomous-first, one `← recommended`? |
+| □ | Position derived from `.toh/plan.md` Status + checkboxes (not vibes)? No completed stage repeated? |
 
 If any check fails → fix it before sending.
 
@@ -181,4 +219,4 @@ skills:
 
 ---
 
-*Engineer Harness v1.0.0 — merged from the two legacy reporting skills, plus V2 tool-selection rules*
+*Engineer Harness v1.1.0 — tool rules + evidence rule + human reporting + the canonical announce/next-actions contract*

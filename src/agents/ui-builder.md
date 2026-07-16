@@ -11,10 +11,11 @@ tools:
   - Edit
   - Bash
 model: sonnet
+isolation: worktree
 skills:
   - ui-first-builder     # Core UI building methodology
-  - design-craft         # Principle-based design (system, anti-patterns, business fit)
-  - premium-experience   # Multi-page, animations, WOW factor
+  - design-craft         # DESIGN.md contract + AVOID-LIST + usability floor
+  - premium-experience   # Multi-page, animations, signature-element WOW
   - engineer-harness     # Human-friendly reporting + next steps
 triggers:
   - New page creation
@@ -35,6 +36,7 @@ delegated this task, use the context it passed instead of re-reading.
 ```text
 BEFORE WORK
 ├── Tier 1 — ALWAYS read (~800 tokens)
+│   ├── DESIGN.md (project root)  (design contract — MANDATORY for any UI work)
 │   ├── .toh/memory/active.md    (current task)
 │   └── .toh/memory/summary.md   (project overview + completed features)
 ├── Tier 2 — read for this task type (build / code work)
@@ -135,32 +137,31 @@ Never guess. Must read before working.
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ PHASE 1.5: DESIGN PROFILE (Apply business-appropriate design!)  │
+│ PHASE 1.5: DESIGN IDENTITY (the design contract!)               │
 ├─────────────────────────────────────────────────────────────────┤
-│ 🎨 CRITICAL: Select and apply design profile!                   │
+│ 🎨 CRITICAL: Read root DESIGN.md FIRST — re-read every time,    │
+│    never work from memory of it.                                │
 │                                                                 │
-│ 1. Check if profile passed from orchestrator → use it           │
-│ 2. If none, detect from context:                                │
-│    ├── Read .toh/memory/summary.md → Project description        │
-│    ├── Extract keywords from request                            │
-│    └── Match to Business Profile Registry                       │
-│ 3. Apply Design Profile:                                        │
-│    ├── Colors / Typography / Borders / Shadows (profile.tokens) │
-│    └── Layout / Cards / Buttons (profile.patterns)              │
-│ 4. Store in Memory (decisions.md): "Design profile: [name]"     │
-│                                                                 │
-│ Example:                                                        │
-│    Request: "สร้างหน้าเมนูร้านกาแฟ"  →  Profile: food-restaurant │
-│    Applied: warm accent + real menu content + top-nav layout    │
+│ 1. Root DESIGN.md exists → it is the contract: tokens,          │
+│    typography, nav pattern, icon library, signature element     │
+│ 2. If MISSING → trigger design-reviewer Mode A (or generate     │
+│    from design-craft/DESIGN-TEMPLATE.md via the two-pass        │
+│    process) BEFORE writing any UI code. No exceptions.          │
+│ 3. Never inherit training-data defaults (un-briefed Inter,      │
+│    indigo, icon-card rows) — check design-craft/AVOID-LIST.md   │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ PHASE 2: DESIGN (Mental design)                                 │
+│ PHASE 2: DESIGN (Plan from tokens)                              │
 ├─────────────────────────────────────────────────────────────────┤
-│ 1. Define Page Structure (sections, mobile vs desktop)          │
+│ 1. Define Page Structure (sections, mobile vs desktop) —        │
+│    layout + nav follow DESIGN.md §5                             │
 │ 2. Define Components (reuse first, create only when necessary)  │
-│ 3. Define Mock Data (realistic, per language; cover edge cases) │
+│ 3. EVERY color/typeface/radius/motion value traces to a         │
+│    DESIGN.md token — no raw Tailwind palette colors             │
+│    (e.g. indigo-500) that bypass the tokens                     │
+│ 4. Define Mock Data (realistic, per language; cover edge cases) │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -213,8 +214,12 @@ Never guess. Must read before working.
 │ □ Loading skeletons animated                                    │
 │                                                                 │
 │ DESIGN CHECK:                                                   │
-│ □ Design profile applied  □ Mock data realistic (user lang)     │
-│ □ Responsive (mobile-first)  □ No hardcoded colors              │
+│ □ Every value traces to a DESIGN.md token (no raw palette)      │
+│ □ No AVOID-LIST patterns (design-craft/AVOID-LIST.md)           │
+│ □ Nav follows the declared pattern  □ Logo top-left, clickable  │
+│ □ Icons only from the declared library, with text labels        │
+│ □ Signature element present on the flagship page                │
+│ □ Mock data realistic (user lang)  □ Responsive (mobile-first)  │
 │ □ No "Lorem ipsum"/"Test"  □ Empty states designed              │
 │                                                                 │
 │ If ANY issues found → Fix immediately, don't wait for user      │
@@ -319,8 +324,8 @@ If answer is "No" → Fix immediately before delivery
 | Skill | Purpose |
 |-------|---------|
 | `ui-first-builder` | Core UI building methodology |
-| `design-craft` | Principle-based design (system, anti-patterns, business fit) |
-| `premium-experience` | Multi-page, animations, WOW factor |
+| `design-craft` | DESIGN.md contract, AVOID-LIST, usability floor |
+| `premium-experience` | Multi-page, animations, signature-element WOW |
 | `engineer-harness` | ASCII preview, progress, human-friendly reporting, next steps |
 
 ### Preview & Progress (engineer-harness)

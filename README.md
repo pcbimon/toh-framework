@@ -1,6 +1,10 @@
-# 🎯 Toh Framework
+<p align="center">
+  <img src="https://raw.githubusercontent.com/wasintoh/toh-framework/main/docs/assets/toh-framework-banner.png" alt="Toh Framework 2.0" width="760" />
+</p>
 
-> **"Type Once, Have it all!"** - AI-Orchestration Driven Development
+<h3 align="center">"Type Once, Have it all!" — AI-Orchestration Driven Development</h3>
+
+<p align="center">Approve once. Walk away. Come back to a finished, verified app.</p>
 
 [![npm version](https://img.shields.io/npm/v/toh-framework.svg?style=flat-square)](https://www.npmjs.com/package/toh-framework)
 [![npm downloads](https://img.shields.io/npm/dt/toh-framework.svg?style=flat-square)](https://www.npmjs.com/package/toh-framework)
@@ -33,74 +37,26 @@ Toh Framework enables you to:
 - 👀 **See results instantly** - No waiting, no answering questions
 - 🚀 **Production-ready** - Not just a prototype
 
-## 🆕 What's New in v1.8.1
+## 🆕 What's New in v2.0.0
 
-### 🌐 Google Antigravity Workflows
+> **The "never babysit your AI again" release.** One approval in. One finished app out.
 
-Full support for Google Antigravity IDE! Commands now appear when pressing `/`:
+| Feature | What it means for you |
+|---------|----------------------|
+| 🚀 **One-Go Build** | Approve once, get a whole finished app — `/toh-plan` writes the plan to a file, you say **"Go"**, and it builds to the end. Zero babysitting. |
+| 🔁 **TOH LOOP** | Type & Forget — builds, tests, and fixes itself task by task, and **never asks "continue?"** between phases. |
+| 🛡️ **Stop Hook** | Refuses to quit until every task is **verified DONE** — real command output is the only proof it accepts (Claude Code). |
+| 🎨 **Design Identity** | No one can tell AI made it — every project gets its own root `DESIGN.md` (colors, fonts, navigation, one signature element) plus a versioned **AVOID-LIST** that kills the "AI look". |
+| ⏯️ **Auto-Resume** | Quit anytime — `/clear`, close the terminal, even switch IDEs — it continues **exactly where it left off** from `.toh/plan.md`. |
 
-- **13 workflow files** created in `.agent/workflows/`
-- Commands use **dash syntax** (`/toh-vibe`) in Antigravity
-- Separate from Gemini CLI which uses **colon syntax** (`/toh:vibe`)
+### Also in 2.0.0
 
-### 🧠 7-File Memory System
-
-Enhanced memory tracking with 2 new files:
-
-| Memory File | Purpose |
-|-------------|---------|
-| `active.md` | Current task |
-| `summary.md` | Project overview |
-| `decisions.md` | Key decisions |
-| `changelog.md` | **NEW!** Session changes |
-| `agents-log.md` | **NEW!** Agent activity log |
-| `architecture.md` | Project structure |
-| `components.md` | Component registry |
-
-### 📢 Agent Announcements
-
-All agents now announce themselves when working:
-
-```
-[🎨 UI Builder] Starting: Create Dashboard Page
-[🎨 UI Builder] ✅ Complete: Dashboard with 3 components
-```
-
-### ⚡ Parallel Execution
-
-Agents can now work simultaneously when there are no dependencies:
-
-```
-Phase 1: [🎨 UI] + [⚙️ Dev]    ← PARALLEL
-Phase 2: [🔌 Backend]          ← SEQUENTIAL
-Phase 3: [✨ Design] + [🧪 Test] ← PARALLEL
-```
-
-### 🎯 Agent Selection Reasoning
-
-Before executing, see why AI chose specific agents:
-
-```
-🔍 Analysis:
-| Need | Agent | Confidence |
-|------|-------|------------|
-| Create pages | 🎨 UI | 95% |
-| Add logic | ⚙️ Dev | 90% |
-| Connect DB | 🔌 Connect | 95% |
-```
-
-### 🤖 8 Sub-Agents v2.1
-
-| Agent | Specialty |
-|-------|-----------|
-| 🎨 **ui-builder** | Pages, Components, Layouts |
-| ⚙️ **dev-builder** | Logic, State, API |
-| 🔌 **backend-connector** | Supabase, Auth, RLS |
-| ✨ **design-reviewer** | Polish, Animation |
-| 🧪 **test-runner** | Auto test & fix |
-| 🧠 **plan-orchestrator** | Analyze, Plan |
-| 📱 **platform-adapter** | LINE, Mobile, Desktop |
-| 🔍 **root-cause-debugger** | Investigate & prove bug root cause |
+- 🧠 **`/toh` v5** — intent-based orchestrator: reads what you *mean*, surveys its runtime, routes to the right agents with the right models, verifies before reporting
+- 🔬 **`/toh-fix` evidence-first** — reproduces and proves the root cause before touching a single line (no fix without proof)
+- ⚡ **Modern stack** — Next.js 16 / React 19 / Tailwind CSS 4 templates, build-verified
+- 💚 **`/toh-line` + `/toh-mobile`** — convert to LINE MINI App, or ship PWA / Capacitor mobile in one command
+- 🤖 **Single-source agents** — one definition per agent, transformed per IDE at install, with model tiers (opus / sonnet / haiku) matched to each role
+- 🎛️ **Runtime capability survey** — `.toh/capabilities.json` + per-IDE command variants: Claude Code gets hard enforcement (Stop hook, `/goal`, `/loop`), other IDEs run the same loop as instructions with checkbox-resume
 
 ### 📜 Previous Versions
 
@@ -110,12 +66,12 @@ See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 
 | Version | Date | Key Feature |
 |---------|------|-------------|
+| v2.0.0 | 2026-07-16 | One-Go Build, TOH LOOP, Design Identity, Auto-Resume |
 | v1.8.0 | 2026-01-11 | 7-File Memory System, Agent Announcements |
 | v1.7.1 | 2026-01-11 | Gemini CLI Native Commands (TOML) |
 | v1.7.0 | 2025-12-26 | Security Engineer, `/toh-protect` command |
 | v1.6.0 | 2025-12-18 | Claude Code Sub-Agents, Multi-Agent Orchestration |
 | v1.5.0 | 2025-12-05 | Google Antigravity/Gemini Support |
-| v1.4.0 | 2025-12-04 | `/toh` Smart Command, Premium Experience |
 
 ---
 
@@ -123,13 +79,13 @@ See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 
 | Feature | Description |
 |---------|-------------|
-| **`/toh` Smart Command** | Type anything, AI picks the right agent |
-| **Sub-Agents** | 8 specialized agents for different tasks |
-| **Multi-Agent Orchestration** | Complex workflows with full visibility |
-| **Premium Experience** | 5+ pages with animations in one prompt |
-| **Design Mastery** | 13 business profiles for smart design |
+| **One-Go Build** | `/toh-plan` → approve once → whole app built autonomously |
+| **TOH LOOP** | Builds, tests, and fixes itself until every task is verified DONE |
+| **`/toh` Smart Command** | Type anything, AI picks the right agents and models |
+| **Design Identity** | Per-project `DESIGN.md` + versioned AVOID-LIST — no "AI look" |
+| **Auto-Resume** | `.toh/plan.md` survives `/clear`, restarts, and IDE switches |
+| **Sub-Agents** | 8 specialized agents with model tiers per role |
 | **Auto Memory** | Context persists across sessions and IDEs |
-| **Auto Testing** | Test & fix loop until all pass |
 
 ---
 
@@ -230,7 +186,7 @@ gemini
 | Command | Shortcut | Description |
 |---------|----------|-------------|
 | `/toh` | - | 🧠 **Smart Command** - Type anything, AI picks agent |
-| `/toh-plan` | `/toh-p` | 📋 **Plan** - Analyze, plan, orchestrate |
+| `/toh-plan` | `/toh-p` | 📋 **Plan** - Writes `.toh/plan.md`, approve once, builds to the end |
 | `/toh-vibe` | `/toh-v` | 🎨 **Create Project** - Complete app in one command |
 | `/toh-ui` | `/toh-u` | 🖼️ **Create UI** - Pages, Components, Layouts |
 | `/toh-dev` | `/toh-d` | ⚙️ **Add Logic** - TypeScript, Zustand, Forms |
@@ -252,8 +208,8 @@ No decisions needed - optimized stack ready to go:
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 (App Router) |
-| Styling | Tailwind CSS + shadcn/ui |
+| Framework | Next.js 16 (App Router) + React 19 |
+| Styling | Tailwind CSS 4 + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
 | Backend | Supabase |
@@ -282,6 +238,21 @@ Orchestrator:
 ├── 🧪 test-runner → Test & fix
 ├── 🔐 security-check → Audit code [NEW]
 └── ✅ Deliver working system!
+```
+
+### 🔁 Plan → Vibe Workflow
+
+The plan is a **file**, never chat state:
+
+- `/toh-plan` writes `.toh/plan.md` → you approve **once** ("Go") → the whole plan is built autonomously, verified checkpoint by checkpoint.
+- `/toh-vibe` resumes any unfinished plan: it reads `.toh/plan.md` first and continues from the first unchecked task — in any session, any IDE.
+
+Note: autonomous-loop *enforcement* (the Stop hook, `/goal`, `/loop`) is Claude Code-only — other IDEs follow the same loop as instructions, with checkbox-resume in `.toh/plan.md` as the recovery mechanism.
+
+**Unattended builds** — kick off a full build headless (Claude Code):
+
+```bash
+claude -p "/toh-vibe coffee shop management system" --permission-mode acceptEdits
 ```
 
 ---
@@ -318,11 +289,24 @@ Orchestrator:
 ## 📊 Framework Stats
 
 - 🤖 **8 Sub-Agents** - Specialized for different tasks
-- 🎯 **15 Commands** - From planning to deployment `[NEW: /toh-protect]`
-- 📚 **22 Skills** - Comprehensive AI capabilities `[NEW: Security Engineer]`
-- 🎨 **13 Design Profiles** - Business-appropriate design
+- 🎯 **14 Commands** - From planning to deployment
+- 📚 **23 Skills** - Comprehensive AI capabilities `[NEW: Orchestration Protocol]`
+- 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
 - 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex
+
+---
+
+## 📚 Documentation & Guides
+
+| Guide | Where |
+|-------|-------|
+| 🇹🇭 Thai documentation | [docs/README-TH.md](docs/README-TH.md) |
+| Full version history | [CHANGELOG.md](CHANGELOG.md) |
+| All commands + cheatsheet | run `/toh-help` in your IDE |
+| Per-project guide (auto-generated) | `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules` in your project after install |
+| The plan artifact | `.toh/plan.md` — your app's live checklist (open it anytime to see progress) |
+| Design contract | `DESIGN.md` at your project root — generated per project, edit it to steer the look |
 
 ---
 

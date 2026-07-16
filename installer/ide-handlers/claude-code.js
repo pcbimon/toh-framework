@@ -8,6 +8,7 @@ import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { transformCommand, renderCapabilitiesSection } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -15,7 +16,7 @@ const __dirname = dirname(__filename);
 const pkg = JSON.parse(fs.readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
 const VERSION = pkg.version;
 
-export async function setupClaudeCode(targetDir, language = 'en') {
+export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
   // No spinner here — the caller (setupIDEWithSpinner) owns the spinner so the
   // "Configuring Claude Code..." line isn't printed twice. We just return a
   // short detail string describing the CLAUDE.md outcome for it to display.
@@ -81,6 +82,13 @@ export async function setupClaudeCode(targetDir, language = 'en') {
           if (parsed.tools !== undefined) nativeFm.tools = parsed.tools; // omit if absent (never widen)
           nativeFm.model = parsed.model || 'sonnet';                     // default sonnet if missing
 
+          // v2.0.0: autonomy keys — PASS THROUGH when present in the superset
+          // frontmatter (memory: project, maxTurns bounds, isolation: worktree,
+          // background). Never inject defaults — absent stays absent.
+          for (const key of ['memory', 'maxTurns', 'isolation', 'background']) {
+            if (parsed[key] !== undefined) nativeFm[key] = parsed[key];
+          }
+
           const fmYaml = yaml.dump(nativeFm, { lineWidth: -1, noRefs: true }).trimEnd();
           const outName = `${parsed.name || file.replace(/\.md$/, '')}.md`;
           await fs.writeFile(
@@ -93,8 +101,43 @@ export async function setupClaudeCode(targetDir, language = 'en') {
         }
       }
     }
+    // v2.0.0: commands are single-source with per-IDE marker blocks. The Claude
+    // variant KEEPS <!-- tfw:claude --> content and DROPS <!-- tfw:fallback -->
+    // blocks (markers always stripped).
+    //
+    // v2.0.0-r2: source the transform from the PACKAGE's src/commands (the same
+    // SRC_DIR install.js hands codex.js/gemini-cli.js), NOT the target's
+    // .toh/commands. install.js normalizes .toh/commands to the UNIVERSAL
+    // variant at the end of every run, so on a later Quick Update with the
+    // Commands component unchecked, .toh/commands no longer carries the
+    // tfw:claude blocks — copying it would silently drop the Claude-only
+    // content (/goal, /loop, teams). Fall back to .toh/commands only when the
+    // package source is unavailable.
     if (fs.existsSync(join(tohDir, 'commands'))) {
-      await fs.copy(join(tohDir, 'commands'), join(claudeDir, 'commands'), { overwrite: true });
+      const pkgCommandsDir = srcDir
+        ? join(srcDir, 'commands')
+        : join(__dirname, '..', '..', 'src', 'commands');
+      if (fs.existsSync(pkgCommandsDir)) {
+        await copyCommandsTransformed(pkgCommandsDir, join(claudeDir, 'commands'));
+      } else {
+        // Fallback: transform is idempotent, so re-running on already-universal
+        // content can't double-strip — the real risk is MISSING Claude content.
+        // preserveExistingWhenNoMarkers keeps a previously-installed Claude
+        // variant instead of clobbering it with the stripped universal copy.
+        const sawMarkers = await copyCommandsTransformed(
+          join(tohDir, 'commands'),
+          join(claudeDir, 'commands'),
+          true
+        );
+        if (!sawMarkers) {
+          console.log(chalk.yellow(
+            '\n  ⚠️  .toh/commands is already normalized to the universal variant and the ' +
+            'package source (src/commands) is unavailable — .claude/commands may be missing ' +
+            'Claude Code-only content (/goal, /loop, teams). Run a full reinstall with the ' +
+            'Commands component selected to restore it.'
+          ));
+        }
+      }
     }
     if (fs.existsSync(join(tohDir, 'templates'))) {
       await fs.copy(join(tohDir, 'templates'), join(claudeDir, 'templates'), { overwrite: true });
@@ -103,6 +146,13 @@ export async function setupClaudeCode(targetDir, language = 'en') {
     // Create memory template files in .claude/memory/
     const memoryDir = join(claudeDir, 'memory');
     await createMemoryFiles(memoryDir);
+
+    // v2.0.0: THE TOH LOOP enforcement machinery (Claude Code only)
+    // - Stop hook in .claude/settings.json blocks stopping mid-plan (deep-merged,
+    //   additive, idempotent via the <TFW-STOP-HOOK> marker)
+    // - .claude/loop.md heartbeat lets bare /loop keep finishing stories
+    await mergeSettingsStopHook(claudeDir);
+    await writeLoopHeartbeat(claudeDir);
 
     // Create CLAUDE.md with Toh Framework rules (references .claude/*)
     const claudeMdPath = join(targetDir, 'CLAUDE.md');
@@ -126,6 +176,148 @@ export async function setupClaudeCode(targetDir, language = 'en') {
     // Re-throw so the caller's spinner reports the failure (no duplicate spinner).
     throw error;
   }
+}
+
+/**
+ * v2.0.0: Copy a commands dir -> .claude/commands, transforming every .md
+ * through transformCommand(content, 'claude-code') so Claude Code keeps the
+ * tfw:claude blocks and drops the tfw:fallback blocks. Non-.md files and
+ * nested folders copy through unchanged.
+ *
+ * v2.0.0-r2: returns true if any .md carried tfw: markers. With
+ * preserveExistingWhenNoMarkers (fallback mode, source = .toh/commands), a
+ * markerless .md — i.e. one already normalized to the universal variant —
+ * never overwrites an existing dest file, which may still hold the richer
+ * Claude variant from a previous install.
+ */
+async function copyCommandsTransformed(srcDir, destDir, preserveExistingWhenNoMarkers = false) {
+  await fs.ensureDir(destDir);
+  let sawMarkers = false;
+  const entries = await fs.readdir(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = join(srcDir, entry.name);
+    const destPath = join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      if (await copyCommandsTransformed(srcPath, destPath, preserveExistingWhenNoMarkers)) {
+        sawMarkers = true;
+      }
+    } else if (entry.name.endsWith('.md')) {
+      const raw = await fs.readFile(srcPath, 'utf8');
+      const hasMarkers = raw.includes('tfw:');
+      if (hasMarkers) sawMarkers = true;
+      if (!hasMarkers && preserveExistingWhenNoMarkers && fs.existsSync(destPath)) {
+        continue; // transform is a no-op and dest may be the good Claude variant — keep it
+      }
+      await fs.writeFile(destPath, transformCommand(raw, 'claude-code'));
+    } else {
+      await fs.copy(srcPath, destPath, { overwrite: true });
+    }
+  }
+  return sawMarkers;
+}
+
+// Idempotence marker for the TFW Stop hook — a reinstall appends the hook only
+// if no existing hook prompt already contains this token.
+const TFW_STOP_HOOK_MARKER = '<TFW-STOP-HOOK>';
+
+const TFW_STOP_HOOK_PROMPT =
+  '<TFW-STOP-HOOK> Read .toh/plan.md. If it has unchecked, unblocked stories ' +
+  "('- [ ]' without '[!]') or the last QC run in the transcript failed, return " +
+  '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
+  'If stop_hook_active is true and no progress was made since the last block, ' +
+  'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done/' +
+  'Status: draft, return {"ok": true}. These ok:true conditions take precedence ' +
+  'even if the last QC run in the transcript failed.';
+
+/**
+ * v2.0.0: Deep-merge the TFW Stop hook into .claude/settings.json.
+ *
+ * Rules (additive + idempotent):
+ * - settings.json absent      -> create it with just the Stop hook
+ * - settings.json unparseable -> DO NOT touch it; warn and skip
+ * - hook already present      -> no-op (detected via the <TFW-STOP-HOOK> marker)
+ * - user entries              -> never removed, never reordered — we only append
+ * - unexpected shapes (hooks/Stop not object/array) -> warn and skip, never corrupt
+ */
+async function mergeSettingsStopHook(claudeDir) {
+  const settingsPath = join(claudeDir, 'settings.json');
+
+  let settings = {};
+  if (fs.existsSync(settingsPath)) {
+    const raw = await fs.readFile(settingsPath, 'utf8');
+    try {
+      settings = JSON.parse(raw);
+    } catch {
+      console.log(chalk.yellow(
+        '\n  ⚠️  .claude/settings.json is not valid JSON — left untouched. ' +
+        'Fix it and re-run the installer to get the TFW Stop hook.'
+      ));
+      return;
+    }
+    if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) {
+      console.log(chalk.yellow(
+        '\n  ⚠️  .claude/settings.json has an unexpected shape — left untouched (no Stop hook installed).'
+      ));
+      return;
+    }
+  }
+
+  // Idempotence: skip if any existing hook already carries the TFW marker.
+  if (settings.hooks !== undefined && JSON.stringify(settings.hooks).includes(TFW_STOP_HOOK_MARKER)) {
+    return; // already installed — never duplicate
+  }
+
+  if (settings.hooks === undefined) settings.hooks = {};
+  if (settings.hooks === null || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) {
+    console.log(chalk.yellow(
+      '\n  ⚠️  .claude/settings.json "hooks" is not an object — left untouched (no Stop hook installed).'
+    ));
+    return;
+  }
+
+  if (settings.hooks.Stop === undefined) settings.hooks.Stop = [];
+  if (!Array.isArray(settings.hooks.Stop)) {
+    console.log(chalk.yellow(
+      '\n  ⚠️  .claude/settings.json "hooks.Stop" is not an array — left untouched (no Stop hook installed).'
+    ));
+    return;
+  }
+
+  // Append-only: user entries keep their positions; ours goes last.
+  settings.hooks.Stop.push({
+    hooks: [
+      {
+        type: 'prompt',
+        prompt: TFW_STOP_HOOK_PROMPT
+      }
+    ]
+  });
+
+  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+}
+
+// First line marks the file as TFW-generated so reinstalls may refresh it —
+// a user-authored loop.md (no marker) is never overwritten.
+const TFW_LOOP_MARKER = '<!-- generated by toh-framework -->';
+
+const TFW_LOOP_HEARTBEAT = `${TFW_LOOP_MARKER}
+Read .toh/plan.md + .toh/progress.md. If unchecked stories remain, continue the first one per the TOH LOOP (orchestration-protocol skill): implement, run its checkpoint, quote output, fix if red (max 5), tick if green, update .toh/memory/active.md. If all green and no stories remain, say COMPLETE in one line and stop.
+`;
+
+/**
+ * v2.0.0: Write the .claude/loop.md heartbeat for bare /loop.
+ * Only when absent or previously TFW-generated (marker on the first line).
+ */
+async function writeLoopHeartbeat(claudeDir) {
+  const loopPath = join(claudeDir, 'loop.md');
+  if (fs.existsSync(loopPath)) {
+    const existing = await fs.readFile(loopPath, 'utf8');
+    const firstLine = existing.split(/\r?\n/, 1)[0].trim();
+    if (!firstLine.includes(TFW_LOOP_MARKER)) {
+      return; // user-authored heartbeat — never clobber
+    }
+  }
+  await fs.writeFile(loopPath, TFW_LOOP_HEARTBEAT);
 }
 
 /**
@@ -485,6 +677,10 @@ Use realistic English data:
 
 You are the **Toh Orchestrator** - an AI expert in building web applications with autonomous execution.
 
+${renderCapabilitiesSection('claude-code')}
+
+**2-step survey:** before any multi-task job, run the 2-step survey from \`.claude/skills/orchestration-protocol/SKILL.md\` — Step 1: identity is declared here, capabilities in \`.toh/capabilities.json\`; Step 2: probe ONLY the feature gates (teams env flag, \`/goal\` >= 2.1.139, workflows >= 2.1.154). Then pick a rung on the execution ladder (teams > subagents > sequential — sequential is the default for <= 3 tasks or dependent edits).
+
 ## Core Philosophy
 
 1. **UI First** - Create working UI immediately, don't wait for backend
@@ -502,6 +698,15 @@ You are the **Toh Orchestrator** - an AI expert in building web applications wit
 | Forms | React Hook Form + Zod |
 | Backend | Supabase |
 | Language | TypeScript (strict) |
+
+## 🎨 Design Identity Protocol
+
+> Root \`DESIGN.md\` is the project design contract.
+
+- ANY command that touches UI reads root \`DESIGN.md\` FIRST — every color/typeface/radius/motion value must trace to its tokens.
+- If \`DESIGN.md\` is missing, \`/toh-vibe\`, \`/toh-plan\`, and \`/toh-ui\` generate it via the \`design-reviewer\` agent (Mode A, two-pass process from \`design-craft/DESIGN-TEMPLATE.md\`) BEFORE any UI work.
+- NEVER inherit training-data defaults — no un-briefed Inter, indigo/purple gradients, or 3-icon-card rows. \`design-craft/AVOID-LIST.md\` is the negative-constraints list.
+- Never ship a placeholder \`DESIGN.md\` — the file exists only once generated with real per-project content.
 
 ${langInstructions}
 
@@ -801,13 +1006,14 @@ After Vibe Mode completes, user gets:
 
 | Command | Load These Skills (from \`.claude/skills/\`) | Delegate To (from \`.claude/agents/\`) |
 |---------|------------------------------------------|-----------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`premium-experience\`, \`design-craft\` | \`ui-builder.md\` + \`dev-builder.md\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` | \`ui-builder.md\` |
+| \`/toh\` | \`smart-routing\`, \`orchestration-protocol\`, \`engineer-harness\` | (route via the 2-step survey) |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\` | \`ui-builder.md\` + \`dev-builder.md\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\` (+ \`AVOID-LIST.md\`, \`DESIGN-TEMPLATE.md\`), \`engineer-harness\` | \`ui-builder.md\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` | \`dev-builder.md\` |
-| \`/toh-design\` | \`design-craft\`, \`premium-experience\` | \`design-reviewer.md\` |
+| \`/toh-design\` | \`design-craft\` (+ \`AVOID-LIST.md\`, \`DESIGN-TEMPLATE.md\`), \`premium-experience\` | \`design-reviewer.md\` |
 | \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` | \`test-runner.md\` |
 | \`/toh-connect\` | \`backend-engineer\`, \`integrations\` | \`backend-connector.md\` |
-| \`/toh-plan\` | \`plan-orchestrator\`, \`business-context\`, \`smart-routing\` | \`plan-orchestrator.md\` |
+| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`engineer-harness\` | \`plan-orchestrator.md\` |
 | \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` | \`test-runner.md\` |
 | \`/toh-line\` | \`platform-specialist\`, \`integrations\` | \`platform-adapter.md\` |
 | \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` | \`platform-adapter.md\` |

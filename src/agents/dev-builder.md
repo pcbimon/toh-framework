@@ -12,6 +12,7 @@ tools:
   - Bash
   - WebFetch
 model: sonnet
+isolation: worktree
 skills:
   - dev-engineer         # Core dev skills
   - prompt-optimizer     # For AI SaaS system prompts

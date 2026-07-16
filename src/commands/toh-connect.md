@@ -3,6 +3,9 @@ command: /toh-connect
 aliases: ["/toh-c"]
 description: Connect app to Supabase backend with schema and RLS policies
 trigger: /toh-connect or /toh-c
+skills:
+  - backend-engineer
+  - engineer-harness
 ---
 
 # /toh-connect - Connect Backend
@@ -109,6 +112,12 @@ trigger: /toh-connect or /toh-c
    - Refresh app
    - CRUD should work with real database now
 ```
+
+ปิดท้ายด้วย **Section C ของ engineer-harness** (stage-aware trio) — default trio หลังเชื่อม backend:
+
+1. บอกหนูว่า "ใส่ keys แล้ว" — หนูจะทดสอบ CRUD จริง end-to-end ให้ ← recommended
+2. `/toh-protect` — เพิ่ม auth + security
+3. `/toh-ship` — deploy ขึ้น production
 
 ## Supported Services
 

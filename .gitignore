@@ -27,3 +27,9 @@ claude-project/
 .claude/
 TOH-FRAMEWORK-DETAILS.txt
 installer_file/
+
+# Local-only tooling (private, never part of the public framework)
+.cursor/
+.playwright-mcp/
+TFW-CustomEdition/
+CLAUDE.local.md

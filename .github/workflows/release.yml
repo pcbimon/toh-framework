@@ -1,0 +1,73 @@
+# Release — publish to npm with provenance + create a GitHub Release.
+# Triggered by pushing a tag matching v* (e.g. `git tag v2.1.0 && git push --tags`).
+#
+# Required secret: NPM_TOKEN — an npm granular access token with
+# read-and-write on the toh-framework package. Add it under
+# repo Settings → Secrets and variables → Actions → New repository secret.
+# `id-token: write` lets npm attach a provenance attestation (Sigstore),
+# so npmjs.com shows the package was built from this repo by this workflow.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm --provenance attestation
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      # Guard: the tag must match package.json version
+      - name: Verify tag matches package.json
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag v$TAG_VERSION != package.json $PKG_VERSION" >&2
+            exit 1
+          fi
+
+      # Quality gate: the repo has no test suite yet, so the gate is
+      # "the CLI actually runs" + "the tarball packs clean"
+      - run: npm ci
+      - run: node bin/toh-cli.js --version
+      - run: node bin/toh-cli.js --help
+      - run: npm run list
+      - run: npm pack --dry-run
+
+      - name: Publish to npm (with provenance)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Pull the matching "## [X.Y.Z]" section out of CHANGELOG.md
+      - name: Extract changelog section
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            $0 ~ ("^## \\[" ver "\\]") { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > RELEASE_BODY.md
+          if ! [ -s RELEASE_BODY.md ]; then
+            echo "No CHANGELOG.md section for ${VERSION} — see CHANGELOG.md." > RELEASE_BODY.md
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file RELEASE_BODY.md

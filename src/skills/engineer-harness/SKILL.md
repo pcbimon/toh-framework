@@ -1,3 +1,14 @@
+---
+name: engineer-harness
+description: >
+  Shared delivery harness for the main commands (/toh, /toh-plan, /toh-fix,
+  /toh-vibe) — senior-engineer tool selection rules (search real docs, reproduce
+  before diagnosing, verify by running), THE EVIDENCE RULE (only a quoted passing
+  run counts as done), non-developer communication mode, and stage-aware next
+  actions with the announce contract. Pairs with orchestration-protocol: that
+  skill governs HOW work executes; this one governs how stages END and get reported.
+user-invocable: false  # internal — model-invoked via toh-* commands, not a user /command
+---
 # 🛠️ Engineer Harness Skill
 
 > **Purpose:** Shared harness for the main commands — pick tools like a senior engineer, talk like a human, suggest what's next

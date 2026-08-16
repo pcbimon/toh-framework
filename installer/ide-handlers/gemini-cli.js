@@ -1,17 +1,22 @@
 /**
- * Gemini CLI IDE Handler
+ * Gemini CLI IDE Handler — LEGACY (v2.1, owner decision D1)
  * Creates .gemini/ directory structure for Gemini CLI
- * Creates .agent/workflows/ for Google Antigravity
+ *
+ * Google stopped serving consumer Gemini CLI requests on 2026-06-18; the
+ * default Google target is now Antigravity (agy CLI + IDE) via
+ * antigravity-cli.js on .agents/ paths. This handler is kept ONLY for
+ * Enterprise/GCP users who can still run Gemini CLI, is reachable
+ * exclusively behind the explicit --legacy-gemini flag, and no longer
+ * appears in the interactive installer menu.
  *
  * v1.8.0: Native Commands Support
  * - Commands now use TOML format in .gemini/commands/ (native Gemini CLI support)
  * - Skills copied to .gemini/skills/ (auto-discovered by Gemini CLI)
  * - No more relying on contextFiles for command recognition
  *
- * v1.8.1: Google Antigravity Workflows Support
- * - Workflows copied to .agent/workflows/ (Markdown + YAML frontmatter format)
- * - Antigravity uses different format than Gemini CLI
- * - Commands appear when pressing / in Antigravity chat
+ * v2.1: Antigravity workflows moved OUT of this handler — .agents/workflows/
+ * (+ legacy .agent/workflows/ mirror) are written by antigravity-cli.js;
+ * selecting gemini no longer implies Antigravity.
  */
 
 import fs from 'fs-extra';
@@ -61,18 +66,9 @@ export async function setupGeminiCLI(targetDir, srcDir, language = 'en') {
     await fs.copy(skillsSrc, skillsDest, { overwrite: true });
   }
 
-  // v1.8.1: Copy Antigravity workflows to .agent/workflows/
-  // Google Antigravity uses .agent/workflows/ for slash commands (different from Gemini CLI!)
-  const agentDir = path.join(targetDir, '.agent');
-  const workflowsDir = path.join(agentDir, 'workflows');
-  await fs.ensureDir(workflowsDir);
-
-  const workflowsSrc = path.join(srcDir, 'antigravity-workflows');
-  if (await fs.pathExists(workflowsSrc)) {
-    await fs.copy(workflowsSrc, workflowsDir, { overwrite: true });
-    // v2.0: same marker transform for Antigravity workflow markdown.
-    await transformCommandFilesInDir(workflowsDir, 'antigravity', ['.md']);
-  }
+  // v2.1: Antigravity workflows are no longer written here — the Antigravity
+  // surface (.agents/ + legacy .agent/workflows mirror) belongs to
+  // antigravity-cli.js. This legacy handler emits the .gemini/ surface only.
 
   // Create GEMINI.md - Simplified since commands are now native
   const geminiMd = language === 'th' ? generateGeminiMdTH() : generateGeminiMdEN();

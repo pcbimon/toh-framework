@@ -10,8 +10,8 @@ make the existing web app installable and offline-capable, then wrap it with
 **Capacitor** when native builds / native APIs / app-store distribution are needed.
 
 ## CRITICAL: Read Skills First
-- `.gemini/skills/platform-specialist/SKILL.md`
-- `.gemini/skills/ui-first-builder/SKILL.md`
+- `.agents/skills/platform-specialist/SKILL.md`
+- `.agents/skills/ui-first-builder/SKILL.md`
 
 ## Doc-Driven Rule (MANDATORY)
 Do NOT hardcode versions or paste frozen setup snippets. Pull the current steps from docs:

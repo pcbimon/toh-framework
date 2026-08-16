@@ -12,6 +12,7 @@
  */
 
 import fs from 'fs-extra';
+import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -23,7 +24,7 @@ const VERSION = pkg.version;
 // ============================================================
 // 1. Capability profiles (per IDE)
 // ============================================================
-// subagents: 'native' | 'none'
+// subagents: 'native' | 'file-based' | 'none'
 // teams:     'env-gated' | false   (env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
 // goal:      'version-gated' | false (Claude Code >= 2.1.139)
 // workflows: 'version-gated' | false (Claude Code >= 2.1.154, can be plan-disabled)
@@ -41,7 +42,11 @@ export const CAPABILITY_PROFILES = {
   },
   cursor: {
     ide: 'cursor',
-    subagents: 'none',
+    // v2.1 (W4): Cursor 2.4 has native subagents (.cursor/agents/*.md; on dual
+    // installs it also auto-loads .claude/agents/*.md — same Toh agents).
+    // parallel stays false: the TOH LOOP prose is written for one task at a
+    // time; delegation is allowed, parallel fan-out is not promised.
+    subagents: 'native',
     teams: false,
     goal: false,
     loop: false,
@@ -74,12 +79,19 @@ export const CAPABILITY_PROFILES = {
   },
   antigravity: {
     ide: 'antigravity',
-    subagents: 'none',
+    // v2.1 (W2): Antigravity (agy CLI + IDE 2.x) reads workspace .agents/:
+    // file-based subagents (.agents/agents/<name>.md with subagent: true,
+    // invoked via invoke_subagent), hooks (.agents/hooks.json, incl. Stop),
+    // and /toh-* workflows (.agents/workflows/, legacy mirror .agent/workflows/).
+    // VERIFY-LIVE (v2.1): workflows-loading by the agy CLI is a documented
+    // unknown — if live verification shows .agents/workflows is not loaded,
+    // fold workflows into skills (owner decision D7) and flip this to false.
+    subagents: 'file-based',
     teams: false,
     goal: false,
     loop: false,
-    hooks: false,
-    workflows: false,
+    hooks: true,
+    workflows: true,
     parallel: false,
     modelRouting: false
   }
@@ -91,7 +103,7 @@ const IDE_DISPLAY = {
   cursor: { name: 'Cursor', contextFile: '.cursor/rules/toh-framework.mdc' },
   codex: { name: 'Codex CLI', contextFile: 'AGENTS.md' },
   'gemini-cli': { name: 'Gemini CLI', contextFile: 'GEMINI.md' },
-  antigravity: { name: 'Google Antigravity', contextFile: 'GEMINI.md' }
+  antigravity: { name: 'Google Antigravity (agy CLI + IDE)', contextFile: '.agents/rules/toh-framework.md' }
 };
 
 /**
@@ -108,7 +120,8 @@ function normalizeIde(ide) {
     'codex-cli': 'codex',
     gemini: 'gemini-cli',
     'gemini-cli': 'gemini-cli',
-    antigravity: 'antigravity'
+    antigravity: 'antigravity',
+    agy: 'antigravity'
   };
   return aliases[key] || key;
 }
@@ -170,12 +183,14 @@ export async function writeCapabilitiesJson(targetDir, ides) {
   const filePath = join(tohDir, 'capabilities.json');
   await fs.ensureDir(tohDir);
 
-  // Normalize selection; 'gemini' installs configure Antigravity too.
+  // Normalize selection.
+  // v2.1 (W2/D1): 'gemini' no longer implies Antigravity — Gemini CLI is a
+  // separate legacy/Enterprise surface behind --legacy-gemini; Antigravity
+  // (agy CLI + IDE) is its own first-class target on .agents/ paths.
   const selected = new Set();
   for (const ide of ides || []) {
     const key = normalizeIde(ide);
     if (CAPABILITY_PROFILES[key]) selected.add(key);
-    if (key === 'gemini-cli') selected.add('antigravity');
   }
 
   // Union with a previous install (additive, never drop a declared runtime).
@@ -240,7 +255,13 @@ export function renderCapabilitiesSection(ide) {
 
   const lines = [];
   if (p.subagents === 'native') {
-    lines.push('- Native subagents: YES — delegate via the Task tool (parallel only for independent tasks on disjoint files, max 4 concurrent)');
+    // Claude Code keeps its original wording (Task tool); Cursor's native
+    // subagents live in .cursor/agents/ and have no Task tool.
+    lines.push(key === 'cursor'
+      ? '- Native subagents: YES — delegate to the Toh specialists in `.cursor/agents/*.md` (fall back to sequential execution in this session when delegation is unavailable)'
+      : '- Native subagents: YES — delegate via the Agent tool (Task) (parallel only for independent tasks on disjoint files, max 4 concurrent)');
+  } else if (p.subagents === 'file-based') {
+    lines.push('- Native subagents: file-based — `.agents/agents/<name>.md` (`subagent: true`), delegate via `invoke_subagent`; fall back to sequential execution in this session when delegation is unavailable');
   } else {
     lines.push('- Native subagents: NO — single-session only');
   }
@@ -253,17 +274,27 @@ export function renderCapabilitiesSection(ide) {
   lines.push(p.loop
     ? '- `/loop`: YES — heartbeat prompt in `.claude/loop.md`'
     : '- `/loop`: NO');
-  lines.push(p.hooks
-    ? '- Hooks: YES — Stop hook in `.claude/settings.json` enforces THE TOH LOOP'
-    : '- Hooks: NO');
-  lines.push(p.workflows === 'version-gated'
-    ? '- Workflows: version-gated (Claude Code >= 2.1.154)'
-    : '- Workflows: NO');
+  if (p.hooks) {
+    lines.push(key === 'antigravity'
+      ? '- Hooks: YES — deterministic Stop hook in `.agents/hooks.json` blocks ending while `.toh/plan.md` still has unchecked `- [ ]` tasks'
+      : '- Hooks: YES — Stop hook in `.claude/settings.json` enforces THE TOH LOOP');
+  } else {
+    lines.push('- Hooks: NO');
+  }
+  if (p.workflows === 'version-gated') {
+    lines.push('- Workflows: version-gated (Claude Code >= 2.1.154)');
+  } else if (p.workflows === true) {
+    lines.push('- Workflows: YES — `/toh-*` workflows in `.agents/workflows/` (legacy mirror: `.agent/workflows/`)');
+  } else {
+    lines.push('- Workflows: NO');
+  }
   lines.push(p.modelRouting
     ? '- Model routing: YES — haiku = scaffold/tests · sonnet = builders · opus = planning/QC'
     : '- Model routing: NO — ignore model tiers and proceed');
   if (!p.parallel) {
-    lines.push('- Execution mode: run THE TOH LOOP **sequentially in this session** (orchestration-protocol skill); recovery = checkbox-resume from `.toh/plan.md`');
+    lines.push(p.subagents === 'none'
+      ? '- Execution mode: run THE TOH LOOP **sequentially in this session** (orchestration-protocol skill); recovery = checkbox-resume from `.toh/plan.md`'
+      : '- Execution mode: run THE TOH LOOP **one task at a time** (orchestration-protocol skill) — delegation is allowed, parallel fan-out is not; recovery = checkbox-resume from `.toh/plan.md`');
   }
 
   return `## Runtime Identity & Capabilities
@@ -275,9 +306,160 @@ ${lines.join('\n')}
 ${SURVEY_LINE}`;
 }
 
+// ============================================================
+// 5. Shared .agents/skills writer (v2.1 — W2 + W3, ONE writer for three tools)
+// ============================================================
+// Codex (repo-level skills), Cursor 2.4 (.agents/skills per the agentskills.io
+// standard), and Antigravity agy CLI + IDE (workspace skills) all natively
+// discover Agent Skills from <project>/.agents/skills/<name>/SKILL.md.
+//
+// This is the ONLY .agents/skills writer in the installer — install.js calls
+// it after the .toh copy, and antigravity-cli.js calls it again for
+// standalone safety (idempotent: same inputs produce the same files).
+//
+// It generates:
+//   (a) 23 thin framework-skill wrappers — compliant frontmatter (name +
+//       terse third-person description copied from the source skill) whose
+//       body points at .toh/skills/<name>/SKILL.md, the cross-IDE source of
+//       truth. Wrappers, not verbatim copies: source SKILL.md formats vary,
+//       and Codex shares an 8,000-char name+description listing budget.
+//   (b) 14 toh-* command skills converted from src/gemini-commands TOML
+//       prompts (skills auto-become /toh-vibe etc. slash commands in agy —
+//       the /toh:vibe colon namespace cannot survive as a skill name):
+//       {{args}} -> "the user's request following the command",
+//       @{...} includes -> plain 'Read .agents/skills/<skill>/SKILL.md'
+//       lines, /toh:<cmd> -> /toh-<cmd>. Command skills carry
+//       disable-model-invocation: true (explicit invocation — on Cursor this
+//       surfaces them in the native '/' menu without implicit matching).
+
+/** Split "---\n<yaml>\n---\n<body>" — returns { fm: object|null, body: string }. */
+function splitFrontmatter(raw) {
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!m) return { fm: null, body: raw };
+  try {
+    return { fm: yaml.load(m[1]) || {}, body: m[2] };
+  } catch {
+    return { fm: null, body: raw };
+  }
+}
+
+/**
+ * Cap a wrapper description at 300 chars (prefer a sentence boundary).
+ * Codex shares one 8,000-char name+description listing budget across ALL
+ * skills in .agents/skills — verbatim source descriptions (some >800 chars)
+ * blow it; the full text still ships in .toh/skills, which the wrapper reads.
+ */
+function terseDescription(text) {
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  if (t.length <= 300) return t;
+  const cut = t.slice(0, 300);
+  const sentence = cut.match(/^[\s\S]*[.!?](?=\s)/);
+  if (sentence && sentence[0].length >= 60) return sentence[0].trim();
+  return `${cut.slice(0, 297).trimEnd()}...`;
+}
+
+/** Terse one-paragraph fallback description from a SKILL.md body. */
+function fallbackDescription(body, name) {
+  const para = (body || '')
+    .split(/\r?\n\s*\r?\n/)
+    .map((p) => p.replace(/^#+\s*/gm, '').replace(/[*_`>]/g, '').trim())
+    .find((p) => p.length > 0);
+  return terseDescription(para || `Toh Framework skill: ${name}.`);
+}
+
+/**
+ * Write the shared .agents/skills/ surface for the selected non-Claude
+ * runtimes. Returns { dir, skillWrappers, commandSkills }.
+ */
+export async function writeAgentsSkills(targetDir, srcDir) {
+  const outDir = join(targetDir, '.agents', 'skills');
+  await fs.ensureDir(outDir);
+  let skillWrappers = 0;
+  let commandSkills = 0;
+
+  // ---- (a) thin wrappers for the framework skills --------------------
+  const skillsSrc = join(srcDir, 'skills');
+  if (await fs.pathExists(skillsSrc)) {
+    const entries = await fs.readdir(skillsSrc, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillPath = join(skillsSrc, entry.name, 'SKILL.md');
+      if (!(await fs.pathExists(skillPath))) continue;
+
+      const raw = await fs.readFile(skillPath, 'utf8');
+      const { fm, body } = splitFrontmatter(raw);
+      const name = (fm && fm.name) || entry.name;
+      const description =
+        (fm && typeof fm.description === 'string' && fm.description.trim())
+          ? terseDescription(fm.description)
+          : fallbackDescription(body, name);
+
+      const wrapperFm = { name, description };
+      // Internal skills stay off the user-facing /command surface.
+      if (fm && fm['user-invocable'] === false) wrapperFm['user-invocable'] = false;
+
+      const fmYaml = yaml.dump(wrapperFm, { lineWidth: -1, noRefs: true }).trimEnd();
+      const wrapperBody =
+        `Read \`.toh/skills/${entry.name}/SKILL.md\` and follow it exactly.\n\n` +
+        `That file is the full skill — the cross-IDE source of truth installed by ` +
+        `Toh Framework v${VERSION}. This entry is a generated pointer so this runtime ` +
+        `can discover the skill natively; never edit either copy by hand (re-run the installer instead).\n`;
+
+      await fs.ensureDir(join(outDir, entry.name));
+      await fs.writeFile(join(outDir, entry.name, 'SKILL.md'), `---\n${fmYaml}\n---\n\n${wrapperBody}`);
+      skillWrappers++;
+    }
+  }
+
+  // ---- (b) toh-* command skills converted from the TOML prompts ------
+  const tomlSources = [];
+  const rootToml = join(srcDir, 'gemini-commands', 'toh.toml');
+  if (await fs.pathExists(rootToml)) tomlSources.push({ file: rootToml, name: 'toh' });
+  const namespacedDir = join(srcDir, 'gemini-commands', 'toh');
+  if (await fs.pathExists(namespacedDir)) {
+    for (const f of (await fs.readdir(namespacedDir)).sort()) {
+      if (f.endsWith('.toml')) {
+        tomlSources.push({ file: join(namespacedDir, f), name: `toh-${f.replace(/\.toml$/, '')}` });
+      }
+    }
+  }
+
+  for (const { file, name } of tomlSources) {
+    const raw = await fs.readFile(file, 'utf8');
+    const descMatch = raw.match(/^description\s*=\s*"(.*)"\s*$/m);
+    const promptMatch = raw.match(/^prompt\s*=\s*"""\r?\n?([\s\S]*?)"""\s*$/m);
+    if (!descMatch || !promptMatch) {
+      throw new Error(`writeAgentsSkills: cannot parse description/prompt in ${file}`);
+    }
+
+    let body = transformCommand(promptMatch[1], 'antigravity');
+    // Colon namespace is dead in agy — skills register as /toh-vibe etc.
+    body = body.replace(/\/toh:(?=[a-z])/g, '/toh-');
+    // TOML @{...} file includes do not exist in agy skills — plain read lines.
+    body = body.replace(/\.gemini\/skills\//g, '.agents/skills/');
+    body = body.replace(/@\{([^}]+)\}/g, 'Read `$1`');
+    // {{args}} has no equivalent — skills receive the invocation text itself.
+    body = body.replace(/\{\{args\}\}/g, "the user's request following the command");
+
+    const fmYaml = yaml
+      .dump(
+        { name, description: descMatch[1], 'disable-model-invocation': true },
+        { lineWidth: -1, noRefs: true }
+      )
+      .trimEnd();
+
+    await fs.ensureDir(join(outDir, name));
+    await fs.writeFile(join(outDir, name, 'SKILL.md'), `---\n${fmYaml}\n---\n\n${body.trimEnd()}\n`);
+    commandSkills++;
+  }
+
+  return { dir: outDir, skillWrappers, commandSkills };
+}
+
 export default {
   CAPABILITY_PROFILES,
   transformCommand,
   writeCapabilitiesJson,
-  renderCapabilitiesSection
+  renderCapabilitiesSection,
+  writeAgentsSkills
 };

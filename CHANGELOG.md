@@ -2,6 +2,55 @@
 
 All notable changes to Toh Framework will be documented in this file.
 
+## [2.1.0] - 2026-08-16
+
+### 🔌 Compatibility Release: Every Living IDE, Verified For Real
+
+v2.1 is a compatibility release — ตรวจจริง ซ่อมจริง ทุก IDE ที่ยังมีชีวิต. Every supported tool was measured against its current version and repaired where reality had moved: Codex was silently truncating our instructions (now slimmed and hard-guarded), the dead consumer Gemini CLI target is reborn as Antigravity CLI (agy), Cursor 2.4's native subagents are used instead of denied, all three non-Claude runtimes discover one shared open-standard `.agents/skills/` surface, and Claude Code subagents preload their skills natively.
+
+#### Changed
+
+- **Codex un-truncated** — Codex now reads the whole Toh Framework instead of silently dropping 6 of 8 agents. The generated `AGENTS.md` block shrank from ~117 KB to 12,748 bytes (EN; TH 12,437) — safely under Codex's 32 KiB combined project-doc budget — by replacing embedded agent bodies with a compact roster table plus runtime reads from `.toh/agents/` and `.toh/commands/`. A hard assertion now fails the install if the block ever exceeds 24 KiB, and a project-scoped `.codex/config.toml` raises `project_doc_max_bytes` to 131,072 (written only when no user `config.toml` exists).
+- **Antigravity CLI (agy) replaces Gemini CLI as the default terminal target** — Google shut down consumer Gemini CLI on 2026-06-18, so the installer now writes what agy actually reads. A new handler emits the workspace `.agents/` surface: an Always-On rule, 14 workflows (plus a legacy `.agent/workflows/` mirror), 8 file-based subagents, skills, and a deterministic Stop hook. Legacy `.gemini/` output survives for Enterprise/GCP users behind the new `--legacy-gemini` flag (removed from the interactive menu); its 14 TOML commands and settings.json are unchanged from v2.0.0, GEMINI.md differs only in its version line, and the verbatim-copied `.gemini/skills/` pick up this release's new skill frontmatter.
+- **Cursor 2.4 gets a real agent team** — instead of being told "multi-agent features are unavailable here", Cursor now installs all 8 Toh agents as native `.cursor/agents/*.md` subagents (root-cause-debugger derives `readonly: true` from its read-only tools allowlist), the capability profile declares `subagents: native`, and the rule prose describes native delegation with the sequential TOH LOOP as the documented fallback.
+- **`.cursorrules` no longer written by default** — the file has vanished from official Cursor docs and duplicated the alwaysApply `.mdc`; users on very old Cursor versions can keep it via the new `--legacy-cursorrules` flag.
+- **Claude Code subagents preload their skills natively** — skill loading no longer depends on prose the subagent can skip: the installer passes the native `skills` frontmatter key through, filtered to skills that actually exist in `.claude/skills/` (excluding any marked `disable-model-invocation: true`).
+- **`/toh-protect` shortcut is now `/toh-pt`** — resolves the long-standing alias collision: `/toh-p` belongs solely to `/toh-plan`. `/toh-security` and `/toh-audit` still work.
+- **`npm run list` reads the live catalog** — the stale hardcoded tables are gone; it now parses `src/` frontmatter at runtime and prints the real 14 commands / 8 agents / 23 skills.
+- **Claude Code Stop hook: deliberately unchanged** — the flagship "refuses to quit until DONE" prompt hook ships byte-identical to v2.0.0 (owner decision); the new deterministic command-script Stop hook is Antigravity-only.
+
+#### Added
+
+- **Shared `.agents/skills/` open standard — one write, three tools** — Codex, Cursor 2.4, and Antigravity all natively discover Agent Skills from `<project>/.agents/skills/`, so the installer now generates 37 skills there: 23 thin wrappers over the framework skills plus 14 `/toh-*` command skills (`disable-model-invocation: true`, so they surface as explicit `/` commands). Wrapper descriptions are capped at 300 chars so the whole name+description listing (7,383 chars) fits Codex's shared 8,000-char budget; full skill text still lives in `.toh/skills/`, which every wrapper reads at runtime.
+- **Real slash aliases on Claude Code** — typing `/toh-v` or `/toh-p` no longer risks "Unknown command": the installer generates 15 thin alias command files (`toh-v`, `toh-p`, `toh-pt`, `toh-security`, `toh-audit`, …) that forward `$ARGUMENTS` to the real commands.
+- **Frontmatter for all 23 skills** — the 13 previously bare SKILL.md files gained spec-compliant YAML frontmatter (keyword-rich third-person descriptions; internal skills marked `user-invocable: false`), so auto-invocation now triggers off real descriptions instead of decorated titles. Skill bodies are byte-identical.
+- **Deterministic Antigravity Stop hook** — `.agents/hooks.json` blocks ending a session while `.toh/plan.md` still has unchecked tasks, via a plain `grep` command script (exit 2 + reason). Strictly additive and idempotent (`<TFW-STOP-HOOK>` marker); never removes or reorders user hook entries.
+- **New install flags** — `--legacy-gemini` (Enterprise Gemini CLI `.gemini/` output) and `--legacy-cursorrules` (root `.cursorrules`); the quick-install default IDE set is now `claude,cursor,antigravity`.
+
+#### Fixed
+
+- **Codex footer URLs** — both EN and TH `AGENTS.md` footers pointed at the dead `github.com/ArtificialWeb`; now `github.com/wasintoh/toh-framework`.
+- **ui-builder dead skill paths** — the agent body referenced `src/skills/...` paths that don't exist in end-user projects; now the IDE-neutral `.toh/skills/...`.
+- **TH/EN drift in the Cursor rule** — the Thai `/toh-vibe` Command→Skills row was missing `ui-first-builder`; now byte-equal to the EN row.
+- **Stale docs and counts** — `src/commands/README.md` now counts all 14 commands (the `/toh-protect` row was missing); `toh-help.md` names the current IDE set; web bundles (`npm run bundle`) drop the v1.0.0-era `*star` commands and Next.js 14 for `/toh-*` names and Next.js 16, and a failed bundle run now exits non-zero.
+- **Dead code removed** — `bin/toh-npx-wrapper.js` (never referenced anywhere) deleted from the package.
+- **Renamed-tool wording** — orchestration-protocol now says "the Agent tool (Task)", matching Claude Code ≥ 2.1.178.
+
+#### Technical
+
+- Counts (from disk): **8 agents / 23 skills / 14 commands** — unchanged from 2.0.0. The parallel command surfaces stay in sync at 14 Gemini CLI TOML files (legacy) and 14 Antigravity workflow files.
+- Synced IDE surfaces at 2.1.0, verified from a real install:
+  - **Claude Code** — `.claude/commands/` (14 commands + 15 generated aliases), `.claude/agents/` (8), `.claude/skills/` (23), Stop hook in `.claude/settings.json` (byte-identical to 2.0.0), `.claude/loop.md`, project `CLAUDE.md`.
+  - **Cursor** — `.cursor/rules/toh-framework.mdc` + `toh-agents.mdc`, new `.cursor/agents/` (8 native subagents); root `.cursorrules` only with `--legacy-cursorrules`.
+  - **Antigravity (agy CLI + IDE)** — `.agents/rules/toh-framework.md` (EN 6,034 chars / TH 5,780; ≤ 12,000 hard assert), `.agents/skills/` (37), `.agents/workflows/` (14) + legacy mirror `.agent/workflows/` (14), `.agents/agents/` (8, `subagent: true`), `.agents/hooks.json`.
+  - **Codex** — root `AGENTS.md` TOH block 12,748 B EN / 12,437 B TH (24,576 B hard assert) + `.codex/config.toml` (`project_doc_max_bytes = 131072`, never overwrites an existing file); also reads the shared `.agents/skills/`.
+  - **Gemini CLI (legacy, `--legacy-gemini`)** — `.gemini/` (GEMINI.md, 14 TOML commands, skills, settings.json); the TOML commands and settings.json are byte-identical to 2.0.0 (verified by diffing real installs), GEMINI.md differs only in its embedded version line, and the copied skills differ in 14 SKILL.md files (the new v2.1 frontmatter, plus this release's small orchestration-protocol wording updates).
+- `.toh/capabilities.json` profiles updated: cursor `subagents: "native"`; antigravity `subagents: "file-based"`, `hooks: true`, `workflows: true`. Union semantics are additive — projects installed under v2.0 with gemini keep both `gemini-cli` and `antigravity` declared.
+- Removed `bin/toh-npx-wrapper.js`; `installer/list.js` rewritten to live-read `src/`. Package tarball: 141 files, ~1.0 MB unpacked (`npm pack --dry-run`).
+- package.json: version **2.0.0 → 2.1.0**; description and keywords now name Claude Code, Cursor, Codex, and Antigravity (agy CLI + IDE) — the dead `gemini` keyword dropped; `codex`, `openai-codex`, `antigravity-cli`, `agy`, `agent-skills` added.
+
+---
+
 ## [2.0.0] - 2026-07-14
 
 ### 🚀 v2.0.0 Final: Single-Source Agents, Merged Harness & Tiered Memory

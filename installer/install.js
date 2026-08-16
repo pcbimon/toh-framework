@@ -12,8 +12,9 @@ import { dirname, join } from 'path';
 import { setupClaudeCode } from './ide-handlers/claude-code.js';
 import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
+import { setupAntigravityCLI } from './ide-handlers/antigravity-cli.js';
 import { setupCodex } from './ide-handlers/codex.js';
-import { transformCommand, writeCapabilitiesJson } from './ide-handlers/shared.js';
+import { transformCommand, writeCapabilitiesJson, writeAgentsSkills } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,11 +25,25 @@ const PKG_PATH = join(__dirname, '..', 'package.json');
 const pkg = await fs.readJson(PKG_PATH);
 const VERSION = pkg.version;
 
+// v2.1 fix: two spinner hazards on unusual terminals.
+// (1) discardStdin conflicts with inquirer's readline on the same TTY — disable it.
+// (2) a pty with NO window size (columns = 0 — common when automation/AI agents
+//     drive the interactive installer through a bare pty) makes ora's clear-line
+//     math divide by zero and loop forever inside stop()/succeed(). On a
+//     zero-width TTY fall back to plain non-animated output (isEnabled: false).
+const spin = (text) => {
+  const options = { text, discardStdin: false };
+  if (process.stderr.isTTY && !(process.stderr.columns > 0)) {
+    options.isEnabled = false; // zero-width pty: plain output, no animation
+  }
+  return ora(options);
+};
+
 export async function install(options) {
   const { target, ide, quick, lang } = options;
-  
+
   console.log(chalk.cyan('\n📦 Starting Toh Framework Installation...\n'));
-  
+
   let config = {
     targetDir: target,
     ides: ide.split(',').map(i => i.trim()),
@@ -36,7 +51,10 @@ export async function install(options) {
     installSkills: true,
     installAgents: true,
     installCommands: true,
-    installTemplates: true
+    installTemplates: true,
+    // v2.1 legacy flags (D1/D5): --legacy-gemini / --legacy-cursorrules
+    legacyGemini: !!options.legacyGemini,
+    legacyCursorrules: !!options.legacyCursorrules
   };
 
   // Interactive mode (if not quick)
@@ -44,9 +62,13 @@ export async function install(options) {
     config = await promptConfiguration(config);
   }
 
+  // v2.1 (W2/D1): Gemini CLI stopped serving consumer requests on 2026-06-18.
+  // The Google default is now Antigravity CLI (agy); Gemini CLI is available
+  // ONLY behind the explicit --legacy-gemini flag (Enterprise/GCP users).
+  config.ides = resolveGeminiLegacy(config);
+
   // Validate target directory
-  const spinner = ora('Validating target directory...').start();
-  
+  const spinner = spin('Validating target directory...').start();
   if (!fs.existsSync(config.targetDir)) {
     spinner.warn('Target directory does not exist');
     const { create } = await inquirer.prompt([{
@@ -123,11 +145,17 @@ export async function install(options) {
         await setupIDEWithSpinner('Claude Code', () => setupClaudeCode(config.targetDir, SRC_DIR, config.language));
         break;
       case 'cursor':
-        await setupIDEWithSpinner('Cursor', () => setupCursor(config.targetDir, config.language));
+        await setupIDEWithSpinner('Cursor', () =>
+          setupCursor(config.targetDir, config.language, { legacyCursorrules: config.legacyCursorrules }));
+        break;
+      case 'antigravity':
+      case 'agy':
+        await setupIDEWithSpinner('Antigravity CLI (agy)', () => setupAntigravityCLI(config.targetDir, SRC_DIR, config.language));
         break;
       case 'gemini':
       case 'gemini-cli':
-        await setupIDEWithSpinner('Gemini CLI', () => setupGeminiCLI(config.targetDir, SRC_DIR, config.language));
+        // Only reachable with --legacy-gemini (resolveGeminiLegacy filters otherwise)
+        await setupIDEWithSpinner('Gemini CLI (legacy)', () => setupGeminiCLI(config.targetDir, SRC_DIR, config.language));
         break;
       case 'codex':
       case 'codex-cli':
@@ -137,6 +165,13 @@ export async function install(options) {
         console.log(chalk.yellow(`  ⚠️  Unknown IDE: ${ideName}`));
     }
   }
+
+  // v2.1 (W3): shared .agents/skills surface — Codex, Cursor 2.4, and
+  // Antigravity all natively discover Agent Skills from
+  // <project>/.agents/skills/<name>/SKILL.md. ONE writer (shared.js) emits
+  // 23 thin framework-skill wrappers pointing at .toh/skills/ plus the 14
+  // toh-* command skills converted from the TOML prompts.
+  await installAgentsSkills(config);
 
   // v2.0.0: transform the shared .toh/commands copy to the UNIVERSAL variant
   // (drop tfw:claude blocks, unwrap tfw:fallback). Runs AFTER the IDE loop.
@@ -179,7 +214,7 @@ async function promptConfiguration(defaults) {
       choices: [
         { name: '🤖 Claude Code (Anthropic)', value: 'claude', checked: true },
         { name: '📝 Cursor', value: 'cursor', checked: true },
-        { name: '💎 Gemini CLI / Antigravity (Google)', value: 'gemini', checked: true },
+        { name: '💎 Antigravity CLI (agy) — Google', value: 'antigravity', checked: true },
         { name: '🧠 Codex CLI (OpenAI)', value: 'codex', checked: false }
       ],
       validate: (input) => input.length > 0 ? true : 'Please select at least one IDE'
@@ -207,6 +242,57 @@ async function promptConfiguration(defaults) {
   };
 }
 
+/**
+ * v2.1 (W2/D1): normalize the Google targets in config.ides.
+ * - 'gemini'/'gemini-cli' WITHOUT --legacy-gemini → warn once and substitute
+ *   'antigravity' (the surface Gemini CLI users are being migrated to).
+ * - --legacy-gemini → ensure 'gemini' is in the list (the flag IS the opt-in;
+ *   Enterprise/GCP Gemini CLI users still exist).
+ * Deduplicates while preserving order.
+ */
+function resolveGeminiLegacy(config) {
+  const out = [];
+  let warned = false;
+  for (const name of config.ides) {
+    const key = name.toLowerCase();
+    if ((key === 'gemini' || key === 'gemini-cli') && !config.legacyGemini) {
+      if (!warned) {
+        console.log(chalk.yellow(
+          '  ⚠️  Google shut down consumer Gemini CLI on 2026-06-18 — installing "Antigravity CLI (agy)" instead.\n' +
+          '      Enterprise/GCP Gemini CLI users: re-run with --legacy-gemini to keep the .gemini/ setup.'
+        ));
+        warned = true;
+      }
+      if (!out.includes('antigravity')) out.push('antigravity');
+      continue;
+    }
+    if (!out.includes(key)) out.push(key);
+  }
+  if (config.legacyGemini && !out.some(k => k === 'gemini' || k === 'gemini-cli')) {
+    out.push('gemini');
+  }
+  return out;
+}
+
+/**
+ * v2.1 (W3): write the shared .agents/skills surface when any runtime that
+ * reads it (Codex, Cursor 2.4, Antigravity) is selected. Antigravity's own
+ * handler also calls the same shared writer — it is idempotent, never a
+ * second competing implementation.
+ */
+async function installAgentsSkills(config) {
+  const consumers = ['cursor', 'codex', 'codex-cli', 'antigravity', 'agy'];
+  if (!config.ides.some(name => consumers.includes(name.toLowerCase()))) return;
+
+  const spinner = spin('Writing shared .agents/skills (Codex + Cursor + Antigravity)...').start();
+  try {
+    const result = await writeAgentsSkills(config.targetDir, SRC_DIR);
+    spinner.succeed(`Shared skills written (.agents/skills/ — ${result.skillWrappers} skill wrappers + ${result.commandSkills} toh-* command skills)`);
+  } catch (error) {
+    spinner.fail(`Failed to write .agents/skills: ${error.message}`);
+  }
+}
+
 async function checkExistingInstall(targetDir) {
   const markers = [
     join(targetDir, '.toh'),
@@ -218,7 +304,7 @@ async function checkExistingInstall(targetDir) {
 }
 
 async function cleanExistingInstall(targetDir) {
-  const spinner = ora('Cleaning existing installation...').start();
+  const spinner = spin('Cleaning existing installation...').start();
   
   const pathsToClean = [
     join(targetDir, '.toh'),
@@ -237,13 +323,23 @@ async function cleanExistingInstall(targetDir) {
 }
 
 async function setupIDEWithSpinner(ideName, setupFn) {
-  const spinner = ora(`Configuring ${ideName}...`).start();
+  const spinner = spin(`Configuring ${ideName}...`).start();
   try {
     const detail = await setupFn();
     const configFile = (typeof detail === 'string' && detail) ? detail : getIDEConfigFile(ideName);
     spinner.succeed(`${ideName} configured (${configFile})`);
   } catch (error) {
     spinner.fail(`Failed to configure ${ideName}: ${error.message}`);
+    // Hard budget violations (error.fatal, e.g. the Codex 24 KiB AGENTS.md
+    // block or the Antigravity 12,000-char Always-On rule) mean the generated
+    // output would be silently broken — never report success past them.
+    if (error.fatal) {
+      console.error(chalk.red(
+        `\n✖ Installation aborted: ${ideName} failed a hard size-budget check (see above). ` +
+        `Fix the generator and re-run the installer.\n`
+      ));
+      process.exit(1);
+    }
   }
 }
 
@@ -251,14 +347,15 @@ function getIDEConfigFile(ideName) {
   const configs = {
     'Claude Code': 'created CLAUDE.md',
     'Cursor': '.cursor/rules/*.mdc',
-    'Gemini CLI': '.gemini/GEMINI.md',
+    'Antigravity CLI (agy)': '.agents/rules/toh-framework.md',
+    'Gemini CLI (legacy)': '.gemini/GEMINI.md',
     'Codex CLI': 'AGENTS.md'
   };
   return configs[ideName] || 'configured';
 }
 
 async function installComponent(componentName, targetDir) {
-  const spinner = ora(`Installing ${componentName}...`).start();
+  const spinner = spin(`Installing ${componentName}...`).start();
   
   const srcPath = join(SRC_DIR, componentName);
   let destPath;
@@ -308,7 +405,7 @@ async function countFiles(dir) {
 }
 
 async function generateManifest(config) {
-  const spinner = ora('Generating manifest...').start();
+  const spinner = spin('Generating manifest...').start();
   
   const manifest = {
     version: VERSION,
@@ -340,7 +437,7 @@ async function normalizeUniversalCommands(targetDir) {
   const commandsDir = join(targetDir, '.toh', 'commands');
   if (!fs.existsSync(commandsDir)) return;
 
-  const spinner = ora('Normalizing shared commands (universal variant)...').start();
+  const spinner = spin('Normalizing shared commands (universal variant)...').start();
   try {
     let changed = 0;
     const walk = async (dir) => {
@@ -371,7 +468,7 @@ async function normalizeUniversalCommands(targetDir) {
  * orchestration-protocol 2-step survey (identity lives in each context file).
  */
 async function declareCapabilities(config) {
-  const spinner = ora('Declaring runtime capabilities...').start();
+  const spinner = spin('Declaring runtime capabilities...').start();
   try {
     await writeCapabilitiesJson(config.targetDir, config.ides);
     spinner.succeed('Capabilities declared (.toh/capabilities.json)');
@@ -381,7 +478,7 @@ async function declareCapabilities(config) {
 }
 
 async function setupMemoryFolder(targetDir) {
-  const spinner = ora('Setting up Memory System (7 files)...').start();
+  const spinner = spin('Setting up Memory System (7 files)...').start();
 
   const memoryDir = join(targetDir, '.toh', 'memory');
   const archiveDir = join(memoryDir, 'archive');
@@ -622,18 +719,21 @@ function printNextSteps(config) {
     console.log(empty);
   }
 
-  if (config.ides.includes('gemini') || config.ides.includes('gemini-cli')) {
-    console.log(row(chalk.white(pad('  Gemini CLI (Terminal):'))));
-    // 13 chars green + 47 chars gray = 60
-    console.log(row(chalk.green('    /toh:plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
-    console.log(row(chalk.green('    /toh:vibe') + chalk.gray(' - Create new project'.padEnd(47))));
-    console.log(row(chalk.green('    /toh:help') + chalk.gray(' - Show all commands'.padEnd(47))));
-    console.log(empty);
-    console.log(row(chalk.white(pad('  Google Antigravity (IDE):'))));
+  if (config.ides.includes('antigravity') || config.ides.includes('agy')) {
+    console.log(row(chalk.white(pad('  Antigravity CLI (agy) + Antigravity IDE:'))));
     // 13 chars green + 47 chars gray = 60
     console.log(row(chalk.green('    /toh-plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
     console.log(row(chalk.green('    /toh-vibe') + chalk.gray(' - Create new project'.padEnd(47))));
     console.log(row(chalk.green('    /toh-help') + chalk.gray(' - Show all commands'.padEnd(47))));
+    console.log(empty);
+  }
+
+  if (config.ides.includes('gemini') || config.ides.includes('gemini-cli')) {
+    console.log(row(chalk.white(pad('  Gemini CLI (legacy - Enterprise/GCP only):'))));
+    // 13 chars green + 47 chars gray = 60
+    console.log(row(chalk.green('    /toh:plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
+    console.log(row(chalk.green('    /toh:vibe') + chalk.gray(' - Create new project'.padEnd(47))));
+    console.log(row(chalk.green('    /toh:help') + chalk.gray(' - Show all commands'.padEnd(47))));
     console.log(empty);
   }
 
@@ -650,11 +750,11 @@ function printNextSteps(config) {
   console.log(row(chalk.blue(pad('    https://github.com/wasintoh/toh-framework'))));
   console.log(mid);
   console.log(row(chalk.bold.yellow(pad(`  What's New in v${VERSION}:`))));
-  console.log(row(chalk.white(pad('  * One-Go Build: approve once, get a whole finished app'))));
-  console.log(row(chalk.white(pad('  * TOH LOOP: Type & Forget - builds, tests, fixes itself'))));
-  console.log(row(chalk.white(pad('  * Stop Hook: refuses to quit until verified DONE'))));
-  console.log(row(chalk.white(pad('  * Design Identity: no one can tell AI made it'))));
-  console.log(row(chalk.white(pad('  * Auto-Resume: quit anytime, it continues where it left'))));
+  console.log(row(chalk.white(pad('  * Codex: compact AGENTS.md, never truncated (24KiB guard)'))));
+  console.log(row(chalk.white(pad('  * Antigravity (agy): .agents/ + deterministic Stop hook'))));
+  console.log(row(chalk.white(pad('  * Cursor 2.4 native subagents (.cursor/agents/)'))));
+  console.log(row(chalk.white(pad('  * Shared .agents/skills: 37 skills for Codex/Cursor/agy'))));
+  console.log(row(chalk.white(pad('  * Live-read catalog + real /toh-* aliases (incl. /toh-pt)'))));
   console.log(bot);
   console.log('');
 }

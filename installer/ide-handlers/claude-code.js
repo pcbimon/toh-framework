@@ -44,7 +44,8 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
     // understands the NATIVE keys, so transform every top-level agent file:
     //   1. read the file and split off the YAML frontmatter
     //   2. parse it with js-yaml
-    //   3. keep ONLY name/description/tools/model (DROP type/skills/triggers)
+    //   3. keep ONLY name/description/tools/model + the native 'skills' preload
+    //      list, filtered to skills installed in .claude/skills/ (DROP type/triggers)
     //   4. re-serialize with js-yaml (multi-line description stays a block scalar)
     //   5. write .claude/agents/<name>.md with the native frontmatter + body
     // NOTE: never inject a default tool list — that would widen restricted agents
@@ -82,6 +83,26 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
           if (parsed.tools !== undefined) nativeFm.tools = parsed.tools; // omit if absent (never widen)
           nativeFm.model = parsed.model || 'sonnet';                     // default sonnet if missing
 
+          // v2.1 (W6): 'skills' is a NATIVE subagent frontmatter key that
+          // preloads the FULL content of each listed skill at subagent startup —
+          // guaranteed loading instead of prose the subagent can skip. Pass it
+          // through, filtered to skills actually installed at
+          // .claude/skills/<name>/SKILL.md (a missing name must never ship) and
+          // excluding skills marked disable-model-invocation: true (those are
+          // user-command-only surfaces). Context cost is accepted per owner
+          // decision D4 and bounded by this existence filter.
+          // 'triggers' stays dropped — not a native key.
+          if (Array.isArray(parsed.skills)) {
+            const preload = [];
+            for (const skillName of parsed.skills) {
+              if (typeof skillName !== 'string') continue;
+              if (await isPreloadableSkill(join(claudeDir, 'skills'), skillName)) {
+                preload.push(skillName);
+              }
+            }
+            if (preload.length > 0) nativeFm.skills = preload;
+          }
+
           // v2.0.0: autonomy keys — PASS THROUGH when present in the superset
           // frontmatter (memory: project, maxTurns bounds, isolation: worktree,
           // background). Never inject defaults — absent stays absent.
@@ -117,8 +138,13 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
       const pkgCommandsDir = srcDir
         ? join(srcDir, 'commands')
         : join(__dirname, '..', '..', 'src', 'commands');
+      // v2.1 (W8): alias command files are generated from whichever source dir
+      // the transform above actually used, so aliases always match the
+      // commands that were just installed.
+      let aliasSourceDir = null;
       if (fs.existsSync(pkgCommandsDir)) {
         await copyCommandsTransformed(pkgCommandsDir, join(claudeDir, 'commands'));
+        aliasSourceDir = pkgCommandsDir;
       } else {
         // Fallback: transform is idempotent, so re-running on already-universal
         // content can't double-strip — the real risk is MISSING Claude content.
@@ -137,7 +163,13 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
             'Commands component selected to restore it.'
           ));
         }
+        aliasSourceDir = join(tohDir, 'commands');
       }
+      // v2.1 (W8): the 'aliases' frontmatter key is NOT native to Claude Code
+      // (supported command frontmatter ignores it), so a literally-typed
+      // /toh-v or /toh-pt hits "Unknown command". Register the shortcuts as
+      // REAL slash commands via thin alias files.
+      await generateAliasCommands(aliasSourceDir, join(claudeDir, 'commands'));
     }
     if (fs.existsSync(join(tohDir, 'templates'))) {
       await fs.copy(join(tohDir, 'templates'), join(claudeDir, 'templates'), { overwrite: true });
@@ -214,6 +246,112 @@ async function copyCommandsTransformed(srcDir, destDir, preserveExistingWhenNoMa
     }
   }
   return sawMarkers;
+}
+
+/**
+ * v2.1 (W6): a skill may be preloaded into a subagent's native 'skills' list
+ * only when it is actually installed at .claude/skills/<name>/SKILL.md AND its
+ * frontmatter does not set disable-model-invocation: true (such skills are
+ * explicit user-command surfaces, never model-preloaded).
+ *
+ * A SKILL.md with no (or unparseable) frontmatter counts as preloadable: bare
+ * skills are valid — existence is already verified, and without parseable YAML
+ * the file cannot carry the disable flag.
+ */
+async function isPreloadableSkill(skillsDir, name) {
+  // Names come from agent frontmatter — restrict to plain directory names so a
+  // malformed entry can never resolve outside .claude/skills/.
+  if (!/^[a-z0-9][a-z0-9_-]*$/i.test(name)) return false;
+  const skillPath = join(skillsDir, name, 'SKILL.md');
+  if (!fs.existsSync(skillPath)) return false;
+  const raw = await fs.readFile(skillPath, 'utf8');
+  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/);
+  if (!fmMatch) return true; // bare skill — no frontmatter, no flags to honor
+  try {
+    const fm = yaml.load(fmMatch[1]);
+    return !(fm && typeof fm === 'object' && fm['disable-model-invocation'] === true);
+  } catch {
+    return true; // unparseable frontmatter cannot carry the disable flag
+  }
+}
+
+/**
+ * v2.1 (W8): generate thin alias command files (.claude/commands/toh-v.md,
+ * toh-pt.md, ...) from each source command's 'aliases' frontmatter list, so the
+ * documented shortcuts register as real slash commands instead of relying on
+ * CLAUDE.md prose pattern-matching (which cannot save a literally-typed
+ * "/toh-v" from "Unknown command").
+ *
+ * Rules (deterministic, additive):
+ * - only aliases shaped like a legal command filename become files
+ *   ("/toh-v" -> toh-v.md); prose shortcuts ("toh v") and names like "/toh-?"
+ *   are skipped — they stay prose-only
+ * - an alias never shadows a real command file, and the first command
+ *   (alphabetical source order) to claim an alias wins; a collision is
+ *   reported, never silently double-written
+ * - alias bodies point at the real command file and forward $ARGUMENTS
+ */
+async function generateAliasCommands(srcDir, destDir) {
+  if (!srcDir || !fs.existsSync(srcDir)) return;
+  await fs.ensureDir(destDir);
+  const files = (await fs.readdir(srcDir))
+    .filter((f) => f.endsWith('.md') && f !== 'README.md')
+    .sort(); // deterministic claim order
+  const realNames = new Set(files.map((f) => f.replace(/\.md$/, '')));
+  const claimed = new Map(); // alias name -> command that claimed it
+
+  for (const file of files) {
+    const srcPath = join(srcDir, file);
+    if (!(await fs.stat(srcPath)).isFile()) continue;
+    const raw = await fs.readFile(srcPath, 'utf8');
+    const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+    if (!fmMatch) continue; // no frontmatter -> no aliases key
+    let parsed;
+    try {
+      parsed = yaml.load(fmMatch[1]) || {};
+    } catch {
+      // The command file itself was already installed by the transform above;
+      // only its alias generation is skipped. Say so instead of hiding it.
+      console.log(chalk.yellow(
+        `\n  ⚠️  ${file}: frontmatter did not parse — no alias commands generated from it.`
+      ));
+      continue;
+    }
+    if (!Array.isArray(parsed.aliases)) continue;
+
+    const cmdName = file.replace(/\.md$/, '');
+    for (const alias of parsed.aliases) {
+      if (typeof alias !== 'string') continue;
+      const aliasName = alias.replace(/^\//, '');
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(aliasName)) continue; // prose-only shortcut
+      if (realNames.has(aliasName)) {
+        console.log(chalk.yellow(
+          `\n  ⚠️  alias /${aliasName} (from ${cmdName}) shadows a real command — skipped.`
+        ));
+        continue;
+      }
+      if (claimed.has(aliasName)) {
+        console.log(chalk.yellow(
+          `\n  ⚠️  alias /${aliasName} claimed by both ${claimed.get(aliasName)} and ${cmdName} — kept ${claimed.get(aliasName)}.`
+        ));
+        continue;
+      }
+      claimed.set(aliasName, cmdName);
+
+      const desc = typeof parsed.description === 'string'
+        ? parsed.description.trim().split('\n')[0]
+        : '';
+      const aliasFm = yaml.dump(
+        { description: `Alias for /${cmdName}${desc ? ` — ${desc}` : ''}` },
+        { lineWidth: -1, noRefs: true }
+      ).trimEnd();
+      const body =
+        `---\n${aliasFm}\n---\n\n` +
+        `This is a thin alias for \`/${cmdName}\`.\n\n` +
+        `Read \`.claude/commands/${cmdName}.md\` now and execute it exactly as if the user had typed \`/${cmdName}\`, with this as the request: $ARGUMENTS\n`;
+      await fs.writeFile(join(destDir, `${aliasName}.md`), body);
+    }
+  }
 }
 
 // Idempotence marker for the TFW Stop hook — a reinstall appends the hook only
@@ -731,6 +869,7 @@ ${langInstructions}
 | \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | PWA / Capacitor |
 | \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
 | \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | Security audit before deploy |
 
 ### ⚡ Execution Rules:
 
@@ -759,6 +898,7 @@ When user types ONLY the command (no description), respond with a friendly promp
 | \`/toh-line\` | "I'm the **LINE Agent** 💚 - I convert web apps into LINE MINI Apps using the LIFF SDK. What LINE feature do you need?" |
 | \`/toh-mobile\` | "I'm the **Mobile Agent** 📱 - I ship apps to mobile PWA-first, then wrap with Capacitor for native builds. What mobile feature should I build?" |
 | \`/toh-ship\` | "I'm the **Ship Agent** 🚀 - I deploy to production. Where should I deploy?" |
+| \`/toh-protect\` | "I'm the **Protect Agent** 🔒 - I run a full security audit to catch vulnerabilities before deploy. What should I scan?" |
 | \`/toh-help\` | (Always show help immediately - no description needed) |
 
 ### Examples:

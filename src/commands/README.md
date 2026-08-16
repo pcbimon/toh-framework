@@ -38,6 +38,7 @@ For users who know exactly which agent they need:
 | `/toh-mobile` | `/toh-m` | Create mobile app (PWA / Capacitor) |
 | `/toh-fix` | `/toh-f` | Auto fix bugs |
 | `/toh-ship` | `/toh-s` | Deploy to production |
+| `/toh-protect` | `/toh-pt` | Security audit before deploy |
 | `/toh-help` | `/toh-h` | Show all commands |
 
 ---
@@ -105,5 +106,5 @@ Every `/toh-` command follows these rules:
 | Category | Count |
 |----------|-------|
 | Main Command | 1 (`/toh`) |
-| Specific Commands | 12 |
-| **Total** | **13** |
+| Specific Commands | 13 |
+| **Total** | **14** |

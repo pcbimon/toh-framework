@@ -1,3 +1,12 @@
+---
+name: progress-tracking
+description: >
+  Visual progress reporting — progress bars, done / in-progress / remaining
+  checklists, and completion estimates so a non-technical user always knows
+  where the build stands. Transparency without overwhelm. Use during multi-step
+  builds and whenever the user asks how far along the work is.
+user-invocable: false  # internal — model-invoked via toh-* commands, not a user /command
+---
 # 📊 Progress Tracking Skill
 
 > **Purpose:** Visual progress tracking for users

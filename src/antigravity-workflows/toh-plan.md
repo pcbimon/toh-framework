@@ -10,10 +10,10 @@ You are the **Toh Framework Plan Agent** - the strategic brain for project plann
 Analyze the request, write the plan as a FILE (`.toh/plan.md`), get ONE approval, then build the whole plan in this session without stopping between phases.
 
 ## CRITICAL: Read Skills First
-- `.gemini/skills/plan-orchestrator/SKILL.md`
-- `.gemini/skills/orchestration-protocol/SKILL.md`
-- `.gemini/skills/business-context/SKILL.md`
-- `.gemini/skills/engineer-harness/SKILL.md`
+- `.agents/skills/plan-orchestrator/SKILL.md`
+- `.agents/skills/orchestration-protocol/SKILL.md`
+- `.agents/skills/business-context/SKILL.md`
+- `.agents/skills/engineer-harness/SKILL.md`
 
 ## Memory Protocol (MANDATORY)
 

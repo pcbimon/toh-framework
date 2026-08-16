@@ -8,7 +8,14 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import yaml from 'js-yaml';
 import { transformCommand, renderCapabilitiesSection } from './shared.js';
+
+// Hard budget for the TOH marker block inside AGENTS.md. Codex silently
+// truncates project docs at 32 KiB COMBINED (project_doc_max_bytes default),
+// including any pre-existing user content above our marker — so our block must
+// stay well under that. Exceeding this is a build bug, never a warning.
+const MAX_TOH_BLOCK_BYTES = 24 * 1024;
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -222,43 +229,47 @@ export async function setupCodex(targetDir, srcDir, language = 'en') {
   // Create memory template files
   await createMemoryFiles(memoryDir, language);
 
-  // Read all agents
+  // Read all agents — v2.1 (W1): embed a compact roster table ONLY.
+  // Full agent bodies used to be inlined here, which pushed AGENTS.md to
+  // ~117 KB while Codex silently truncates project docs at 32 KiB combined —
+  // 6/8 agents and everything after them were dropped without warning.
+  // Full specs live in .toh/agents/ and are read at runtime instead (the same
+  // .toh/ runtime-read pattern cursor.js uses).
   const srcAgentsDir = path.join(srcDir, 'agents');
-  let agentSections = '';
-  
+  let agentRoster = '';
+
   if (await fs.pathExists(srcAgentsDir)) {
-    const agentFiles = await fs.readdir(srcAgentsDir);
+    const agentFiles = (await fs.readdir(srcAgentsDir)).sort();
+    const rows = [];
     for (const file of agentFiles) {
       if (file.endsWith('.md') && file !== 'README.md') {
         const raw = await fs.readFile(path.join(srcAgentsDir, file), 'utf-8');
         const agentName = file.replace('.md', '');
-        // v2.0: agents now carry SUPERSET frontmatter (name/description/tools/
-        // model/skills/triggers). Strip the leading YAML block so Codex embeds a
-        // clean body only — no tools/model YAML leaking into AGENTS.md.
-        const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trimStart();
-        agentSections += `
-### toh-${agentName}
-
-${body}
-
----
-`;
+        const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (!fmMatch) {
+          throw new Error(`[toh-framework] src/agents/${file} has no YAML frontmatter — cannot build the Codex agent roster.`);
+        }
+        // Agents carry superset frontmatter (name/description/tools/model/
+        // skills/triggers/...). The roster needs name, model and description
+        // only; a parse failure here is a packaging bug — let it throw.
+        const fm = yaml.load(fmMatch[1]) || {};
+        const desc = String(fm.description || '').replace(/\s+/g, ' ').trim();
+        // Role = first sentence of the description ('.md' never terminates —
+        // boundary is a period followed by whitespace/end).
+        const roleMatch = desc.match(/^(.*?)\.(?:\s|$)/);
+        const role = roleMatch ? roleMatch[1].trim() : desc;
+        // 'Delegate when' sentence (colon optional — root-cause-debugger
+        // phrases it without one), same boundary rule.
+        const delegateMatch = desc.match(/Delegate when:?\s*([\s\S]*?)(?:\.(?:\s|$)|$)/);
+        const delegateWhen = delegateMatch ? delegateMatch[1].trim() : '(see agent file)';
+        rows.push(`| \`${fm.name || agentName}\` | ${fm.model || 'sonnet'} | ${role} | ${delegateWhen} |`);
       }
     }
-  }
-  
-  // Read commands summary
-  const srcCommandsDir = path.join(srcDir, 'commands');
-  let commandsList = '';
-  
-  if (await fs.pathExists(srcCommandsDir)) {
-    const commandFiles = await fs.readdir(srcCommandsDir);
-    for (const file of commandFiles) {
-      if (file.endsWith('.md') && file !== 'README.md') {
-        const cmdName = file.replace('.md', '').replace('toh-', '/toh-');
-        commandsList += `- \`${cmdName}\`\n`;
-      }
-    }
+    agentRoster = [
+      '| Agent | Model | Role | Delegate when |',
+      '|-------|-------|------|---------------|',
+      ...rows
+    ].join('\n');
   }
 
   // v2.0: run the assembled markdown through the shared marker transform so any
@@ -266,10 +277,25 @@ ${body}
   // <!-- tfw:fallback --> blocks are unwrapped for Codex (idempotent, additive).
   const agentsMd = transformCommand(
     language === 'th'
-      ? generateAgentsMdTH(commandsList, agentSections)
-      : generateAgentsMdEN(commandsList, agentSections),
+      ? generateAgentsMdTH(agentRoster)
+      : generateAgentsMdEN(agentRoster),
     'codex'
   );
+
+  // W1 hard size assertion: never ship a block Codex would silently truncate.
+  const tohBlockBytes = Buffer.byteLength(agentsMd, 'utf-8');
+  if (tohBlockBytes > MAX_TOH_BLOCK_BYTES) {
+    const err = new Error(
+      `[toh-framework] Generated AGENTS.md TOH block is ${tohBlockBytes} bytes — over the ` +
+      `${MAX_TOH_BLOCK_BYTES}-byte hard budget (Codex truncates project docs at 32 KiB combined ` +
+      `with any user content). Refusing to install a silently-truncated AGENTS.md; slim the ` +
+      `generator in installer/ide-handlers/codex.js.`
+    );
+    // Hard size budget: over-budget output would be silently truncated by
+    // Codex. install.js aborts the whole install (non-zero exit) on fatal errors.
+    err.fatal = true;
+    throw err;
+  }
 
   // Check if AGENTS.md exists
   const agentsPath = path.join(targetDir, 'AGENTS.md');
@@ -291,11 +317,28 @@ ${body}
   } else {
     await fs.writeFile(agentsPath, agentsMd);
   }
-  
+
+  // W1 belt-and-braces: project-scoped .codex/config.toml raising Codex's
+  // project-doc budget (officially supported key, per config-reference), so
+  // even a large pre-existing user AGENTS.md above our marker cannot push the
+  // combined file past the read cutoff. NEVER overwrite a user's config.toml.
+  const codexConfigPath = path.join(targetDir, '.codex', 'config.toml');
+  if (!(await fs.pathExists(codexConfigPath))) {
+    await fs.ensureDir(path.dirname(codexConfigPath));
+    await fs.writeFile(
+      codexConfigPath,
+      `# Generated by Toh Framework v${VERSION}\n` +
+      `# Raises Codex's per-project doc read budget (default 32768 bytes) so the\n` +
+      `# full AGENTS.md — including the Toh Framework block — is always loaded.\n` +
+      `# Safe to edit; the installer never overwrites an existing config.toml.\n` +
+      `project_doc_max_bytes = 131072\n`
+    );
+  }
+
   return true;
 }
 
-function generateAgentsMdEN(commandsList, agentSections) {
+function generateAgentsMdEN(agentRoster) {
   return `<!-- TOH-FRAMEWORK-START -->
 # 🎯 Toh Framework
 
@@ -304,6 +347,11 @@ function generateAgentsMdEN(commandsList, agentSections) {
 ## Project Memory
 
 This file serves as project memory for Codex CLI/Web. It contains the Toh Framework configuration and agent definitions.
+
+This file is a compact index. Full specs live on disk and MUST be read at runtime:
+- Commands → \`.toh/commands/toh-<cmd>.md\`
+- Agents → \`.toh/agents/<name>.md\`
+- Skills → \`.toh/skills/<skill-name>/SKILL.md\`
 
 ## Identity
 
@@ -346,74 +394,34 @@ If user writes in Thai, respond in Thai.
 
 > **YOU MUST recognize and execute these commands immediately!**
 > When user types ANY of these patterns, treat them as direct commands.
+> The table below is an INDEX only — when a command is invoked, read
+> \`.toh/commands/toh-<cmd>.md\` (e.g. \`.toh/commands/toh-vibe.md\`) and follow it.
+> That file is the command's full behavior spec.
 
-### Command Patterns to Recognize:
-
-| Full Command | Shortcuts (ALL VALID) | Action |
-|-------------|----------------------|--------|
+| Command | Shortcuts (ALL VALID) | Purpose |
+|---------|----------------------|---------|
 | \`/toh-help\` | \`/toh-h\`, \`toh help\`, \`toh h\` | Show all commands |
-| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | **THE BRAIN** - Analyze, plan |
-| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project |
-| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI components |
-| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add logic & state |
-| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve design |
-| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Auto test & fix |
-| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Supabase |
-| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App (convert) |
-| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | PWA / Capacitor |
-| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
-| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
-| \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
+| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
+| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project with UI + Logic + Mock Data |
+| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI - Pages, Components, Layouts |
+| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add Logic - TypeScript, Zustand, Forms |
+| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve Design - Make it look professional |
+| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Test system - Auto test & fix until passing |
+| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Backend - Supabase, Auth, RLS |
+| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App - convert (LIFF SDK) |
+| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App - PWA / Capacitor |
+| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs - Debug and fix issues |
+| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy - Vercel, Production ready |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | Security audit - Full security check |
 
 ### ⚡ Execution Rules:
 
 1. **Instant Recognition** - When you see \`/toh-\` or \`toh \` prefix, this is a COMMAND
-2. **Check for Description** - Does the command have a description after it?
-   - ✅ **Has description** → Execute immediately
-   - ❓ **No description** → Ask user first: "I'm the [Agent Name] agent. What would you like me to help you with?"
-3. **No Confirmation for Described Commands** - If description exists, execute without asking
+2. **Read the command file first** - \`.toh/commands/toh-<cmd>.md\` is the full spec; never execute from this index alone
+3. **Check for Description** - Does the command have a description after it?
+   - ✅ **Has description** → Execute immediately, no confirmation
+   - ❓ **No description** → Introduce yourself as that command's agent and ask what to do (e.g. "I'm the **Vibe Agent** 🎨. What system would you like me to build?"). Exception: \`/toh-help\` always runs immediately
 4. **Follow Memory Protocol** - Read/write \`.toh/memory/\` before/after
-
-### Command Without Description Behavior:
-
-| Command Only | Response |
-|-------------|----------|
-| \`/toh-vibe\` | "I'm the **Vibe Agent** 🎨. What system would you like me to build?" |
-| \`/toh-ui\` | "I'm the **UI Agent** 🖼️. What UI would you like me to create?" |
-| \`/toh-dev\` | "I'm the **Dev Agent** ⚙️. What functionality should I implement?" |
-| \`/toh-design\` | "I'm the **Design Agent** ✨. What should I polish?" |
-| \`/toh-test\` | "I'm the **Test Agent** 🧪. What should I test?" |
-| \`/toh-connect\` | "I'm the **Connect Agent** 🔌. What should I connect?" |
-| \`/toh-plan\` | "I'm the **Plan Agent** 🧠. What project should I plan?" |
-| \`/toh-help\` | (Always show help immediately) |
-
-### Examples:
-
-\`\`\`
-User: /toh-v restaurant management
-→ Execute /toh-vibe to create restaurant management system
-
-User: toh ui dashboard
-→ Execute /toh-ui to create dashboard UI
-\`\`\`
-
-## Available Commands
-
-| Command | Description |
-|---------|-------------|
-| \`/toh-help\` | Show all available commands |
-| \`/toh-plan\` | **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
-| \`/toh-vibe\` | Create new project with UI + Logic + Mock Data |
-| \`/toh-ui\` | Create UI - Pages, Components, Layouts |
-| \`/toh-dev\` | Add Logic - TypeScript, Zustand, Forms |
-| \`/toh-design\` | Improve Design - Make it look professional |
-| \`/toh-test\` | Test system - Auto test & fix until passing |
-| \`/toh-connect\` | Connect Backend - Supabase, Auth, RLS |
-| \`/toh-line\` | LINE MINI App - convert (LIFF SDK) |
-| \`/toh-mobile\` | Mobile App - PWA / Capacitor |
-| \`/toh-fix\` | Fix bugs - Debug and fix issues |
-| \`/toh-ship\` | Deploy - Vercel, Production ready |
-| \`/toh-protect\` | Security audit - Full security check |
 
 ## Memory System (Auto, 7 files — Tiered Loading)
 
@@ -449,43 +457,6 @@ Toh Framework has automatic memory at \`.toh/memory/\`. Read only what the task 
 - Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
 - Memory files must ALWAYS be in English!
 
-## Command Usage Examples
-
-### Create New Project
-\`\`\`
-/toh-vibe A coffee shop management system with POS, inventory, and sales reports
-\`\`\`
-
-### Add UI
-\`\`\`
-/toh-ui Add a dashboard page showing daily sales
-\`\`\`
-
-### Add Logic
-\`\`\`
-/toh-dev Make the date filter work properly
-\`\`\`
-
-### Improve Design
-\`\`\`
-/toh-design Make it look professional, not like AI-generated
-\`\`\`
-
-### Test System
-\`\`\`
-/toh-test Test all pages
-\`\`\`
-
-### Connect Backend
-\`\`\`
-/toh-connect Connect to Supabase with auth
-\`\`\`
-
-### Deploy
-\`\`\`
-/toh-ship Deploy to Vercel
-\`\`\`
-
 ## Behavior Rules
 
 1. **Don't ask basic questions** - Make decisions yourself
@@ -504,9 +475,13 @@ Use realistic English data:
 - Phone: (555) 123-4567
 - Email: john.smith@example.com
 
-## Agents
+## Agents (roster — full specs in \`.toh/agents/\`)
 
-${agentSections}
+${agentRoster}
+
+This table is a summary ONLY. Before acting as (or delegating to) any agent,
+read \`.toh/agents/<name>.md\` — the agent's workflow, rules, tool limits, and
+quality bar live in that file, not here.
 
 ## 🚨 MANDATORY: Skills & Agents Loading
 
@@ -516,6 +491,7 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |---------|------------------------------------------|
+| \`/toh\` | \`smart-routing\`, \`orchestration-protocol\`, \`engineer-harness\` |
 | \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
 | \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
@@ -527,6 +503,8 @@ ${agentSections}
 | \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
 | \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
 | \`/toh-ship\` | \`version-control\`, \`progress-tracking\` |
+| \`/toh-protect\` | \`engineer-harness\` |
+| \`/toh-help\` | (none — self-contained; run \`.toh/commands/toh-help.md\` directly) |
 
 ### Core Skills (Always Available)
 - \`memory-system\` - Memory read/write protocol
@@ -601,14 +579,14 @@ The AI will:
 
 ---
 
-**GitHub:** https://github.com/ArtificialWeb/toh-framework
+**GitHub:** https://github.com/wasintoh/toh-framework
 **Author:** Wasin Treesinthuros (Innovation Vantage)
 
 <!-- TOH-FRAMEWORK-END -->
 `;
 }
 
-function generateAgentsMdTH(commandsList, agentSections) {
+function generateAgentsMdTH(agentRoster) {
   return `<!-- TOH-FRAMEWORK-START -->
 # 🎯 Toh Framework
 
@@ -618,6 +596,11 @@ function generateAgentsMdTH(commandsList, agentSections) {
 ## Project Memory
 
 This file is project memory for Codex CLI/Web containing Toh Framework configuration and agent definitions
+
+This file is a compact index. Full specs live on disk and MUST be read at runtime:
+- Commands → \`.toh/commands/toh-<cmd>.md\`
+- Agents → \`.toh/agents/<name>.md\`
+- Skills → \`.toh/skills/<skill-name>/SKILL.md\`
 
 ## Identity
 
@@ -660,74 +643,34 @@ If user types in English, respond in English
 
 > **You must remember and execute these commands immediately!**
 > When user types any pattern below, treat it as a direct command
+> The table below is an INDEX only — when a command is invoked, read
+> \`.toh/commands/toh-<cmd>.md\` (e.g. \`.toh/commands/toh-vibe.md\`) and follow it.
+> That file is the command's full behavior spec.
 
-### Command Patterns to Remember:
-
-| Full Command | Shortcuts (ALL VALID) | Action |
-|-------------|----------------------|--------|
+| Command | Shortcuts (ALL VALID) | Purpose |
+|---------|----------------------|---------|
 | \`/toh-help\` | \`/toh-h\`, \`toh help\`, \`toh h\` | Show all commands |
-| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | 🧠 THE BRAIN - Analyze, plan |
-| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project |
-| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI |
-| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add logic & state |
-| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve design |
-| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Auto test & fix |
-| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Supabase |
-| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App (convert) |
-| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App (PWA / Capacitor) |
-| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
-| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
-| \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
+| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | 🧠 **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
+| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project - UI + Logic + Mock Data |
+| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI - Pages, Components, Layouts |
+| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add Logic - TypeScript, Zustand, Forms |
+| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Polish Design - Make it beautiful, not AI-looking |
+| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Test system - Auto test & fix until pass |
+| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Backend - Supabase, Auth, RLS |
+| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App - convert (LIFF SDK) |
+| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App - PWA / Capacitor |
+| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix Bug - Debug and fix issues |
+| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy - Vercel, Production ready |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | 🔐 Security Audit - Full security check |
 
 ### ⚡ Execution Rules:
 
 1. **Remember Immediately** - See \`/toh-\` or \`toh \` = command!
-2. **Check Description** - Does command have description after?
-   - ✅ **Has description** → Execute immediately
-   - ❓ **No description** → Ask first: "I'm [Agent Name], what would you like me to help with?"
-3. **No confirmation if Description exists** - Has description = execute
+2. **Read the command file first** - \`.toh/commands/toh-<cmd>.md\` is the full spec; never execute from this index alone
+3. **Check Description** - Does command have description after?
+   - ✅ **Has description** → Execute immediately, no confirmation
+   - ❓ **No description** → Introduce yourself as that command's agent and ask first (e.g. "I'm **Vibe Agent** 🎨, what system would you like me to create?"). Exception: \`/toh-help\` always runs immediately
 4. **Follow Memory Protocol** - Read/write \`.toh/memory/\`
-
-### Behavior When No Description:
-
-| Command Only | Response |
-|-----------|--------|
-| \`/toh-vibe\` | "I'm **Vibe Agent** 🎨, what system would you like me to create?" |
-| \`/toh-ui\` | "I'm **UI Agent** 🖼️, what UI would you like me to create?" |
-| \`/toh-dev\` | "I'm **Dev Agent** ⚙️, what functionality would you like me to add?" |
-| \`/toh-design\` | "I'm **Design Agent** ✨, what would you like me to improve?" |
-| \`/toh-test\` | "I'm **Test Agent** 🧪, what would you like me to test?" |
-| \`/toh-connect\` | "I'm **Connect Agent** 🔌, what would you like me to connect?" |
-| \`/toh-plan\` | "I'm **Plan Agent** 🧠, what would you like me to plan?" |
-| \`/toh-help\` | (Always show help immediately) |
-
-### Examples:
-
-\`\`\`
-User: /toh-v restaurant management system
-→ Execute /toh-vibe create restaurant management system
-
-User: toh ui dashboard
-→ Execute /toh-ui create dashboard
-\`\`\`
-
-## Available Commands
-
-| Command | Description |
-|---------|-------------|
-| \`/toh-help\` | Show all commands |
-| \`/toh-plan\` | 🧠 **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
-| \`/toh-vibe\` | Create new project - UI + Logic + Mock Data |
-| \`/toh-ui\` | Create UI - Pages, Components, Layouts |
-| \`/toh-dev\` | Add Logic - TypeScript, Zustand, Forms |
-| \`/toh-design\` | Polish Design - Make it beautiful, not AI-looking |
-| \`/toh-test\` | Test system - Auto test & fix until pass |
-| \`/toh-connect\` | Connect Backend - Supabase, Auth, RLS |
-| \`/toh-line\` | LINE MINI App - convert (LIFF SDK) |
-| \`/toh-mobile\` | Mobile App - PWA / Capacitor |
-| \`/toh-fix\` | Fix Bug - Debug and fix issues |
-| \`/toh-ship\` | Deploy - Vercel, Production ready |
-| \`/toh-protect\` | 🔐 Security Audit - Full security check |
 
 ## Memory System (Automatic, 7 files — Tiered Loading)
 
@@ -763,43 +706,6 @@ Toh Framework has Memory system at \`.toh/memory/\`. Read only what the task nee
 - Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
 - Memory files must always be in English!
 
-## Usage Examples
-
-### Create New Project
-\`\`\`
-/toh-vibe coffee shop management with POS, inventory, sales reports
-\`\`\`
-
-### Add UI
-\`\`\`
-/toh-ui add dashboard page showing daily sales
-\`\`\`
-
-### Add Logic
-\`\`\`
-/toh-dev make date filter actually work
-\`\`\`
-
-### Polish Design
-\`\`\`
-/toh-design make it look professional, not AI-generated
-\`\`\`
-
-### Test System
-\`\`\`
-/toh-test test all pages
-\`\`\`
-
-### Connect Backend
-\`\`\`
-/toh-connect connect Supabase with auth
-\`\`\`
-
-### Deploy
-\`\`\`
-/toh-ship deploy to Vercel
-\`\`\`
-
 ## Rules to Follow
 
 1. **No Basic Questions** - Decide yourself
@@ -818,9 +724,13 @@ Use realistic Thai data:
 - Phone: 081-234-5678
 - Email: somchai@example.com
 
-## Agents
+## Agents (roster — full specs in \`.toh/agents/\`)
 
-${agentSections}
+${agentRoster}
+
+This table is a summary ONLY. Before acting as (or delegating to) any agent,
+read \`.toh/agents/<name>.md\` — the agent's workflow, rules, tool limits, and
+quality bar live in that file, not here.
 
 ## 🚨 Required: Load Skills & Agents
 
@@ -830,6 +740,7 @@ ${agentSections}
 
 | Command | Load These Skills (from \`.toh/skills/\`) |
 |--------|-------------------------------------------|
+| \`/toh\` | \`smart-routing\`, \`orchestration-protocol\`, \`engineer-harness\` |
 | \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
 | \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
 | \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
@@ -841,6 +752,8 @@ ${agentSections}
 | \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
 | \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
 | \`/toh-ship\` | \`version-control\`, \`progress-tracking\` |
+| \`/toh-protect\` | \`engineer-harness\` |
+| \`/toh-help\` | (none — self-contained; run \`.toh/commands/toh-help.md\` directly) |
 
 ### Core Skills (Always Available)
 - \`memory-system\` - Memory system
@@ -913,7 +826,7 @@ AI will:
 
 ---
 
-**GitHub:** https://github.com/ArtificialWeb/toh-framework
+**GitHub:** https://github.com/wasintoh/toh-framework
 **Author:** Wasin Treesinthuros (Innovation Vantage)
 
 <!-- TOH-FRAMEWORK-END -->

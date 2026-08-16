@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wasintoh/toh-framework/main/docs/assets/toh-framework-banner.png" alt="Toh Framework 2.0" width="760" />
+  <img src="https://raw.githubusercontent.com/wasintoh/toh-framework/main/docs/assets/toh-framework-banner.png" alt="Toh Framework" width="760" />
 </p>
 
 <h3 align="center">"พิมพ์ครั้งเดียว ได้ครบ!" — AI-Orchestration Driven Development</h3>
@@ -10,19 +10,44 @@
 [![npm downloads](https://img.shields.io/npm/dt/toh-framework.svg?style=flat-square)](https://www.npmjs.com/package/toh-framework)
 [![License](https://img.shields.io/npm/l/toh-framework.svg?style=flat-square)](https://github.com/wasintoh/toh-framework/blob/main/LICENSE)
 
+**Toh Framework** คือ "แผนกสร้างแอป AI" ที่ติดตั้งเข้าโปรเจคของคุณ: **14 คำสั่ง, 8 agents ผู้เชี่ยวชาญ, 23 skills** — ตั้งค่าให้ Claude Code, Cursor, Antigravity และ Codex ในการติดตั้งครั้งเดียว พิมพ์ประโยคเดียว (เช่น `/toh-vibe ระบบจัดการร้านกาแฟ`) อนุมัติครั้งเดียว แล้วระบบจะวางแผน สร้าง ทดสอบ และแก้เองจนแอปเสร็จแบบพิสูจน์ได้
+
+```bash
+npx toh-framework install
+```
+
 🌐 **เว็บไซต์:** [tohframework.dev](https://tohframework.dev)
 
 > 📖 **[🇬🇧 English Documentation](../README.md)**
+
+## 🆕 มีอะไรใหม่ใน v2.1.0
+
+> **รุ่น Compatibility — ตรวจจริง ซ่อมจริง ทุก IDE ที่ยังมีชีวิต** เราเอาทุก IDE ที่รองรับมาทดสอบกับเวอร์ชันปัจจุบันของมันจริงๆ แล้วซ่อมทุกจุดที่พังไปเงียบๆ — framework เดิม แต่คราวนี้ถูกโหลดครบทุกที่จริงๆ
+
+| ฟีเจอร์ | คุณได้อะไร |
+|---------|-----------|
+| 🛰️ **Antigravity CLI (agy) — เกิดใหม่** | Google ปิด Gemini CLI สำหรับผู้ใช้ทั่วไปไปแล้ว (18 มิ.ย. 2026) — ไฟล์ที่เคยติดตั้งเป็นค่าเริ่มต้นจึงไม่มีโปรแกรมไหนอ่านเลย v2.1 รองรับ Antigravity (agy CLI + IDE) โดยตรง: surface ใหม่ใน `.agents/` มีทั้ง rule แบบ Always-On, 14 workflows, 8 subagents แบบไฟล์, Stop hook แบบ deterministic (`.agents/hooks.json`) และ skills ครบชุด — พร้อม mirror `.agent/workflows/` สำหรับรุ่นเก่า |
+| 📦 **Codex — ไม่โดนตัดท้ายอีกต่อไป** | Codex ตัดไฟล์คู่มือโปรเจคที่เกิน 32 KB ทิ้งเงียบๆ — AGENTS.md เดิมของเราใหญ่เกิน 3.6 เท่า ทำให้ agents 6 จาก 8 ตัวไม่เคยถูกโหลดเลย AGENTS.md ใหม่เป็นตารางสรุปกะทัดรัด ~12.7 KB — ทุกส่วนอยู่ครบ ตัว agents และคำสั่งอ่านจาก `.toh/` ตอนใช้งานจริง และตัวติดตั้งจะ fail ทันทีถ้าไฟล์โตเกินงบ พร้อมเขียน `.codex/config.toml` เพิ่มโควต้าให้ (ไม่ทับไฟล์ของคุณเด็ดขาด) |
+| 🤝 **มาตรฐาน skills เดียว ใช้ได้ 3 IDE** | Skills ทั้ง 37 ตัว (23 framework skills + 14 command skills `/toh-*`) ถูกเขียนครั้งเดียวลง `.agents/skills/` — มาตรฐานเปิดที่ Codex, Cursor 2.4+ และ Antigravity ค้นเจอเองโดยธรรมชาติ เขียนครั้งเดียว ใช้สามที่ ไม่มีเพี้ยน |
+| 🧩 **Cursor 2.4 native subagents** | Cursor ได้ทีมงานจริงแล้ว: ผู้เชี่ยวชาญ Toh ทั้ง 8 ตัวติดตั้งเป็น native subagents ใน `.cursor/agents/` ให้ Cursor มอบหมายงานได้เลย (ก่อนหน้านี้ rule ของเราไปบอก Cursor ว่า "ที่นี่ไม่มีทีม" — เท่ากับทิ้งของฟรี) |
+| ⚡ **Claude Code skills preload** | Subagents เริ่มงานพร้อม skills โหลดเต็มในตัวผ่าน frontmatter key `skills` แบบ native — ไม่ต้องลุ้นว่าโมเดลจะเปิดไฟล์อ่านเองหรือเปล่าอีกแล้ว |
+
+### และใน 2.1.0 ยังมี
+
+- ⌨️ **ทางลัดเป็นคำสั่งจริงบน Claude Code** — `/toh-v`, `/toh-p`, `/toh-pt` และเพื่อนๆ ถูกลงทะเบียนเป็นไฟล์คำสั่งจริง ไม่ใช่แค่ pattern ในเอกสาร และแก้ปัญหา `/toh-p` ชนกันแล้ว: `/toh-p` = `/toh-plan`, `/toh-pt` = `/toh-protect` (มี `/toh-security`, `/toh-audit` ด้วย)
+- 📇 **Catalog สดจากต้นทาง** — `npx toh-framework list` อ่านคำสั่ง agents และ skills ตรงจาก source ตัวเลขจึงไม่มีวันตกรุ่นอีก
+- 🧾 **คำอธิบาย skill ครบทุกตัว** — ทั้ง 23 skills มี frontmatter description จริงแล้ว ทุก IDE จึงรู้ว่าแต่ละ skill มีไว้ทำอะไรและเรียกใช้เองได้ถูกจังหวะ
+- 🏳️ **ทางหนีสำหรับของเก่า (ปิดเป็นค่าเริ่มต้น)** — `--legacy-gemini` ยังเขียน `.gemini/` ให้ผู้ใช้ Gemini CLI ฝั่ง Enterprise/GCP; `--legacy-cursorrules` เขียน `.cursorrules` ที่ root ให้ Cursor รุ่นเก่ามาก
 
 ## 🤖 IDE ที่รองรับ
 
 | IDE | สถานะ | หมายเหตุ |
 |-----|--------|----------|
-| 🧠 **Claude Code** | ✅ รองรับเต็ม | Native Sub-Agents, Slash commands |
-| 📝 **Cursor** | ✅ รองรับเต็ม | @ file references |
-| 🌌 **Google Antigravity** | ✅ รองรับเต็ม | Gemini integration |
-| 💎 **Gemini CLI** | ✅ รองรับเต็ม | Context files auto-loaded |
-| 🤖 **Codex CLI** | ✅ รองรับ | OpenAI agents |
+| 🧠 **Claude Code** | ✅ รองรับเต็ม | Native subagents + skills preload, Stop hook, slash commands & ทางลัด |
+| 📝 **Cursor (2.4+)** | ✅ รองรับเต็ม | Native subagents (`.cursor/agents/`), skills ผ่าน `.agents/skills/`, rule แบบ always-on |
+| 🛰️ **Antigravity CLI (agy) + IDE** | ✅ รองรับเต็ม | `.agents/` rules + skills + workflows + subagents + Stop hook |
+| 🤖 **Codex CLI + ChatGPT Desktop** | ✅ รองรับ | AGENTS.md แบบกะทัดรัด + repo-level skills |
+| 💎 **Gemini CLI** | 🏢 Legacy | เฉพาะ Enterprise/GCP — ใช้ `--legacy-gemini` (ฝั่งผู้ใช้ทั่วไปปิดบริการ 18 มิ.ย. 2026) |
 
 ## 💡 ทำไมต้อง Toh?
 
@@ -36,25 +61,20 @@ Toh Framework ช่วยให้คุณ:
 - 👀 **เห็นผลทันที** - ไม่ต้องรอ ไม่ต้องตอบคำถาม
 - 🚀 **พร้อมใช้งานจริง** - ไม่ใช่แค่ prototype
 
-## 🆕 มีอะไรใหม่ใน v2.0.0
+### 📜 เวอร์ชันก่อนหน้า
 
-> **รุ่น "เลิกเฝ้า AI ได้เลย"** — อนุมัติครั้งเดียว ได้แอปเสร็จทั้งระบบ
+ดูประวัติทั้งหมดใน [CHANGELOG.md](../CHANGELOG.md)
 
-| ฟีเจอร์ | คุณได้อะไร |
-|---------|-----------|
-| 🚀 **One-Go Build** | อนุมัติครั้งเดียว ได้แอปเสร็จทั้งระบบ — `/toh-plan` เขียนแผนลงไฟล์ พิมพ์ **"Go"** แล้วสร้างรวดจนจบ ไม่ต้องนั่งกดต่อทีละขั้น |
-| 🔁 **TOH LOOP** | พิมพ์แล้วลืมได้เลย — สร้าง ตรวจ แก้เองจนผ่านทีละงาน **ไม่ถาม "ทำต่อไหม?"** คั่นกลางอีกแล้ว |
-| 🛡️ **Stop Hook** | ไม่ยอมเลิกงานจนกว่าทุกข้อจะ**เสร็จจริงแบบพิสูจน์ได้** — ยึดผลรันจริงเป็นหลักฐานเท่านั้น (Claude Code) |
-| 🎨 **Design Identity** | ดูไม่ออกว่า AI ทำ — ทุกโปรเจคได้ `DESIGN.md` บุคลิกของตัวเอง (สี ฟอนต์ เมนู จุดเด่นเฉพาะตัว) + **AVOID-LIST** ฆ่าลุค AI ทุกรูปแบบ |
-| ⏯️ **Auto-Resume** | หยุดเมื่อไหร่ก็ได้ — `/clear` ปิดเครื่อง หรือย้าย IDE กลับมา**ทำต่อจากจุดเดิมเป๊ะ** จาก `.toh/plan.md` |
+**ไฮไลท์ล่าสุด:**
 
-### และใน 2.0.0 ยังมี
-
-- 🧠 **`/toh` v5** — เข้าใจเจตนา สำรวจเครื่องมือที่มี จัดทีม+เลือกโมเดลเอง ตรวจก่อนรายงาน
-- 🔬 **`/toh-fix`** — พิสูจน์ต้นตอด้วยหลักฐานจริงก่อนแก้เสมอ (ห้ามแก้มั่ว)
-- ⚡ **Stack ใหม่** — Next.js 16 / React 19 / Tailwind CSS 4 (build ผ่านจริง)
-- 💚 **`/toh-line` + `/toh-mobile`** — แปลงเป็น LINE MINI App หรือทำ PWA/Capacitor ในคำสั่งเดียว
-- 🤖 **Agents ชุดเดียว** — แปลงให้เหมาะกับแต่ละ IDE ตอนติดตั้ง + เลือกโมเดลตามหน้าที่ (opus/sonnet/haiku)
+| เวอร์ชัน | วันที่ | ฟีเจอร์เด่น |
+|---------|--------|------------|
+| v2.1.0 | 2026-08-16 | รุ่น Compatibility: รองรับ agy, Codex ไม่โดนตัด, Cursor native subagents, `.agents/skills` มาตรฐานร่วม |
+| v2.0.0 | 2026-07-16 | One-Go Build, TOH LOOP, Design Identity, Auto-Resume |
+| v1.8.0 | 2026-01-11 | 7-File Memory System, Agent Announcements |
+| v1.7.0 | 2025-12-26 | Security Engineer, คำสั่ง `/toh-protect` |
+| v1.6.0 | 2025-12-18 | Claude Code Sub-Agents, Multi-Agent Orchestration |
+| v1.5.0 | 2025-12-05 | รองรับ Google Antigravity/Gemini |
 
 ---
 
@@ -78,17 +98,21 @@ Toh Framework ช่วยให้คุณ:
 # ติดตั้งแบบ interactive (เลือก IDE และภาษา)
 npx toh-framework install
 
-# ติดตั้งแบบรวดเร็ว (Claude Code + Cursor, English)
+# ติดตั้งแบบรวดเร็ว (Claude Code + Cursor + Antigravity, English)
 npx toh-framework install --quick
 
 # ติดตั้งเฉพาะ IDE
 npx toh-framework install --ide claude
 npx toh-framework install --ide cursor
-npx toh-framework install --ide gemini
+npx toh-framework install --ide antigravity
 npx toh-framework install --ide codex
 
 # หลาย IDEs
-npx toh-framework install --ide "claude,cursor,gemini,codex"
+npx toh-framework install --ide "claude,cursor,antigravity,codex"
+
+# เป้าหมาย legacy (ปิดเป็นค่าเริ่มต้น)
+npx toh-framework install --legacy-gemini       # .gemini/ สำหรับ Gemini CLI ฝั่ง Enterprise/GCP
+npx toh-framework install --legacy-cursorrules  # .cursorrules ที่ root สำหรับ Cursor รุ่นเก่ามาก
 ```
 
 ## 🔄 อัพเดทเป็นเวอร์ชันล่าสุด
@@ -145,20 +169,29 @@ claude .
 ### Cursor
 
 ```bash
-# เรียก Toh agent
-@toh สร้างระบบจองห้องประชุม
+# ใช้คำสั่งเดียวกันในแชทได้เลย — rule แบบ always-on สอนให้ Cursor รู้จักคำสั่งเหล่านี้
+/toh-vibe สร้างระบบจองห้องประชุม
 
 # หรือใช้คำสั่งเฉพาะ
-@toh:ui สร้างหน้า calendar สำหรับจองห้อง
+/toh-ui สร้างหน้า calendar สำหรับจองห้อง
 ```
 
-### Gemini CLI / Antigravity
+### Antigravity (agy CLI หรือ Antigravity IDE)
 
 ```bash
-# เริ่ม Gemini CLI
-gemini
+# เริ่ม Antigravity CLI
+agy
 
-# ใช้คำสั่ง
+# ใช้คำสั่งเดียวกัน
+/toh-vibe ระบบจัดการ inventory
+```
+
+### Codex CLI / ChatGPT Desktop
+
+```bash
+codex
+
+# ใช้คำสั่งเดียวกัน — AGENTS.md สอนชุดคำสั่งครบให้ Codex
 /toh-vibe ระบบจัดการ inventory
 ```
 
@@ -175,13 +208,15 @@ gemini
 | `/toh-dev` | `/toh-d` | ⚙️ **เพิ่ม Logic** - TypeScript, Zustand, Forms |
 | `/toh-design` | `/toh-ds` | ✨ **ขัดเกลา Design** - Professional ไม่ดู AI |
 | `/toh-test` | `/toh-t` | 🧪 **Test** - Auto test & fix จนผ่าน |
-| `/toh-protect` | `/toh-pt` | 🔐 **Security Audit** - ตรวจสอบความปลอดภัย `[NEW]` |
+| `/toh-protect` | `/toh-pt` | 🔐 **Security Audit** - ตรวจสอบความปลอดภัย |
 | `/toh-connect` | `/toh-c` | 🔌 **เชื่อม Backend** - Supabase, Auth, RLS |
 | `/toh-line` | `/toh-l` | 💚 **LINE MINI App** (convert) |
 | `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - PWA / Capacitor |
 | `/toh-fix` | `/toh-f` | 🔧 **แก้ Bug** - Debug อย่างเป็นระบบ |
 | `/toh-ship` | `/toh-s` | 🚀 **Deploy** - Vercel, พร้อม Production |
 | `/toh-help` | `/toh-h` | ❓ **Help** - แสดงคำสั่งทั้งหมด |
+
+> บน Claude Code ทางลัดเป็นคำสั่งจริงที่ลงทะเบียนแล้ว (v2.1) ส่วน IDE อื่นใช้เป็น pattern ในแชทที่ rule file สอนให้โมเดลรู้จัก
 
 ---
 
@@ -219,7 +254,7 @@ Orchestrator:
 ├── ⚙️ dev-builder → เพิ่ม logic
 ├── ✨ design-reviewer → ขัดเกลา design
 ├── 🧪 test-runner → Test & fix
-├── 🔐 security-check → ตรวจสอบความปลอดภัย [NEW]
+├── 🔐 security-check → ตรวจสอบความปลอดภัย
 └── ✅ ส่งมอบระบบพร้อมใช้!
 ```
 
@@ -230,7 +265,7 @@ Orchestrator:
 - `/toh-plan` เขียนแผนลง `.toh/plan.md` → อนุมัติ**ครั้งเดียว** ("Go") → AI สร้างทั้งแผนอัตโนมัติ ตรวจสอบทุก checkpoint เอง
 - `/toh-vibe` ทำแผนค้างต่อได้เสมอ: อ่าน `.toh/plan.md` ก่อน แล้วทำต่อจาก task แรกที่ยังไม่ติ๊ก — ข้าม session ข้าม IDE ได้
 
-หมายเหตุ: กลไก*บังคับ* loop อัตโนมัติ (Stop hook, `/goal`, `/loop`) มีเฉพาะบน Claude Code เท่านั้น — IDE อื่นรัน loop เดียวกันในรูปแบบคำสั่งในเอกสาร (instructions) โดยมี checkbox-resume ใน `.toh/plan.md` เป็นกลไกกู้คืน
+หมายเหตุ: กลไก*บังคับ* loop อัตโนมัติแข็งแรงที่สุดบน Claude Code (Stop hook, `/goal`, `/loop`) และ Antigravity (Stop hook แบบ deterministic ใน `.agents/hooks.json`) — IDE อื่นรัน loop เดียวกันในรูปแบบคำสั่งในเอกสาร (instructions) โดยมี checkbox-resume ใน `.toh/plan.md` เป็นกลไกกู้คืน
 
 **สั่ง build แบบไม่ต้องเฝ้า** — รันแบบ headless (Claude Code):
 
@@ -271,12 +306,25 @@ claude -p "/toh-vibe ระบบจัดการร้านกาแฟ" --p
 
 ## 📊 สถิติ Framework
 
-- 🤖 **8 Sub-Agents** - เชี่ยวชาญเฉพาะทาง
+- 🤖 **8 Sub-Agents** - เชี่ยวชาญเฉพาะทาง ติดตั้งแบบ native บน Claude Code, Cursor 2.4+ และ Antigravity
 - 🎯 **14 Commands** - ตั้งแต่วางแผนถึง deployment
-- 📚 **23 Skills** - ความสามารถ AI ครบครัน `[NEW: Orchestration Protocol]`
+- 📚 **23 Skills** - ความสามารถ AI ครบครัน ส่งครั้งเดียวลง `.agents/skills/` ให้ทุก IDE ที่อ่านมาตรฐานเปิดนี้ `[NEW ใน 2.1]`
 - 🎨 **Design Identity** - DESIGN.md ประจำโปรเจค + AVOID-LIST แบบมีเวอร์ชัน
 - 📦 **15 Component Templates** - Premium components พร้อมใช้
-- 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity, Gemini, Codex
+- 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity (agy CLI + IDE), Codex, Gemini CLI (legacy)
+
+---
+
+## 📚 เอกสารและคู่มือ
+
+| คู่มือ | อยู่ที่ไหน |
+|-------|-----------|
+| 🇬🇧 เอกสารภาษาอังกฤษ | [README.md](../README.md) |
+| ประวัติเวอร์ชันทั้งหมด | [CHANGELOG.md](../CHANGELOG.md) |
+| คำสั่งทั้งหมด + cheatsheet | รัน `/toh-help` ใน IDE ของคุณ |
+| คู่มือประจำโปรเจค (สร้างอัตโนมัติ) | `CLAUDE.md` / `AGENTS.md` / `.cursor/rules/` / `.agents/rules/` ในโปรเจคหลังติดตั้ง |
+| ไฟล์แผนงาน | `.toh/plan.md` — checklist สดของแอปคุณ (เปิดดูความคืบหน้าได้ตลอด) |
+| สัญญา design | `DESIGN.md` ที่ root โปรเจค — สร้างต่อโปรเจค แก้ไขเพื่อกำหนดลุคได้ |
 
 ---
 

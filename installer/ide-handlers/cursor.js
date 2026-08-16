@@ -1,13 +1,18 @@
 /**
  * Cursor IDE Handler
- * Sets up Toh Framework for Cursor with .mdc rules
- * 
- * Note: Cursor doesn't support @ mention for custom agents.
- * We use Rules (.mdc) with alwaysApply: true to inject Toh methodology.
- * Users type commands like "/toh-vibe" or "use toh framework to create..."
+ * Sets up Toh Framework for Cursor (2.4+) with .mdc rules + native subagents.
+ *
+ * v2.1: Cursor 2.4 has native subagents (.cursor/agents/*.md) — the installer
+ * emits one per src/agents file (native frontmatter subset: name, description,
+ * model; readonly for agents whose tools allowlist has no Write/Edit).
+ * Rules (.mdc, alwaysApply: true) still carry the Toh methodology; users type
+ * commands like "/toh-vibe" or "use toh framework to create...".
+ * Root .cursorrules is legacy (gone from official docs) and is only written
+ * when options.legacyCursorrules is set.
  */
 
 import fs from 'fs-extra';
+import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { transformCommand, renderCapabilitiesSection } from './shared.js';
@@ -18,7 +23,7 @@ const __dirname = dirname(__filename);
 const pkg = JSON.parse(fs.readFileSync(join(__dirname, '../../package.json'), 'utf-8'));
 const VERSION = pkg.version;
 
-export async function setupCursor(targetDir, language = 'en') {
+export async function setupCursor(targetDir, language = 'en', options = {}) {
   // Create .cursor/rules directory
   const cursorRulesDir = join(targetDir, '.cursor', 'rules');
   await fs.ensureDir(cursorRulesDir);
@@ -44,11 +49,93 @@ export async function setupCursor(targetDir, language = 'en') {
   const agentRulePath = join(cursorRulesDir, 'toh-agents.mdc');
   await fs.writeFile(agentRulePath, transformCommand(generateAgentRule(language), 'cursor'));
 
-  // Create .cursorrules (root level for backwards compatibility)
-  const cursorRulesPath = join(targetDir, '.cursorrules');
-  await fs.writeFile(cursorRulesPath, transformCommand(generateCursorRules(language), 'cursor'));
+  // v2.1 (W4): Cursor 2.4 native subagents — .cursor/agents/<name>.md
+  await createCursorAgents(targetDir);
+
+  // v2.1 (W4/D5): root .cursorrules vanished from official Cursor docs and
+  // duplicates the alwaysApply .mdc rule — no longer written by default.
+  // Kept ONLY behind an explicit legacy option for users on very old Cursor.
+  if (options.legacyCursorrules) {
+    const cursorRulesPath = join(targetDir, '.cursorrules');
+    await fs.writeFile(cursorRulesPath, transformCommand(generateCursorRules(language), 'cursor'));
+  }
 
   return true;
+}
+
+/**
+ * v2.1 (W4): emit native Cursor subagents into .cursor/agents/<name>.md.
+ *
+ * Source of truth is the superset agent frontmatter (name, description, tools,
+ * model, skills, triggers, autonomy keys). Cursor's native subagent format
+ * keeps only: name, description, model — plus readonly: true for agents whose
+ * tools allowlist contains no write-capable tool (root-cause-debugger's
+ * Read/Grep/Glob/Bash allowlist is read-only by design). tools/skills/triggers
+ * and the Claude-only autonomy keys are dropped; the canonical body ships
+ * unchanged as the subagent's instructions.
+ *
+ * Reads the target's .toh/agents/ (already populated by install.js from
+ * src/agents) and falls back to the package's src/agents/ so setupCursor
+ * also works standalone.
+ */
+async function createCursorAgents(targetDir) {
+  const WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
+
+  let agentsSrcDir = join(targetDir, '.toh', 'agents');
+  if (!fs.existsSync(agentsSrcDir)) {
+    agentsSrcDir = join(__dirname, '../../src/agents');
+  }
+  if (!fs.existsSync(agentsSrcDir)) return;
+
+  const cursorAgentsDir = join(targetDir, '.cursor', 'agents');
+  await fs.ensureDir(cursorAgentsDir);
+
+  const agentFiles = await fs.readdir(agentsSrcDir);
+  for (const file of agentFiles) {
+    // Only top-level agent .md files (skip README + any nested dirs)
+    if (!file.endsWith('.md') || file === 'README.md') continue;
+    const srcPath = join(agentsSrcDir, file);
+    if (!(await fs.stat(srcPath)).isFile()) continue;
+
+    const raw = await fs.readFile(srcPath, 'utf8');
+    const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+
+    // No frontmatter → copy through unchanged (defensive, mirrors claude-code.js)
+    if (!fmMatch) {
+      await fs.writeFile(join(cursorAgentsDir, file), raw);
+      continue;
+    }
+
+    // Per-file guard: one malformed agent frontmatter must NOT abort the whole
+    // Cursor install — copy through unchanged and keep going.
+    try {
+      const parsed = yaml.load(fmMatch[1]) || {};
+      const body = fmMatch[2];
+
+      const nativeFm = {};
+      if (parsed.name !== undefined) nativeFm.name = parsed.name;
+      if (parsed.description !== undefined) nativeFm.description = parsed.description;
+      if (parsed.model !== undefined) nativeFm.model = parsed.model;
+      // readonly when the source tools allowlist exists and has no write tool
+      // (never derived from an ABSENT list — absence means unrestricted).
+      const tools = Array.isArray(parsed.tools) ? parsed.tools : null;
+      if (tools && !tools.some((t) => WRITE_TOOLS.includes(t))) {
+        nativeFm.readonly = true;
+      }
+
+      const fmYaml = yaml.dump(nativeFm, { lineWidth: -1, noRefs: true }).trimEnd();
+      const outName = `${parsed.name || file.replace(/\.md$/, '')}.md`;
+      await fs.writeFile(
+        join(cursorAgentsDir, outName),
+        `---\n${fmYaml}\n---\n${body}`
+      );
+    } catch (agentErr) {
+      console.warn(
+        `  ⚠️  Cursor subagent ${file}: frontmatter failed to parse (${agentErr.message}) — copied through unchanged to .cursor/agents/${file}.`
+      );
+      await fs.writeFile(join(cursorAgentsDir, file), raw);
+    }
+  }
 }
 
 /**
@@ -267,7 +354,9 @@ You are the **Toh Orchestrator** - an AI expert in building web applications wit
 
 ${renderCapabilitiesSection('cursor')}
 
-Runtime Identity: you are running in Cursor. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+Runtime Identity: you are running in Cursor (2.4+). Native subagents ARE available here — the installer writes them to .cursor/agents/*.md (on dual installs Cursor also auto-loads .claude/agents/*.md; those are the SAME Toh agents, not a separate team). When a story clearly maps to one specialist (ui-builder, dev-builder, backend-connector, test-runner, root-cause-debugger, design-reviewer, platform-adapter, plan-orchestrator), delegate it to that subagent. Whether delegated or done yourself, the TOH LOOP contract is unchanged — and if subagents are unavailable (older Cursor) or the task is small/dependent, fall back to executing it sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+
+Note: a root AGENTS.md may also exist in this project (written for Codex CLI) — it is the SAME Toh Framework, not a second system; when both are loaded, defer to this rule file (.cursor/rules/toh-framework.mdc).
 
 ## How to Invoke
 
@@ -342,7 +431,7 @@ If user writes in Thai, respond in Thai.
 | \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | PWA / Capacitor |
 | \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
 | \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
-| \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | Security audit |
 
 ### ⚡ Execution Rules:
 
@@ -395,7 +484,7 @@ User: /toh-p create e-commerce
 | /toh-mobile | /toh-m | Mobile App - PWA / Capacitor |
 | /toh-fix | /toh-f | Fix bugs - Debug and fix issues |
 | /toh-ship | /toh-s | Deploy - Vercel, Production ready |
-| /toh-protect | /toh-pr | Security audit - Full security check |
+| /toh-protect | /toh-pt | Security audit - Full security check |
 
 ## Memory System (Auto, 7 files — Tiered Loading)
 
@@ -565,7 +654,9 @@ You are **Toh Orchestrator** - AI specialized in building web applications "Type
 
 ${renderCapabilitiesSection('cursor')}
 
-Runtime Identity: you are running in Cursor. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+Runtime Identity: you are running in Cursor (2.4+). Native subagents ARE available here — the installer writes them to .cursor/agents/*.md (on dual installs Cursor also auto-loads .claude/agents/*.md; those are the SAME Toh agents, not a separate team). When a story clearly maps to one specialist (ui-builder, dev-builder, backend-connector, test-runner, root-cause-debugger, design-reviewer, platform-adapter, plan-orchestrator), delegate it to that subagent. Whether delegated or done yourself, the TOH LOOP contract is unchanged — and if subagents are unavailable (older Cursor) or the task is small/dependent, fall back to executing it sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+
+Note: a root AGENTS.md may also exist in this project (written for Codex CLI) — it is the SAME Toh Framework, not a second system; when both are loaded, defer to this rule file (.cursor/rules/toh-framework.mdc).
 
 ## How to Use
 
@@ -639,7 +730,7 @@ If user types in English, respond in English
 | \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App (PWA / Capacitor) |
 | \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
 | \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
-| \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | Security audit |
 
 ### ⚡ Execution Rules:
 
@@ -692,7 +783,7 @@ User: /toh-p e-commerce system
 | /toh-mobile | /toh-m | 📱 Mobile App - PWA / Capacitor |
 | /toh-fix | /toh-f | 🔧 Fix Bug - Debug and fix issues |
 | /toh-ship | /toh-s | 🚀 Deploy - Vercel, Production ready |
-| /toh-protect | /toh-pr | 🔐 Security Audit - Full security check |
+| /toh-protect | /toh-pt | 🔐 Security Audit - Full security check |
 
 ## Memory System (Automatic, 7 files — Tiered Loading)
 
@@ -772,7 +863,7 @@ All Toh Framework resources are in \`.toh/\`:
 
 | Command | Load Skills | Load Agent |
 |--------|------------|------------|
-| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/engineer-harness/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
+| \`/toh-vibe\` | \`@.toh/skills/vibe-orchestrator/SKILL.md\`, \`@.toh/skills/orchestration-protocol/SKILL.md\`, \`@.toh/skills/premium-experience/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\`, \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/engineer-harness/SKILL.md\` | \`@.toh/agents/ui-builder.md\` + \`@.toh/agents/dev-builder.md\` |
 | \`/toh-ui\` | \`@.toh/skills/ui-first-builder/SKILL.md\`, \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/ui-builder.md\` |
 | \`/toh-dev\` | \`@.toh/skills/dev-engineer/SKILL.md\`, \`@.toh/skills/backend-engineer/SKILL.md\` | \`@.toh/agents/dev-builder.md\` |
 | \`/toh-design\` | \`@.toh/skills/design-craft/SKILL.md\` | \`@.toh/agents/design-reviewer.md\` |

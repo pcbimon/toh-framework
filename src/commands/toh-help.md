@@ -9,7 +9,7 @@ description: Display all Toh Framework commands and quick usage guide
 When user calls `/toh-help`, display the following:
 
 <help_response>
-## 🎯 Toh Framework v2.0.0
+## 🎯 Toh Framework v2.1.0
 
 **"Type anything, AI does it for you"** - AI-Orchestration Driven Development
 
@@ -50,7 +50,7 @@ When user calls `/toh-help`, display the following:
 | `/toh-mobile` | `/toh-m` | 📱 **Mobile App** - PWA / Capacitor |
 | `/toh-fix` | `/toh-f` | 🔧 **Fix Bug** - Evidence-first debug: prove the root cause before touching code |
 | `/toh-ship` | `/toh-s` | 🚀 **Deploy** - Vercel, Production ready |
-| `/toh-protect` | `/toh-pr` | 🔐 **Security Audit** - Full security check |
+| `/toh-protect` | `/toh-pt` | 🔐 **Security Audit** - Full security check |
 
 ---
 
@@ -118,7 +118,7 @@ Every response from Toh includes:
 
 ---
 
-### 🤖 Sub-Agents (v1.6.0)
+### 🤖 Sub-Agents (8)
 
 | Agent | File | Specialty |
 |-------|------|-----------|
@@ -145,17 +145,17 @@ Every response from Toh includes:
 - 📚 **23 Skills** - Including Orchestration Protocol & Security Engineer
 - 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
-- 🌐 **5 IDEs** - Claude Code, Cursor, Gemini, Antigravity, Codex
+- 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity (agy CLI + IDE), Codex, Gemini CLI (legacy)
 
 ---
 
-### 🆕 What's New in v2.0.0
+### 🆕 What's New in v2.1.0
 
-- 🚀 **One-Go Build** - approve once, get a whole finished app: `/toh-plan` writes `.toh/plan.md`, one "Go" builds the entire plan with zero babysitting (อนุมัติครั้งเดียว ได้ทั้งแอป)
-- 🔁 **TOH LOOP** - Type & Forget: builds, tests, and fixes itself until every task is verified DONE — no "continue?" prompts, ever (พิมพ์แล้วลืมได้เลย)
-- 🛡️ **Stop Hook** - refuses to quit while the plan has unfinished work; quoted checkpoint output is the only proof of done (ยามที่ไม่ยอมให้เลิกงานก่อนเสร็จ)
-- 🎨 **Design Identity** - no one can tell AI made it: per-project root `DESIGN.md` + versioned AVOID-LIST kill the AI look (แต่ละแอปมีบุคลิกของตัวเอง)
-- ⏯️ **Auto-Resume** - quit anytime, it continues exactly where it left off — `/clear`, new terminal, or even a different IDE (ปิดเครื่องแล้วกลับมาทำต่อได้)
+- 🔌 **Codex Un-truncated** - Codex now reads the whole framework instead of silently dropping 6 of 8 agents: `AGENTS.md` slimmed from ~117 KB to under 13 KB with a hard size guard (Codex เห็นทีมผู้ช่วยครบทุกตัวแล้ว)
+- 🌌 **Antigravity CLI (agy)** - replaces the retired consumer Gemini CLI as the default terminal target: `.agents/` rules, workflows, subagents, skills + a deterministic Stop hook (Gemini CLI แบบเดิมยังใช้ได้ผ่าน `--legacy-gemini`)
+- 🧩 **Shared `.agents/skills/`** - one write, three tools: Codex, Cursor 2.4, and Antigravity all discover the same 37 skills — 23 framework skills + 14 `/toh-*` command skills (ลงครั้งเดียว ใช้ได้สามเครื่องมือ)
+- ⌨️ **Real Slash Aliases** - `/toh-v`, `/toh-p`, `/toh-pt` are now real Claude Code commands — no more "Unknown command"; `/toh-p` belongs solely to `/toh-plan`, `/toh-protect` moved to `/toh-pt` (ทางลัดใช้ได้จริงทุกตัว)
+- 🤖 **Native Agent Upgrades** - Claude Code subagents preload their skills natively, and Cursor 2.4 runs all 8 agents as native subagents instead of being told they don't exist (ทีมผู้ช่วยทำงานเต็มระบบทั้งใน Claude Code และ Cursor)
 
 ---
 
@@ -165,9 +165,9 @@ Every response from Toh includes:
 |-----|-----------------|
 | Claude Code | `CLAUDE.md` |
 | Cursor | `.cursor/rules/*.mdc` |
-| Gemini CLI | `.gemini/GEMINI.md` |
-| Google Antigravity | `.agent/workflows/` |
+| Antigravity CLI (agy) + IDE | `.agents/` — rules, skills, `.agents/workflows/` (legacy: `.agent/workflows/`) |
 | Codex CLI | `AGENTS.md` |
+| Gemini CLI (legacy, `--legacy-gemini`) | `.gemini/GEMINI.md` |
 
 ---
 

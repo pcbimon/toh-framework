@@ -1,3 +1,15 @@
+---
+name: memory-system
+description: >
+  Tiered, low-token project memory protocol for .toh/memory/ — 7 files across
+  3 tiers (Tier 1 active.md + summary.md always read, ~800 tokens; Tier 2
+  architecture/components for build work and changelog for debug work; Tier 3
+  decisions/agents-log only on demand). Auto-saves after task completion with
+  zero user effort; delegated agents receive context from the orchestrator
+  instead of re-reading. Use at every session start and whenever loading or
+  saving project memory or resuming context across sessions and IDEs.
+user-invocable: false  # internal — model-invoked via toh-* commands, not a user /command
+---
 # 🧠 Memory System Skill
 
 > **Purpose:** Tiered, low-token memory — load only what the task needs, save what matters

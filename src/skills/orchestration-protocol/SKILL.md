@@ -59,7 +59,7 @@ Do NOT invent other detection heuristics. Identity comes from Step 1; the probe 
 Three rungs, best first. **Each rung: if unavailable, fall back one rung.** Sequential is the floor and is always available.
 
 1. **AGENT TEAMS** — Claude Code with the teams env flag set, AND the plan has >= 3 independent modules plus a QC role. Recipe in Section F. If unavailable, fall back one rung.
-2. **NATIVE SUBAGENTS** — the Task/Agent tool exists. Delegate tasks to TFW agents; parallel only under the rules below. If unavailable, fall back one rung.
+2. **NATIVE SUBAGENTS** — the Agent tool (Task) exists. Delegate tasks to TFW agents; parallel only under the rules below. If unavailable, fall back one rung.
 3. **SEQUENTIAL SELF** — execute every task yourself, in order, in this session. This is the default mode and the correct choice more often than not.
 
 ### When to use which
@@ -220,7 +220,7 @@ Section E is the floor on every runtime. On Claude Code the installer ships mach
 | Mechanism | What it does |
 |-----------|--------------|
 | **Stop hook** (prompt-type, in `.claude/settings.json`) | Blocks ending the session while plan.md has unchecked, unblocked tasks — returns `{"ok": false, "reason": "<first unchecked task>"}`. Guarded: if `stop_hook_active` and no progress since the last block, or every remaining task is `[!]` blocked, it returns ok — respecting the 8-consecutive-block cap. |
-| **`.claude/loop.md`** (<= 25KB) | Heartbeat prompt for bare `/loop`: continue the first unchecked task per the TOH Loop, fix from quoted failure output, say COMPLETE in one line when green. |
+| **`.claude/loop.md`** (<= 25KB) | Heartbeat prompt for bare `/loop`: continue the first unchecked task per the TOH Loop, fix from quoted failure output, say COMPLETE in one line when green. Note: on Bedrock/Vertex/Foundry, bare `/loop` prints usage instead of reading this file — run `/loop <prompt>` explicitly there. |
 | **`/goal` recipe** (>= 2.1.139) | Set the finish line before coding: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. A Haiku evaluator judges the condition FROM THE TRANSCRIPT — one more reason the QC gate quotes actual output: unquoted results are invisible to the evaluator. |
 | **Workflows** (>= 2.1.154, optional) | `/toh-sweep` (not shipped — optional pattern you can save to `.claude/workflows/`) can fan out fixers per failing task until checks pass. |
 

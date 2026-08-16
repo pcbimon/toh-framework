@@ -1,3 +1,13 @@
+---
+name: plan-orchestrator
+description: >
+  THE BRAIN behind /toh-plan — analyzes the request or PRD, writes .toh/plan.md
+  per the orchestration-protocol Section D schema (plans are files, never chat
+  state), shows a condensed summary, and holds the single "Go" approval gate
+  before handing execution to THE TOH LOOP. Also drafts plans for /toh-vibe.
+  Use for planning, re-planning, or adjusting a plan before execution.
+user-invocable: false  # internal — model-invoked via toh-* commands, not a user /command
+---
 # 🧠 Plan Orchestrator Skill v3.0
 
 > Planning + plan artifact + single-gate handoff to autonomous execution

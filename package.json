@@ -1,8 +1,8 @@
 {
   "name": "toh-framework",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
-  "description": "AI-Orchestration Driven Development - Type Once, Have it all! Approve once and the TOH LOOP builds, tests, and fixes a whole app until verified DONE. For Claude Code, Cursor, Codex, Gemini CLI, and Antigravity.",
+  "description": "AI-Orchestration Driven Development - Type Once, Have it all! Approve once and the TOH LOOP builds, tests, and fixes a whole app until verified DONE. For Claude Code, Cursor, Codex, and Antigravity (agy CLI + IDE).",
   "author": {
     "name": "Wasin Treesinthuros",
     "email": "dr.wasin@gmail.com"
@@ -23,9 +23,13 @@
     "claude",
     "claude-code",
     "cursor",
-    "gemini",
+    "codex",
+    "openai-codex",
     "antigravity",
+    "antigravity-cli",
+    "agy",
     "google-antigravity",
+    "agent-skills",
     "vibe-coding",
     "agentic",
     "orchestration",

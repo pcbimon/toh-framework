@@ -52,6 +52,7 @@
   ],
   "scripts": {
     "install:local": "node bin/toh-cli.js install",
+    "uninstall:local": "node bin/toh-cli.js uninstall",
     "list": "node bin/toh-cli.js list",
     "status": "node bin/toh-cli.js status",
     "bundle": "node bin/toh-cli.js bundle"

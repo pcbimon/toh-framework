@@ -175,6 +175,7 @@ Every response from Toh includes:
 
 - **Website:** [tohframework.dev](https://tohframework.dev)
 - **npm:** `npm install -g toh-framework`
+- **Install / update:** `npx toh-framework install` — **Remove:** `npx toh-framework uninstall` (shows a preview and asks first; your plan, work log and notes are kept unless you say otherwise)
 - **GitHub:** [github.com/wasintoh/toh-framework](https://github.com/wasintoh/toh-framework)
 
 </help_response>

@@ -72,6 +72,7 @@ export async function status() {
 
   console.log(chalk.gray('\n  ─────────────────────────────────────────────'));
   console.log(chalk.white('\n  💡 Run ') + chalk.green('npx toh-framework install') + chalk.white(' to install or update'));
+  console.log(chalk.white('     Run ') + chalk.green('npx toh-framework uninstall') + chalk.white(' to remove it (preview first, asks before deleting)'));
   console.log('');
 }
 

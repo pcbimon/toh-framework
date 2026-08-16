@@ -20,6 +20,9 @@ All npm scripts wrap `node bin/toh-cli.js <cmd>`, which lazy-loads `installer/*.
 
 - `npm run install:local` — interactive installer; `-- --quick` (plus `-t <dir>`) for non-interactive
   runs (dir must pre-exist; reinstalls still prompt). Flags: `--legacy-gemini`, `--legacy-cursorrules`.
+- `npm run uninstall:local` — the counterpart; `-- -t <dir> --dry-run` to preview, `--yes` for
+  scripts, `--all` to also delete .toh/plan.md + .toh/progress.md + both memory folders. Defaults to
+  cwd, so ALWAYS pass `-t` when testing.
 - `npm run list` — print the catalog, live-read from src/ frontmatter (throws on bad YAML)
 - `npm run status` — inspect install state (~/.claude, ./.toh, manifest.json)
 - `npm run bundle` — web prompt bundles into ./dist/web-bundles
@@ -112,6 +115,14 @@ transformCommand(). install.js normalizes .toh/commands to the universal variant
   unchecked plan.md tasks, exit 2) into .agents/hooks.json, same marker idempotence. The other IDEs run the same loop as prose — keep it self-sufficient without hooks.
 - Reinstall safety: .toh/plan.md / .toh/progress.md are seeded only if absent (live loop state —
   never clobber); never remove/reorder user hook entries; never overwrite a user .claude/loop.md or .codex/config.toml.
+- Uninstall safety (installer/uninstall.js): ownership must be PROVED before deleting — manifestSchema 2
+  (path + sha256 + pre-install state of every file the install wrote; install.js snapshots its own
+  surfaces before/after and uses mtime, not just bytes, since reinstalls rewrite identical content),
+  then our markers, then known names — and a name-only match is copied to .toh-uninstall-backup/
+  before removal. Co-owned files are edited surgically or skipped with a warning, never rewritten;
+  a hash mismatch means the user edited it, so it is KEPT. Every generated block needs delimiters
+  for this to work: CLAUDE.md and AGENTS.md both use `<!-- TOH-FRAMEWORK-START/END -->`. Directories
+  go only when empty; the user's plan/ledger/memory need a separate explicit opt-in.
 
 ## Change checklist (5-IDE parity)
 

@@ -129,6 +129,40 @@ toh install
 
 > 💡 **Tip:** Reinstalling updates skills, agents, and commands without deleting your existing memory!
 
+## 🧹 Remove It Again
+
+Changed your mind? One command takes Toh Framework back out — it shows you a plain-language
+preview first and asks before deleting anything.
+
+```bash
+# See exactly what would happen — changes nothing
+npx toh-framework uninstall --dry-run
+
+# Remove Toh Framework (asks you to confirm first)
+npx toh-framework uninstall
+
+# Somewhere else? Point at the folder
+npx toh-framework uninstall -t /path/to/your/project
+
+# Also delete your plan, work log and project notes (a backup copy is saved first)
+npx toh-framework uninstall --all
+```
+
+**What it will never do:**
+
+- **Your own files are never deleted.** Anything it cannot prove it installed is left in place and
+  listed on screen, so you always know what is still there and where.
+- **Files you share with it are edited, not replaced.** `CLAUDE.md`, `AGENTS.md`,
+  `.claude/settings.json`, `.agents/hooks.json` keep every line you wrote — only the Toh section or
+  the Toh hook comes out. If it cannot tell which part is Toh's, it changes nothing and says so.
+- **Your plan and notes stay by default.** `.toh/plan.md`, `.toh/progress.md` and the memory folders
+  are your project's work; they are only removed if you say yes to the extra question (or pass
+  `--all`), and a copy is saved to `.toh-uninstall-backup/` first either way.
+- **Folders are only removed once they are empty**, so your own files inside them survive.
+
+Other flags: `-y, --yes` (skip the question, for scripts) and `--verbose` (list every single file
+instead of a per-tool summary).
+
 ---
 
 ## 🚀 Quick Start

@@ -187,9 +187,13 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
     await writeLoopHeartbeat(claudeDir);
 
     // Create CLAUDE.md with Toh Framework rules (references .claude/*)
+    // v2.1: the block is delimited by TOH-FRAMEWORK-START/END markers (the same
+    // pair Codex uses in AGENTS.md) so `toh uninstall` can lift out exactly our
+    // part of a file the user also writes in — without markers there is no way
+    // to tell where our text ends, and the file could never be cleaned up.
     const claudeMdPath = join(targetDir, 'CLAUDE.md');
-    const claudeMdContent = generateClaudeMd(language);
-    
+    const claudeMdContent = generateClaudeMdBlock(language);
+
     // Check if CLAUDE.md exists
     if (fs.existsSync(claudeMdPath)) {
       // Append to existing CLAUDE.md
@@ -742,12 +746,27 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
   await fs.writeFile(join(memoryDir, 'agents-log.md'), agentsLogContent);
 }
 
+// Delimiters around the Toh Framework section of a project's CLAUDE.md.
+// Same pair as the Codex AGENTS.md block, on purpose: one marker vocabulary for
+// every co-owned file, so the uninstaller has one surgical strategy.
+export const TOH_BLOCK_START = '<!-- TOH-FRAMEWORK-START -->';
+export const TOH_BLOCK_END = '<!-- TOH-FRAMEWORK-END -->';
+
+/**
+ * The exact bytes the installer writes into a project's CLAUDE.md: the content
+ * wrapped in its markers. Exported so `toh uninstall` can recognise our own
+ * text byte-for-byte in projects installed before the markers existed.
+ */
+export function generateClaudeMdBlock(language = 'en') {
+  return `${TOH_BLOCK_START}\n${generateClaudeMd(language)}\n${TOH_BLOCK_END}\n`;
+}
+
 /**
  * Generate CLAUDE.md content
  * Base content is always English
  * Language parameter only affects communication style and mock data
  */
-function generateClaudeMd(language = 'en') {
+export function generateClaudeMd(language = 'en') {
   // Language-specific instructions
   const langInstructions = language === 'th' 
     ? `## 🌏 Language & Communication

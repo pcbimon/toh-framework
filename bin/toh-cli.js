@@ -58,6 +58,24 @@ program
     await install(options);
   });
 
+// Uninstall command — the counterpart to install.
+// Safe by default: shows a plain-language preview and asks once before
+// deleting anything, keeps .toh/plan.md, .toh/progress.md and the memory
+// folders (your work) unless you explicitly pass --all.
+program
+  .command('uninstall')
+  .description('Remove Toh Framework from your project (shows a preview and asks first)')
+  .option('-t, --target <path>', 'Target directory', process.cwd())
+  .option('--dry-run', 'Only show what would be removed, change nothing')
+  .option('-y, --yes', 'Skip the confirmation question (for scripts)')
+  .option('--all', 'ALSO delete your own plan, work log and project notes (a backup copy is saved first)')
+  .option('--verbose', 'List every file in the preview instead of a per-tool summary')
+  .action(async (options) => {
+    const { uninstall } = await import('../installer/uninstall.js');
+    const code = await uninstall(options);
+    if (code) process.exitCode = code;
+  });
+
 // List command
 program
   .command('list')

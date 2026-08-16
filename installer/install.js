@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
 import fs from 'fs-extra';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { setupClaudeCode } from './ide-handlers/claude-code.js';
@@ -38,6 +39,101 @@ const spin = (text) => {
   }
   return ora(options);
 };
+
+// ============================================================
+// v2.1: install inventory (manifestSchema 2) — powers `toh uninstall`
+// ============================================================
+// The uninstaller must be able to answer three questions for every file:
+// "is this ours?", "did the user edit it since install?", and "did it exist
+// before we ran?". Nothing on disk answered them before, so the installer
+// takes a content snapshot of the surfaces it writes to BEFORE and AFTER the
+// run and records the difference. No IDE handler had to change: a file is
+// ours exactly when this run created or rewrote it.
+//
+// Scope is deliberately narrow (the surfaces the installer touches) so the
+// snapshot never walks a real project tree (node_modules, .git, src, ...).
+const INVENTORY_DIRS = ['.toh', '.claude', '.cursor', '.agents', '.agent', '.codex', '.gemini'];
+const INVENTORY_FILES = ['CLAUDE.md', 'AGENTS.md', '.cursorrules'];
+const INVENTORY_FILE_CAP = 20000; // pathological trees degrade, never hang
+
+function sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+/**
+ * Content snapshot of the installer's own surfaces.
+ * Symlinked files/dirs are never followed or recorded — a symlink out of the
+ * project must never end up on the uninstaller's delete list.
+ * Returns { files: Map<relPosixPath, {sha256, bytes, mtimeMs}>, dirs: Set<relPosixPath>, truncated }.
+ *
+ * mtimeMs matters as much as the hash: the installer rewrites almost every file
+ * deterministically, so on a reinstall the bytes are identical and only the
+ * modification time proves that THIS run wrote the file. Without it, a reinstall
+ * recorded almost nothing and `toh uninstall` refused to remove its own files.
+ */
+async function snapshotSurfaces(targetDir) {
+  const files = new Map();
+  const dirs = new Set();
+  let truncated = false;
+
+  const addFile = async (abs, rel) => {
+    if (files.size >= INVENTORY_FILE_CAP) { truncated = true; return; }
+    try {
+      const buf = await fs.readFile(abs);
+      let mtimeMs = 0;
+      try { mtimeMs = (await fs.lstat(abs)).mtimeMs; } catch { /* keep 0 */ }
+      files.set(rel, { sha256: sha256(buf), bytes: buf.length, mtimeMs });
+    } catch {
+      // Unreadable -> not recorded -> the uninstaller will not claim it.
+    }
+  };
+
+  const walk = async (absDir, relDir) => {
+    let entries;
+    try {
+      entries = await fs.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const abs = join(absDir, entry.name);
+      const rel = `${relDir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        dirs.add(rel);
+        await walk(abs, rel);
+      } else if (entry.isFile()) {
+        await addFile(abs, rel);
+      }
+    }
+  };
+
+  for (const name of INVENTORY_DIRS) {
+    const abs = join(targetDir, name);
+    let st;
+    try { st = await fs.lstat(abs); } catch { continue; }
+    if (st.isSymbolicLink() || !st.isDirectory()) continue;
+    dirs.add(name);
+    await walk(abs, name);
+  }
+  for (const name of INVENTORY_FILES) {
+    const abs = join(targetDir, name);
+    let st;
+    try { st = await fs.lstat(abs); } catch { continue; }
+    if (st.isSymbolicLink() || !st.isFile()) continue;
+    await addFile(abs, name);
+  }
+
+  return { files, dirs, truncated };
+}
+
+async function readExistingManifest(targetDir) {
+  try {
+    return await fs.readJson(join(targetDir, '.toh', 'manifest.json'));
+  } catch {
+    return null;
+  }
+}
 
 export async function install(options) {
   const { target, ide, quick, lang } = options;
@@ -89,9 +185,20 @@ export async function install(options) {
     spinner.succeed('Target directory validated');
   }
 
+  // Read the previous manifest BEFORE any cleaning: on a reinstall it carries
+  // the ORIGINAL pre-existence facts (e.g. how many bytes of CLAUDE.md were
+  // the user's before we ever appended), which this run must not overwrite.
+  const previousManifest = await readExistingManifest(config.targetDir);
+
   // Check for existing installation
   const existingInstall = await checkExistingInstall(config.targetDir);
-  if (existingInstall) {
+  if (existingInstall && quick) {
+    // v2.1: --quick means "no questions". Reinstalling on top of leftovers is
+    // the documented path back after `toh uninstall` (which keeps plan.md,
+    // progress.md and the memory folders), so default to the safe branch —
+    // update in place, preserving whatever the user still has.
+    console.log(chalk.cyan('  ↻ Existing files found — updating in place (customizations preserved).'));
+  } else if (existingInstall) {
     const { action } = await inquirer.prompt([{
       type: 'list',
       name: 'action',
@@ -112,6 +219,10 @@ export async function install(options) {
       await cleanExistingInstall(config.targetDir);
     }
   }
+
+  // Snapshot the surfaces as they are BEFORE we write anything (after any
+  // "Fresh Install" clean, so cleaned-then-rewritten files count as ours).
+  const beforeSnapshot = await snapshotSurfaces(config.targetDir);
 
   // Install components
   console.log(chalk.cyan('\n📁 Installing components...\n'));
@@ -180,9 +291,16 @@ export async function install(options) {
   // package source is unavailable. Idempotent: no markers left = no-op.
   await normalizeUniversalCommands(config.targetDir);
 
-  // Generate manifest + machine-readable capability declaration
-  await generateManifest(config);
+  // Generate manifest + machine-readable capability declaration.
+  // capabilities.json is written FIRST so the inventory snapshot below sees it
+  // (manifest.json itself is machine-owned and needs no recorded hash).
   await declareCapabilities(config);
+  const afterSnapshot = await snapshotSurfaces(config.targetDir);
+  await generateManifest(config, {
+    before: beforeSnapshot,
+    after: afterSnapshot,
+    previous: previousManifest
+  });
 
   // Success message
   console.log(chalk.green('\n✅ Toh Framework installed successfully!\n'));
@@ -404,9 +522,9 @@ async function countFiles(dir) {
   return count;
 }
 
-async function generateManifest(config) {
+async function generateManifest(config, inventory = null) {
   const spinner = spin('Generating manifest...').start();
-  
+
   const manifest = {
     version: VERSION,
     installedAt: new Date().toISOString(),
@@ -420,6 +538,73 @@ async function generateManifest(config) {
       memory: true
     }
   };
+
+  // v2.1: manifestSchema 2 — the record `toh uninstall` reads. Older manifests
+  // (no manifestSchema key) stay valid; the uninstaller falls back to detecting
+  // our files by name and by our own markers when these fields are absent.
+  if (inventory && inventory.after) {
+    const { before, after, previous } = inventory;
+    const prevByPath = new Map();
+    if (previous && Array.isArray(previous.files)) {
+      for (const f of previous.files) {
+        if (f && typeof f.path === 'string') prevByPath.set(f.path, f);
+      }
+    }
+
+    const files = [];
+    for (const [rel, info] of after.files) {
+      const beforeInfo = before ? before.files.get(rel) : undefined;
+      const prev = prevByPath.get(rel);
+
+      // Did THIS run write the file? Bytes alone cannot answer it: the installer
+      // is deterministic, so a reinstall rewrites identical content. A newer
+      // modification time is the proof that we wrote it just now.
+      const rewrittenNow =
+        !beforeInfo ||
+        beforeInfo.sha256 !== info.sha256 ||
+        (info.mtimeMs > 0 && beforeInfo.mtimeMs > 0 && info.mtimeMs > beforeInfo.mtimeMs);
+
+      // Untouched by this run: keep an older record if we had one (it is still
+      // our file — e.g. a component this run did not reinstall), otherwise it
+      // is the user's file and we must never claim it.
+      if (!rewrittenNow) {
+        if (prev) files.push(prev);
+        continue;
+      }
+
+      const entry = { path: rel, sha256: info.sha256 };
+      if (prev && prev.preexisted) {
+        // Carry the ORIGINAL pre-install facts through reinstalls.
+        entry.preexisted = true;
+        if (prev.preexistedSha256) entry.preexistedSha256 = prev.preexistedSha256;
+        if (typeof prev.preexistedBytes === 'number') entry.preexistedBytes = prev.preexistedBytes;
+      } else if (beforeInfo && !prev && beforeInfo.sha256 !== info.sha256) {
+        // The file existed before this install with DIFFERENT content and was
+        // not ours: record what it looked like so uninstall can restore the
+        // user's part byte-for-byte (CLAUDE.md/AGENTS.md appends) or at least
+        // warn honestly. Identical content before and after means we simply
+        // rewrote our own file — there is nothing of the user's to restore, and
+        // claiming otherwise would make uninstall "restore" the whole Toh file.
+        entry.preexisted = true;
+        entry.preexistedSha256 = beforeInfo.sha256;
+        entry.preexistedBytes = beforeInfo.bytes;
+      }
+      files.push(entry);
+    }
+    files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
+    manifest.manifestSchema = 2;
+    manifest.language = config.language || 'en';
+    manifest.flags = {
+      legacyGemini: !!config.legacyGemini,
+      legacyCursorrules: !!config.legacyCursorrules
+    };
+    manifest.files = files;
+    manifest.dirsCreated = [...after.dirs]
+      .filter((d) => !before || !before.dirs.has(d))
+      .sort();
+    if (after.truncated || (before && before.truncated)) manifest.inventoryTruncated = true;
+  }
 
   const manifestPath = join(config.targetDir, '.toh', 'manifest.json');
   await fs.ensureDir(join(config.targetDir, '.toh'));
@@ -749,7 +934,14 @@ function printNextSteps(config) {
   console.log(row(chalk.white(pad('  Documentation:'))));
   console.log(row(chalk.blue(pad('    https://github.com/wasintoh/toh-framework'))));
   console.log(mid);
+  // Changed your mind? Say so here — the removal path must be as visible as
+  // the install path, not something you have to find in --help.
+  console.log(row(chalk.white(pad('  Changed your mind? Remove it any time:'))));
+  console.log(row(chalk.cyan(pad('    npx toh-framework uninstall'))));
+  console.log(row(chalk.gray(pad('    (shows a preview and asks first; keeps your plan+notes)'))));
+  console.log(mid);
   console.log(row(chalk.bold.yellow(pad(`  What's New in v${VERSION}:`))));
+  console.log(row(chalk.white(pad('  * NEW uninstall command: previewed, asks first, reversible'))));
   console.log(row(chalk.white(pad('  * Codex: compact AGENTS.md, never truncated (24KiB guard)'))));
   console.log(row(chalk.white(pad('  * Antigravity (agy): .agents/ + deterministic Stop hook'))));
   console.log(row(chalk.white(pad('  * Cursor 2.4 native subagents (.cursor/agents/)'))));

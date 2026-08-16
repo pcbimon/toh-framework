@@ -40,8 +40,10 @@ export async function status() {
   const projectPaths = [
     { path: join(cwd, '.claude'), name: '.claude/' },
     { path: join(cwd, '.cursor', 'rules'), name: '.cursor/rules/' },
+    { path: join(cwd, '.codex', 'skills'), name: '.codex/skills/' },
     { path: join(cwd, '.toh'), name: '.toh/' },
     { path: join(cwd, 'CLAUDE.md'), name: 'CLAUDE.md' },
+    { path: join(cwd, 'AGENTS.md'), name: 'AGENTS.md' },
     { path: join(cwd, '.cursorrules'), name: '.cursorrules' }
   ];
 

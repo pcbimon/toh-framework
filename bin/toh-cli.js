@@ -65,6 +65,17 @@ program
     await list();
   });
 
+// Uninstall command
+program
+  .command('uninstall')
+  .description('Remove Toh Framework from your project (keeps user files)')
+  .option('-t, --target <path>', 'Target directory', process.cwd())
+  .option('-i, --ide <ides>', 'IDE to remove (currently: codex). Omit for full uninstall')
+  .action(async (options) => {
+    const { uninstall } = await import('../installer/uninstall.js');
+    await uninstall(options);
+  });
+
 // Status command
 program
   .command('status')

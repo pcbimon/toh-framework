@@ -22,14 +22,16 @@ All npm scripts wrap `node bin/toh-cli.js <cmd>`, which lazy-loads `installer/*.
 - `npm run list` — print the catalog (hardcoded and stale — see Gotchas)
 - `npm run status` — inspect install state (~/.claude, ./.toh, manifest.json)
 - `npm run bundle` — web prompt bundles into ./dist/web-bundles
+- `npm test` — node:test suite (tests/, in-band runner; currently covers the Codex installer)
 - `npm pack --dry-run` — check exactly what ships before any packaging change
 
 ## Verification protocol
 
-There is NO automated test suite — .github/workflows/ci.yml only smoke-tests the CLI. Verify by running for real:
+`npm test` covers the Codex install/uninstall behavior; the rest is verified by running for real
+(.github/workflows/ci.yml runs both on Node 18 + 22):
 
-1. Run what you touched — install into a scratch dir, `npm run list`/`status`, `npm pack --dry-run`.
-   Inspect the generated output (.toh/, .claude/, .cursor/rules/, AGENTS.md, .gemini/, .agent/workflows/) — never assume a transform worked.
+1. Run what you touched — `npm test`, install into a scratch dir, `npm run list`/`status`, `npm pack --dry-run`.
+   Inspect the generated output (.toh/, .claude/, .cursor/rules/, AGENTS.md, .codex/skills/, .gemini/, .agent/workflows/) — never assume a transform worked.
 2. Coffee-Shop-Owner Test for any user-facing change: Could a coffee-shop owner use this
    without tech vocabulary? Does the system ever ask a question they can't answer? When it
    breaks, do they know what to do next? Does the output look professionally made?
@@ -52,8 +54,15 @@ then 4 handlers in `installer/ide-handlers/` (plus shared.js utilities) cover th
 - gemini-cli.js → BOTH Gemini CLI (.gemini/: TOML commands from src/gemini-commands/, skills,
   GEMINI.md) and Antigravity (.agent/workflows/ from src/antigravity-workflows/); selecting
   gemini auto-adds antigravity. There is no antigravity.js.
-- codex.js → one root AGENTS.md with frontmatter-stripped agent bodies between
-  TOH-FRAMEWORK-START/END markers, read from the package's src/agents/.
+- codex.js → NATIVE Codex skills: one thin wrapper per command at
+  .codex/skills/<toh-*>/SKILL.md (generated from src/commands/ frontmatter; each wrapper
+  points at .toh/commands/*.md + .toh/skills/* and states Codex constraints — no subagents,
+  no Stop hook, sequential TOH LOOP) + a CONCISE managed AGENTS.md block
+  (TOH-FRAMEWORK-START/END: identity, capabilities, skills table, legacy `/toh-*` compat
+  note, memory protocol). Never embed agent bodies in AGENTS.md again (pre-v2.1 behavior —
+  Codex has no subagents to run them). Exports uninstallCodex() (removes only
+  generator-marked skills + the managed block); install.js cleanExistingInstall and the
+  `toh uninstall` CLI command both use it. `.toh/` runtime is seeded only-if-absent.
 
 Per-IDE command divergence lives in ONE markdown source via `<!-- tfw:claude -->` (kept only for
 Claude Code) / `<!-- tfw:fallback -->` (kept for everyone else) blocks, resolved by shared.js
@@ -102,8 +111,9 @@ loop — that is why claude-code.js transforms from package src/commands, not .t
   (`<TFW-STOP-HOOK>` marker), strictly additive prompt hook to .claude/settings.json that blocks
   ending a session while plan.md has unchecked unblocked tasks. The other 4 IDEs run the same
   loop as prose — keep it self-sufficient without hooks.
-- Reinstall safety: .toh/plan.md / .toh/progress.md are seeded only if absent (live loop state —
-  never clobber); never remove/reorder user hook entries; never overwrite a user .claude/loop.md.
+- Reinstall safety: .toh/plan.md / .toh/progress.md AND the 7 .toh/memory/*.md files are
+  seeded only if absent (live state — never clobber); never remove/reorder user hook entries;
+  never overwrite a user .claude/loop.md.
 
 ## Change checklist (5-IDE parity)
 
@@ -137,6 +147,10 @@ loop — that is why claude-code.js transforms from package src/commands, not .t
   11/6/7 — trust toh-help.md's 14 / 8 / 23. Alias collision: /toh-plan and /toh-protect both claim /toh-p.
 - src/agents/README.md oversimplifies two transforms — installer/ide-handlers/ is authoritative.
   Dead/stale, do not propagate: bin/toh-npx-wrapper.js, installer/bundle.js (v1.0.0 text, *star
-  commands), codex.js footer GitHub URL (ArtificialWeb; the repo is wasintoh/toh-framework).
+  commands). (The old codex.js footer with the ArtificialWeb URL was removed in v2.1.0.)
+- Tests: `npm test` runs tests/run.js — an IN-BAND node:test runner. Do not switch it to
+  `node --test tests/`: child-process isolation is intermittently corrupted by the dependency
+  stack on Node 24 ("Unable to deserialize cloned data"). Tests set TOH_QUIET=1 (install.js
+  silences ora on that flag — ora is the IPC corruptor).
 - Internal skill version strings are independent of the package version — don't "fix" them.
   dist/ is gitignored and absent but whitelisted — a stray local build would silently ship.

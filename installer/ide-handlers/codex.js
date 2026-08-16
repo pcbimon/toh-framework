@@ -1,921 +1,434 @@
 /**
  * Codex CLI IDE Handler
- * Creates AGENTS.md file for Codex CLI and Codex Web
- * 
- * Codex uses AGENTS.md as "project memory" - automatically loaded on startup
+ *
+ * Native Codex integration (v2.1.0):
+ *   .codex/skills/<toh-*>/SKILL.md  -> native Codex skills (the canonical layer,
+ *                                      discovered by Codex from the project root)
+ *   AGENTS.md (managed block)       -> concise project-level TOH rules +
+ *                                      legacy `/toh-*` compatibility note
+ *   .toh/                           -> TOH runtime/state (plan, progress, memory,
+ *                                      skills, commands) — owned by install.js
+ *
+ * Codex has no custom slash commands, subagents, or Stop hooks, so the old
+ * "simulate /toh-* via a giant AGENTS.md" approach was unreliable. Skills are
+ * the supported discovery/invocation mechanism; AGENTS.md now only carries
+ * project-level orchestration rules inside a TOH-managed marker block.
  */
 
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { transformCommand, renderCapabilitiesSection } from './shared.js';
+import yaml from 'js-yaml';
+import { renderCapabilitiesSection } from './shared.js';
 
-// Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf-8'));
 const VERSION = pkg.version;
 
+const AGENTS_BLOCK_START = '<!-- TOH-FRAMEWORK-START -->';
+const AGENTS_BLOCK_END = '<!-- TOH-FRAMEWORK-END -->';
+const AGENTS_BLOCK_RE = /[ \t]*<!-- TOH-FRAMEWORK-START -->[\s\S]*?<!-- TOH-FRAMEWORK-END -->[ \t]*\r?\n?/g;
+
+// Generated Codex skills carry this frontmatter marker so we can tell
+// TOH-managed skills apart from a user's own skills on reinstall/uninstall.
+const SKILL_GENERATOR = 'toh-framework';
+
+// Codex skill names: 1-64 chars, lowercase letters, numbers, hyphens.
+const SKILL_NAME_RE = /^[a-z0-9-]{1,64}$/;
+
+// ============================================================
+// Command catalog (single source: src/commands/*.md frontmatter)
+// ============================================================
+
 /**
- * Create memory template files for the Memory System (v1.7.0)
- * Now includes architecture.md and components.md for Code Architecture Tracking
+ * Read src/commands/*.md and return one entry per TOH command:
+ *   { skillName, command, aliases, description, skills, file }
+ * Sorted by skillName for deterministic output. Throws an actionable error
+ * when the catalog cannot be read (the skills layer depends on it).
  */
-async function createMemoryFiles(memoryDir, language = 'en') {
-  const timestamp = new Date().toISOString().split('T')[0];
+export async function readCommandCatalog(srcDir) {
+  const commandsDir = path.join(srcDir, 'commands');
+  if (!(await fs.pathExists(commandsDir))) {
+    throw new Error(`TOH command source not found: ${commandsDir} — is this a complete toh-framework package?`);
+  }
 
-  const activeContent = language === 'th'
-    ? `# 🔥 Active Task\n\n## Current Focus\n[รอคำสั่งจากผู้ใช้]\n\n## In Progress\n- (ยังไม่มี)\n\n## Next Steps\n- รอคำสั่งจากผู้ใช้\n\n---\n*Last updated: ${timestamp}*\n`
-    : `# 🔥 Active Task\n\n## Current Focus\n[Waiting for user command]\n\n## In Progress\n- (none)\n\n## Next Steps\n- Waiting for user command\n\n---\n*Last updated: ${timestamp}*\n`;
+  const files = (await fs.readdir(commandsDir))
+    .filter((f) => f.endsWith('.md') && f !== 'README.md')
+    .sort();
 
-  const summaryContent = language === 'th'
-    ? `# 📋 Project Summary\n\n## Project Overview\n- Name: [ชื่อโปรเจค]\n- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (ยังไม่มี)\n\n## Important Notes\n- ใช้ Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`
-    : `# 📋 Project Summary\n\n## Project Overview\n- Name: [Project Name]\n- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (none)\n\n## Important Notes\n- Using Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`;
+  const catalog = [];
+  for (const file of files) {
+    const raw = await fs.readFile(path.join(commandsDir, file), 'utf8');
+    const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+    if (!fmMatch) continue; // no frontmatter -> not a command definition
 
-  const decisionsContent = language === 'th'
-    ? `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${timestamp} | ใช้ Toh Framework | AI-Orchestration Driven Development |\n\n---\n*Last updated: ${timestamp}*\n`
-    : `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${timestamp} | Use Toh Framework | AI-Orchestration Driven Development |\n\n---\n*Last updated: ${timestamp}*\n`;
+    let parsed;
+    try {
+      parsed = yaml.load(fmMatch[1]) || {};
+    } catch (err) {
+      throw new Error(`Invalid YAML frontmatter in src/commands/${file}: ${err.message}`);
+    }
 
-  // architecture.md (v1.7.0 - Code Architecture Tracking)
-  const architectureContent = `# 🏗️ Project Architecture
+    const command = String(parsed.command || '').trim();
+    const skillName = command.replace(/^\//, '');
+    if (!SKILL_NAME_RE.test(skillName)) continue; // not a slash command -> skip
 
-> Semantic overview of project structure for AI context loading
-> **Update:** After any structural changes (new pages, routes, modules, services)
+    catalog.push({
+      skillName,
+      command,
+      aliases: Array.isArray(parsed.aliases) ? parsed.aliases.map(String) : [],
+      description: String(parsed.description || '').trim(),
+      skills: Array.isArray(parsed.skills) ? parsed.skills.map(String) : [],
+      file
+    });
+  }
 
----
-
-## 📁 Entry Points
-
-| Type | Path | Purpose |
-|------|------|---------|
-| Main | \`app/page.tsx\` | Landing/Home page |
-| Layout | \`app/layout.tsx\` | Root layout with providers |
-| API | \`app/api/\` | API routes (if any) |
-
----
-
-## 🗂️ Core Modules
-
-### \`/app\` - Pages & Routes
-
-| Route | File | Description | Key Functions |
-|-------|------|-------------|---------------|
-| \`/\` | \`app/page.tsx\` | Landing page | - |
-
-### \`/components\` - UI Components
-
-| Folder | Purpose | Key Files |
-|--------|---------|-----------|
-| \`ui/\` | shadcn/ui components | button, card, input, etc. |
-| \`layout/\` | Layout components | Navbar, Sidebar, Footer |
-| \`features/\` | Feature-specific | Per feature components |
-
-### \`/lib\` - Utilities & Services
-
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| \`lib/utils.ts\` | Utility functions | cn(), formatDate() |
-
----
-
-## 🔄 Data Flow Pattern
-
-User Action → Component → Zustand Store → API/Lib → Database (Supabase)
-
----
-
-## 🔌 External Services
-
-| Service | Purpose | Config Location |
-|---------|---------|-----------------|
-| Supabase | Backend (Auth, DB) | \`lib/supabase/\` |
-
----
-
-## 📝 Notes
-
-- Using Toh Framework v${VERSION}
-- Architecture tracking enabled
-
----
-*Last updated: ${timestamp}*
-`;
-
-  // components.md (v1.7.0 - Component Registry)
-  const componentsContent = `# 📦 Component Registry
-
-> Quick reference for all project components, hooks, and utilities
-> **Update:** After creating/modifying any component, hook, or utility
-
----
-
-## 📄 Pages
-
-| Route | File | Description | Key Dependencies |
-|-------|------|-------------|------------------|
-| \`/\` | \`app/page.tsx\` | Landing page | - |
-
----
-
-## 🧩 Components
-
-### Layout Components
-
-| Component | Location | Key Props | Used By |
-|-----------|----------|-----------|---------|
-| (none yet) | - | - | - |
-
-### Feature Components
-
-| Component | Location | Key Props | Used By |
-|-----------|----------|-----------|---------|
-| (none yet) | - | - | - |
-
----
-
-## 🪝 Custom Hooks
-
-| Hook | Location | Purpose | Returns |
-|------|----------|---------|---------|
-| (none yet) | - | - | - |
-
----
-
-## 🏪 Zustand Stores
-
-| Store | Location | State Shape | Key Actions |
-|-------|----------|-------------|-------------|
-| (none yet) | - | - | - |
-
----
-
-## 🛠️ Utility Functions
-
-| Function | Location | Purpose | Params |
-|----------|----------|---------|--------|
-| cn | \`lib/utils.ts\` | Merge Tailwind classes | \`...inputs\` |
-
----
-
-## 📊 Component Statistics
-
-| Category | Count |
-|----------|-------|
-| Pages | 1 |
-| Components | 0 |
-| Hooks | 0 |
-| Stores | 0 |
-
----
-*Last updated: ${timestamp}*
-`;
-
-  // changelog.md (v1.8.0 - Session Changelog)
-  const changelogContent = `# 📝 Session Changelog
-
-## [Current Session] - ${timestamp}
-
-### Changes Made
-| Agent | Action | File/Component |
-|-------|--------|----------------|
-| - | - | - |
-
-### Next Session TODO
-- [ ] Continue from: [last task]
-
----
-*Auto-updated by agents after each task*
-`;
-
-  // agents-log.md (v1.8.0 - Agent Activity Log)
-  const agentsLogContent = `# 🤖 Agents Activity Log
-
-## Recent Activity
-| Time | Agent | Task | Status | Files |
-|------|-------|------|--------|-------|
-| - | - | - | - | - |
-
-## Agent Statistics
-- Total Tasks: 0
-- Success Rate: 100%
-
----
-*Auto-updated by agents during execution*
-`;
-
-  // Write all 7 memory files (v1.8.0)
-  await fs.writeFile(path.join(memoryDir, 'active.md'), activeContent);
-  await fs.writeFile(path.join(memoryDir, 'summary.md'), summaryContent);
-  await fs.writeFile(path.join(memoryDir, 'decisions.md'), decisionsContent);
-  await fs.writeFile(path.join(memoryDir, 'architecture.md'), architectureContent);
-  await fs.writeFile(path.join(memoryDir, 'components.md'), componentsContent);
-  await fs.writeFile(path.join(memoryDir, 'changelog.md'), changelogContent);
-  await fs.writeFile(path.join(memoryDir, 'agents-log.md'), agentsLogContent);
+  if (catalog.length === 0) {
+    throw new Error(`No TOH commands found in ${commandsDir} — cannot generate Codex skills.`);
+  }
+  return catalog;
 }
 
-export async function setupCodex(targetDir, srcDir, language = 'en') {
-  // Create .toh/memory directory structure (v1.1.0 - Memory System)
+// ============================================================
+// Codex skill generation
+// ============================================================
+
+/**
+ * Build the SKILL.md body for one command. Deterministic: no timestamps.
+ * Paths are project-root relative (Codex runs from the project root).
+ */
+function renderSkillMd(entry) {
+  const triggers = [entry.command, ...entry.aliases].map((c) => `\`${c}\``).join(', ');
+  // Description rules (Codex): 1-1024 chars, key use case + trigger words
+  // front-loaded so implicit matching survives description shortening.
+  const description =
+    `${entry.description} — TOH Framework workflow (${entry.command}). ` +
+    `Trigger words: ${[entry.command, ...entry.aliases].join(', ')}.`.slice(0, 1024);
+
+  const supporting = entry.skills.length
+    ? `2. Read every supporting skill BEFORE executing:\n${entry.skills
+        .map((s) => `   - \`.toh/skills/${s}/SKILL.md\``)
+        .join('\n')}\n3. Execute the workflow in this session, in order.`
+    : '2. Execute the workflow in this session, in order.';
+
+  return `---
+name: ${entry.skillName}
+description: ${yaml.dump(description, { lineWidth: -1, noRefs: true }).trim()}
+metadata:
+  generator: ${SKILL_GENERATOR}
+  version: ${VERSION}
+---
+
+# ${entry.command} — ${entry.description}
+
+> Codex-native wrapper for the TOH Framework workflow ${entry.command}.
+> Generated by ${SKILL_GENERATOR} — do not edit by hand; re-run
+> \`npx toh-framework install --ide codex\` to update.
+> All paths below are relative to the project root (the directory holding \`.codex/\`).
+
+## When to use
+
+${entry.description}. Triggers: ${triggers}, or any plain-language request that matches.
+
+## Workflow
+
+1. Read the full workflow definition: \`.toh/commands/${entry.file}\`
+${supporting}
+
+If \`.toh/commands/${entry.file}\` is missing (TOH commands component not
+installed), follow the supporting skills directly — they carry the same rules.
+
+## Codex constraints
+
+- **No subagents/teams** — where the workflow says "spawn" or "delegate", do
+  that work inline, one task at a time, in this session.
+- **No Claude Code Stop hook** — self-enforce THE TOH LOOP: do not end the run
+  while \`.toh/plan.md\` has unchecked, unblocked tasks.
+- **No model routing** — ignore haiku/sonnet/opus tiers mentioned in TOH docs.
+- **State** — persist everything under \`.toh/\` (\`plan.md\`, \`progress.md\`,
+  \`memory/\`); resume = continue at the first unchecked \`[ ]\` task.
+
+## Legacy command text
+
+If the user typed ${triggers} as text: that is this skill. \`/toh-*\` is
+compatibility text interpreted via AGENTS.md, not a native Codex slash command.
+`;
+}
+
+/**
+ * Install .codex/skills/<toh-*>/SKILL.md for every command in the catalog.
+ * - writes are idempotent (same input -> same bytes)
+ * - stale TOH-managed skills (generator marker, no longer in catalog) are removed
+ * - user skills (including user skills named toh-*) are never touched
+ * Returns the list of installed skill names.
+ */
+export async function installCodexSkills(targetDir, srcDir) {
+  const catalog = await readCommandCatalog(srcDir);
+  const skillsRoot = path.join(targetDir, '.codex', 'skills');
+  await fs.ensureDir(skillsRoot);
+
+  const wanted = new Set(catalog.map((c) => c.skillName));
+
+  // Remove stale TOH-managed skills (identified by the generator marker —
+  // never by directory name alone, so user skills are safe).
+  for (const entry of await fs.readdir(skillsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || wanted.has(entry.name)) continue;
+    const skillFile = path.join(skillsRoot, entry.name, 'SKILL.md');
+    if (!(await fs.pathExists(skillFile))) continue;
+    try {
+      const head = (await fs.readFile(skillFile, 'utf8')).slice(0, 4096);
+      if (head.includes(`generator: ${SKILL_GENERATOR}`)) {
+        await fs.remove(path.join(skillsRoot, entry.name));
+      }
+    } catch {
+      // Unreadable file -> leave it alone; never delete what we can't classify.
+    }
+  }
+
+  for (const entry of catalog) {
+    const dir = path.join(skillsRoot, entry.skillName);
+    await fs.ensureDir(dir);
+    await fs.writeFile(path.join(dir, 'SKILL.md'), renderSkillMd(entry));
+  }
+
+  return catalog.map((c) => c.skillName);
+}
+
+// ============================================================
+// AGENTS.md (managed block only)
+// ============================================================
+
+function renderSkillTable(catalog) {
+  const rows = catalog
+    .map((c) => `| \`$${c.skillName}\` | ${c.description} |`)
+    .join('\n');
+  return `| Skill | Use it to |
+|-------|-----------|
+${rows}`;
+}
+
+function generateAgentsMdEN(catalog) {
+  return `${AGENTS_BLOCK_START}
+# 🎯 Toh Framework
+
+> **"Type Once, Have it all!"** — AI-Orchestration Driven Development
+
+## Identity
+
+You are the **Toh Framework Agent** running in **Codex CLI**, helping solo developers build SaaS systems by themselves.
+
+${renderCapabilitiesSection('codex')}
+
+## Using TOH in Codex (native skills)
+
+TOH workflows are installed as **native Codex skills** under \`.codex/skills/\` — this is the canonical integration:
+
+${renderSkillTable(catalog)}
+
+- Invoke explicitly with \`$<skill>\` (or browse with \`/skills\`), or describe the task — Codex matches skills by description.
+- Each skill reads its workflow from \`.toh/commands/\` and supporting rules from \`.toh/skills/\`.
+
+### Legacy \`/toh-*\` compatibility text
+
+Codex has no custom slash commands. If the user types \`/toh-plan\` or \`toh plan\`, interpret it as a request to use the matching skill in \`.codex/skills/\` — compatibility behavior, not a native command.
+
+## TOH runtime & state (\`.toh/\`)
+
+- \`.toh/plan.md\` + \`.toh/progress.md\` — the plan IS a file; resume = first unchecked \`[ ]\` task
+- \`.toh/memory/\` — 7-file memory (protocol below)
+- \`.toh/skills/\` · \`.toh/commands/\` · \`.toh/capabilities.json\`
+
+## Codex constraints (vs Claude Code)
+
+- **No subagents/teams** — run THE TOH LOOP sequentially in this session (see \`.toh/skills/orchestration-protocol/SKILL.md\`): implement → run the task's checkpoint → quote real output → fix if red (max 5 tries; 3 consecutive failures = \`- [!] BLOCKED\`) → tick the checkbox → next task without asking.
+- **No Stop hook** — self-enforce: never end the session while \`.toh/plan.md\` has unchecked, unblocked tasks.
+- **No model routing** — ignore haiku/sonnet/opus tiers in TOH docs.
+
+## Memory protocol (tiered)
+
+- BEFORE work: read \`.toh/memory/active.md\` + \`summary.md\` (always); \`architecture.md\` + \`components.md\` for build tasks; \`changelog.md\` for debugging; \`decisions.md\` / \`agents-log.md\` only when referenced.
+- AFTER work: always update \`active.md\`; update the others per relevance. Memory files are always in English.
+- Close every stage per \`.toh/skills/engineer-harness/SKILL.md\` (Status / Result / Evidence / exactly 3 next actions).
+
+${AGENTS_BLOCK_END}`;
+}
+
+function generateAgentsMdTH(catalog) {
+  return `${AGENTS_BLOCK_START}
+# 🎯 Toh Framework
+
+> **"Type Once, Have it all!"** — AI-Orchestration Driven Development
+> "สั่งครั้งเดียว จบครบโดยไม่ต้องถาม"
+
+## Identity
+
+คุณคือ **Toh Framework Agent** ที่รันอยู่บน **Codex CLI** — ช่วย Solo Developer สร้าง SaaS คนเดียวจนจบ
+
+${renderCapabilitiesSection('codex')}
+
+## การใช้ TOH ใน Codex (native skills)
+
+เวิร์กโฟลว์ TOH ถูกติดตั้งเป็น **native Codex skills** ไว้ที่ \`.codex/skills/\` — นี่คือช่องทางหลัก:
+
+${renderSkillTable(catalog)}
+
+- เรียกตรงๆ ด้วย \`$<skill>\` (หรือพิมพ์ \`/skills\` เพื่อดูทั้งหมด) หรือแค่บรรยายงาน — Codex จะจับคู่ skill จาก description เอง
+- แต่ละ skill อ่านเวิร์กโฟลว์จาก \`.toh/commands/\` และกฎประกอบจาก \`.toh/skills/\`
+
+### ข้อความ \`/toh-*\` แบบเดิม (compatibility)
+
+Codex ไม่มี slash command แบบกำหนดเอง ถ้าผู้ใช้พิมพ์ \`/toh-plan\` หรือ \`toh plan\` ให้ตีความว่าเป็นคำขอใช้ skill ที่ตรงกันใน \`.codex/skills/\` — เป็น compatibility behavior ไม่ใช่ native command
+
+## TOH runtime & state (\`.toh/\`)
+
+- \`.toh/plan.md\` + \`.toh/progress.md\` — แผนคือไฟล์; resume = task แรกที่ยังไม่ติ๊ก \`[ ]\`
+- \`.toh/memory/\` — memory 7 ไฟล์ (protocol ด้านล่าง)
+- \`.toh/skills/\` · \`.toh/commands/\` · \`.toh/capabilities.json\`
+
+## ข้อจำกัดของ Codex (เทียบ Claude Code)
+
+- **ไม่มี subagents/teams** — รัน THE TOH LOOP แบบ sequential ใน session นี้ (ดู \`.toh/skills/orchestration-protocol/SKILL.md\`): implement → รัน checkpoint ของ task → quote output จริง → แก้ถ้าแดง (สูงสุด 5 ครั้ง; แพ้ 3 ครั้งติด = \`- [!] BLOCKED\`) → ติ๊ก checkbox → ทำ task ถัดไปโดยไม่ต้องถาม
+- **ไม่มี Stop hook** — บังคับตัวเอง: ห้ามจบ session ถ้า \`.toh/plan.md\` ยังมี task ที่ไม่ได้ติ๊กและไม่ blocked
+- **ไม่มี model routing** — ข้าม tier haiku/sonnet/opus ในเอกสาร TOH
+
+## Memory protocol (tiered)
+
+- ก่อนทำงาน: อ่าน \`.toh/memory/active.md\` + \`summary.md\` เสมอ; \`architecture.md\` + \`components.md\` สำหรับงาน build; \`changelog.md\` สำหรับงาน debug; \`decisions.md\` / \`agents-log.md\` เฉพาะเมื่อถูกอ้างถึง
+- หลังทำงาน: อัปเดต \`active.md\` เสมอ; ไฟล์อื่นตามความเกี่ยวข้อง — memory ทุกไฟล์เป็นภาษาอังกฤษ
+- ปิดทุก stage ตาม \`.toh/skills/engineer-harness/SKILL.md\` (Status / Result / Evidence / next actions 3 ข้อ)
+
+${AGENTS_BLOCK_END}`;
+}
+
+/**
+ * Insert or replace the TOH-managed block in AGENTS.md. All existing user
+ * content outside the markers is preserved; duplicate TOH blocks collapse
+ * into one, so repeated installs are idempotent by construction.
+ */
+export async function updateAgentsMd(targetDir, catalog, language = 'en') {
+  const block = language === 'th' ? generateAgentsMdTH(catalog) : generateAgentsMdEN(catalog);
+  const agentsPath = path.join(targetDir, 'AGENTS.md');
+
+  if (await fs.pathExists(agentsPath)) {
+    const existing = await fs.readFile(agentsPath, 'utf8');
+    const stripped = existing.replace(AGENTS_BLOCK_RE, '').trimEnd();
+    const next = stripped ? `${stripped}\n\n${block}\n` : `${block}\n`;
+    await fs.writeFile(agentsPath, next);
+  } else {
+    await fs.writeFile(agentsPath, `${block}\n`);
+  }
+  return agentsPath;
+}
+
+// ============================================================
+// .toh runtime (seed-if-absent — install.js is the primary seeder)
+// ============================================================
+
+/**
+ * Guarantee the TOH runtime skeleton exists. Seeds only when absent so a
+ * reinstall never clobbers live memory/plan state. install.js already creates
+ * the full runtime before IDE handlers run; this makes setupCodex() safe to
+ * call standalone (tests, partial reinstalls).
+ */
+export async function ensureTohRuntime(targetDir) {
   const tohDir = path.join(targetDir, '.toh');
   const memoryDir = path.join(tohDir, 'memory');
-  const archiveDir = path.join(memoryDir, 'archive');
-  await fs.ensureDir(archiveDir);
+  await fs.ensureDir(path.join(memoryDir, 'archive'));
 
-  // Create memory template files
-  await createMemoryFiles(memoryDir, language);
+  const today = new Date().toISOString().split('T')[0];
+  const seeds = {
+    'active.md': `# 🔥 Active Task\n\n## Current Work\n[No active task - Waiting for user command]\n\n## Last Action\n[None]\n\n## Next Steps\n- Waiting for user command\n\n## Blockers\n[None]\n`,
+    'summary.md': `# 📋 Project Summary\n\n## Project Info\n- **Name:** [Not specified]\n- **Type:** [Not specified]\n\n## Completed Features\n[None yet]\n\n## In Progress\n[None yet]\n`,
+    'decisions.md': `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${today} | Use Toh Framework v${VERSION} | AI-Orchestration Driven Development |\n`,
+    'changelog.md': `# 📝 Session Changelog\n\n## [Current Session] - ${today}\n\n### Changes Made\n| Agent | Action | File/Component |\n|-------|--------|----------------|\n| - | - | - |\n`,
+    'agents-log.md': `# 🤖 Agents Activity Log\n\n## Recent Activity\n| Time | Agent | Task | Status | Files |\n|------|-------|------|--------|-------|\n| - | - | - | - | - |\n`,
+    'architecture.md': `# 🏗️ Code Architecture\n\n## Directory Structure\n\`\`\`\n[Will be auto-generated when project starts]\n\`\`\`\n`,
+    'components.md': `# 🧩 Component Registry\n\n## UI Components\n| Component | Path | Props | Used In |\n|-----------|------|-------|---------|\n| - | - | - | - |\n`
+  };
 
-  // Read all agents
-  const srcAgentsDir = path.join(srcDir, 'agents');
-  let agentSections = '';
-  
-  if (await fs.pathExists(srcAgentsDir)) {
-    const agentFiles = await fs.readdir(srcAgentsDir);
-    for (const file of agentFiles) {
-      if (file.endsWith('.md') && file !== 'README.md') {
-        const raw = await fs.readFile(path.join(srcAgentsDir, file), 'utf-8');
-        const agentName = file.replace('.md', '');
-        // v2.0: agents now carry SUPERSET frontmatter (name/description/tools/
-        // model/skills/triggers). Strip the leading YAML block so Codex embeds a
-        // clean body only — no tools/model YAML leaking into AGENTS.md.
-        const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trimStart();
-        agentSections += `
-### toh-${agentName}
-
-${body}
-
----
-`;
-      }
-    }
-  }
-  
-  // Read commands summary
-  const srcCommandsDir = path.join(srcDir, 'commands');
-  let commandsList = '';
-  
-  if (await fs.pathExists(srcCommandsDir)) {
-    const commandFiles = await fs.readdir(srcCommandsDir);
-    for (const file of commandFiles) {
-      if (file.endsWith('.md') && file !== 'README.md') {
-        const cmdName = file.replace('.md', '').replace('toh-', '/toh-');
-        commandsList += `- \`${cmdName}\`\n`;
-      }
-    }
+  for (const [file, content] of Object.entries(seeds)) {
+    const p = path.join(memoryDir, file);
+    if (!(await fs.pathExists(p))) await fs.writeFile(p, content);
   }
 
-  // v2.0: run the assembled markdown through the shared marker transform so any
-  // <!-- tfw:claude --> blocks in embedded command/agent markdown are removed and
-  // <!-- tfw:fallback --> blocks are unwrapped for Codex (idempotent, additive).
-  const agentsMd = transformCommand(
-    language === 'th'
-      ? generateAgentsMdTH(commandsList, agentSections)
-      : generateAgentsMdEN(commandsList, agentSections),
-    'codex'
-  );
+  const planPath = path.join(tohDir, 'plan.md');
+  if (!(await fs.pathExists(planPath))) {
+    await fs.writeFile(
+      planPath,
+      `# Plan: (no active plan yet)\nStatus: draft\nCreated: ${today} by toh-framework installer\n\n> This file is THE TOH LOOP's backlog. Full schema + loop protocol:\n> \`.toh/skills/orchestration-protocol/SKILL.md\` (Section D).\n\nEmpty backlog — no stories yet. Run the \`toh-plan\` skill to draft a plan here, or\n\`toh-vibe\` to auto-generate a mini-plan and build it.\n`
+    );
+  }
 
-  // Check if AGENTS.md exists
+  const progressPath = path.join(tohDir, 'progress.md');
+  if (!(await fs.pathExists(progressPath))) {
+    await fs.writeFile(
+      progressPath,
+      `# Progress Ledger\n\n> Append-only, one line per state change: \`queued → running → done/failed/blocked\`.\n> Format: \`YYYY-MM-DD HH:MM T00x <state> — <detail>\`. Never rewrite history — append.\n`
+    );
+  }
+}
+
+// ============================================================
+// Public API
+// ============================================================
+
+/**
+ * Install the Codex integration. Returns a short detail string for the
+ * install spinner.
+ */
+export async function setupCodex(targetDir, srcDir, language = 'en') {
+  await ensureTohRuntime(targetDir);
+  const catalog = await readCommandCatalog(srcDir);
+  const installed = await installCodexSkills(targetDir, srcDir);
+  await updateAgentsMd(targetDir, catalog, language);
+  return `.codex/skills/ (${installed.length} skills) + AGENTS.md`;
+}
+
+/**
+ * Remove ONLY the TOH-managed Codex files:
+ *   - .codex/skills/<skill> dirs whose SKILL.md carries the TOH generator marker
+ *   - the TOH-managed block in AGENTS.md (file deleted if it becomes empty)
+ * User skills, user AGENTS.md content, and .toh/ runtime state are preserved.
+ * Returns { removedSkills, agentsMd: 'updated'|'removed'|'absent' }.
+ */
+export async function uninstallCodex(targetDir) {
+  const result = { removedSkills: [], agentsMd: 'absent' };
+
+  const skillsRoot = path.join(targetDir, '.codex', 'skills');
+  if (await fs.pathExists(skillsRoot)) {
+    for (const entry of await fs.readdir(skillsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const dir = path.join(skillsRoot, entry.name);
+      const skillFile = path.join(dir, 'SKILL.md');
+      if (!(await fs.pathExists(skillFile))) continue;
+      try {
+        const head = (await fs.readFile(skillFile, 'utf8')).slice(0, 4096);
+        if (head.includes(`generator: ${SKILL_GENERATOR}`)) {
+          await fs.remove(dir);
+          result.removedSkills.push(entry.name);
+        }
+      } catch {
+        // Leave unreadable entries untouched.
+      }
+    }
+    result.removedSkills.sort();
+  }
+
   const agentsPath = path.join(targetDir, 'AGENTS.md');
-  
   if (await fs.pathExists(agentsPath)) {
-    // Read existing content
-    let existing = await fs.readFile(agentsPath, 'utf-8');
-    
-    // Replace TOH section if exists, otherwise append
-    if (existing.includes('<!-- TOH-FRAMEWORK-START -->')) {
-      existing = existing.replace(
-        /<!-- TOH-FRAMEWORK-START -->[\s\S]*<!-- TOH-FRAMEWORK-END -->/,
-        agentsMd.trim()
-      );
-      await fs.writeFile(agentsPath, existing);
+    const existing = await fs.readFile(agentsPath, 'utf8');
+    const stripped = existing.replace(AGENTS_BLOCK_RE, '').trim();
+    if (stripped === existing.trim()) {
+      result.agentsMd = 'absent'; // no TOH block -> nothing to do
+    } else if (stripped) {
+      await fs.writeFile(agentsPath, `${stripped}\n`);
+      result.agentsMd = 'updated';
     } else {
-      await fs.appendFile(agentsPath, '\n\n' + agentsMd);
+      await fs.remove(agentsPath); // block was the whole file -> file was ours
+      result.agentsMd = 'removed';
     }
-  } else {
-    await fs.writeFile(agentsPath, agentsMd);
   }
-  
-  return true;
-}
 
-function generateAgentsMdEN(commandsList, agentSections) {
-  return `<!-- TOH-FRAMEWORK-START -->
-# 🎯 Toh Framework
-
-> **"Type Once, Have it all!"** - AI-Orchestration Driven Development
-
-## Project Memory
-
-This file serves as project memory for Codex CLI/Web. It contains the Toh Framework configuration and agent definitions.
-
-## Identity
-
-You are the **Toh Framework Agent** - an AI that helps Solo Developers build SaaS systems by themselves.
-
-${renderCapabilitiesSection('codex')}
-
-Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
-
-## Core Philosophy (AODD - AI-Orchestration Driven Development)
-
-1. **Natural Language → Tasks** - Users give commands in plain language, you break them into tasks
-2. **Orchestrator → Agents** - Automatically invoke relevant agents to complete work
-3. **Users Don't Touch the Process** - No questions, no waiting, just deliver results
-4. **Test → Fix → Loop** - Test, fix issues, repeat until passing
-
-## Tech Stack (Fixed - NEVER CHANGE)
-
-| Category | Technology |
-|----------|------------|
-| Framework | Next.js 14 (App Router) |
-| Styling | Tailwind CSS + shadcn/ui |
-| State | Zustand |
-| Forms | React Hook Form + Zod |
-| Backend | Supabase |
-| Testing | Playwright |
-| Language | TypeScript (strict) |
-
-## Language Rules
-
-- **Response Language:** Respond in the same language the user uses (if unclear, default to English)
-- **UI Labels/Buttons:** English (Save, Cancel, Dashboard)
-- **Mock Data:** English names, addresses, phone numbers
-- **Code Comments:** English
-- **Validation Messages:** English
-
-If user writes in Thai, respond in Thai.
-
-## 🚨 Command Recognition (CRITICAL)
-
-> **YOU MUST recognize and execute these commands immediately!**
-> When user types ANY of these patterns, treat them as direct commands.
-
-### Command Patterns to Recognize:
-
-| Full Command | Shortcuts (ALL VALID) | Action |
-|-------------|----------------------|--------|
-| \`/toh-help\` | \`/toh-h\`, \`toh help\`, \`toh h\` | Show all commands |
-| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | **THE BRAIN** - Analyze, plan |
-| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project |
-| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI components |
-| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add logic & state |
-| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve design |
-| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Auto test & fix |
-| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Supabase |
-| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App (convert) |
-| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | PWA / Capacitor |
-| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
-| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
-| \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
-
-### ⚡ Execution Rules:
-
-1. **Instant Recognition** - When you see \`/toh-\` or \`toh \` prefix, this is a COMMAND
-2. **Check for Description** - Does the command have a description after it?
-   - ✅ **Has description** → Execute immediately
-   - ❓ **No description** → Ask user first: "I'm the [Agent Name] agent. What would you like me to help you with?"
-3. **No Confirmation for Described Commands** - If description exists, execute without asking
-4. **Follow Memory Protocol** - Read/write \`.toh/memory/\` before/after
-
-### Command Without Description Behavior:
-
-| Command Only | Response |
-|-------------|----------|
-| \`/toh-vibe\` | "I'm the **Vibe Agent** 🎨. What system would you like me to build?" |
-| \`/toh-ui\` | "I'm the **UI Agent** 🖼️. What UI would you like me to create?" |
-| \`/toh-dev\` | "I'm the **Dev Agent** ⚙️. What functionality should I implement?" |
-| \`/toh-design\` | "I'm the **Design Agent** ✨. What should I polish?" |
-| \`/toh-test\` | "I'm the **Test Agent** 🧪. What should I test?" |
-| \`/toh-connect\` | "I'm the **Connect Agent** 🔌. What should I connect?" |
-| \`/toh-plan\` | "I'm the **Plan Agent** 🧠. What project should I plan?" |
-| \`/toh-help\` | (Always show help immediately) |
-
-### Examples:
-
-\`\`\`
-User: /toh-v restaurant management
-→ Execute /toh-vibe to create restaurant management system
-
-User: toh ui dashboard
-→ Execute /toh-ui to create dashboard UI
-\`\`\`
-
-## Available Commands
-
-| Command | Description |
-|---------|-------------|
-| \`/toh-help\` | Show all available commands |
-| \`/toh-plan\` | **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
-| \`/toh-vibe\` | Create new project with UI + Logic + Mock Data |
-| \`/toh-ui\` | Create UI - Pages, Components, Layouts |
-| \`/toh-dev\` | Add Logic - TypeScript, Zustand, Forms |
-| \`/toh-design\` | Improve Design - Make it look professional |
-| \`/toh-test\` | Test system - Auto test & fix until passing |
-| \`/toh-connect\` | Connect Backend - Supabase, Auth, RLS |
-| \`/toh-line\` | LINE MINI App - convert (LIFF SDK) |
-| \`/toh-mobile\` | Mobile App - PWA / Capacitor |
-| \`/toh-fix\` | Fix bugs - Debug and fix issues |
-| \`/toh-ship\` | Deploy - Vercel, Production ready |
-| \`/toh-protect\` | Security audit - Full security check |
-
-## Memory System (Auto, 7 files — Tiered Loading)
-
-Toh Framework has automatic memory at \`.toh/memory/\`. Read only what the task needs:
-- **Tier 1 (ALWAYS read, ~800 tokens):** \`active.md\` (current task) + \`summary.md\` (project overview)
-- **Tier 2 (per task type):** \`architecture.md\` + \`components.md\` for build/code work; \`changelog.md\` for debug work
-- **Tier 3 (only when referenced):** \`decisions.md\` (past decisions) + \`agents-log.md\` (agent activity)
-- \`archive/\` - Historical data (on-demand only)
-
-## 🚨 MANDATORY: Memory Protocol (Tiered Loading)
-
-> **CRITICAL:** You MUST follow this protocol EVERY time! Never read all 7 files by reflex.
-
-### BEFORE Starting ANY Work:
-1. Check \`.toh/memory/\` folder exists
-2. Read Tier 1: \`.toh/memory/active.md\` + \`.toh/memory/summary.md\`
-3. Read Tier 2 for this task type (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
-4. Read Tier 3 (\`decisions.md\`, \`agents-log.md\`) ONLY when referenced
-5. If files empty but project has code → ANALYZE and populate first!
-6. Acknowledge: "Memory loaded! [Brief context]"
-
-### AFTER Completing ANY Work (write per relevance):
-1. Update \`.toh/memory/active.md\` - ALWAYS (what was done, next steps)
-2. Update \`.toh/memory/summary.md\` - when the project shape changes (feature done / new structure)
-3. Update \`.toh/memory/architecture.md\` / \`components.md\` - when modules/stores/hooks/utils change
-4. Update \`.toh/memory/changelog.md\` + \`agents-log.md\` - record the change and which agent did it
-5. Update \`.toh/memory/decisions.md\` - if a real decision was made
-6. Confirm: "Memory saved ✅"
-
-### ⚠️ CRITICAL RULES:
-- NEVER start work without reading Tier 1 (active.md + summary.md)!
-- NEVER finish work without updating active.md!
-- Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
-- Memory files must ALWAYS be in English!
-
-## Command Usage Examples
-
-### Create New Project
-\`\`\`
-/toh-vibe A coffee shop management system with POS, inventory, and sales reports
-\`\`\`
-
-### Add UI
-\`\`\`
-/toh-ui Add a dashboard page showing daily sales
-\`\`\`
-
-### Add Logic
-\`\`\`
-/toh-dev Make the date filter work properly
-\`\`\`
-
-### Improve Design
-\`\`\`
-/toh-design Make it look professional, not like AI-generated
-\`\`\`
-
-### Test System
-\`\`\`
-/toh-test Test all pages
-\`\`\`
-
-### Connect Backend
-\`\`\`
-/toh-connect Connect to Supabase with auth
-\`\`\`
-
-### Deploy
-\`\`\`
-/toh-ship Deploy to Vercel
-\`\`\`
-
-## Behavior Rules
-
-1. **Don't ask basic questions** - Make decisions yourself
-2. **Use the fixed tech stack** - Never change it
-3. **Respond in English** - All communication in English
-4. **English Mock Data** - Use English names, addresses, phone numbers
-5. **UI First** - Create working UI before backend
-6. **Production Ready** - Not a prototype
-
-## Mock Data Examples
-
-Use realistic English data:
-- Names: John, Mary, Michael, Sarah
-- Last names: Smith, Johnson, Williams
-- Cities: New York, Los Angeles, Chicago
-- Phone: (555) 123-4567
-- Email: john.smith@example.com
-
-## Agents
-
-${agentSections}
-
-## 🚨 MANDATORY: Skills & Agents Loading
-
-> **CRITICAL:** Before executing ANY /toh- command, you MUST load the required skills!
-
-### Command → Skills Map
-
-| Command | Load These Skills (from \`.toh/skills/\`) |
-|---------|------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
-| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
-| \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
-| \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
-| \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
-| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
-| \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
-| \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
-| \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
-| \`/toh-ship\` | \`version-control\`, \`progress-tracking\` |
-
-### Core Skills (Always Available)
-- \`memory-system\` - Memory read/write protocol
-- \`engineer-harness\` - Smart tool selection + human-friendly reporting + next steps
-- \`smart-routing\` - Command routing logic
-
-### Loading Protocol:
-1. User types /toh-[command]
-2. Read required skill files from \`.toh/skills/[skill-name]/SKILL.md\`
-3. Execute following skill instructions
-4. Save memory after completion
-
-### ⚠️ NEVER Skip Skills!
-Skills contain CRITICAL best practices, design tokens, and rules.
-
-## 🔒 Skills Loading Checkpoint (REQUIRED)
-
-> **ENFORCEMENT:** You MUST report skills loaded at the START of your response!
-
-### Required Response Start:
-
-\`\`\`markdown
-📚 **Skills Loaded:**
-- skill-name-1 ✅ (brief what you learned)
-- skill-name-2 ✅ (brief what you learned)
-
-🤖 **Agent:** agent-name
-
-💾 **Memory:** Loaded ✅
-
----
-
-[Then continue with your work...]
-\`\`\`
-
-### Why This Matters:
-- If you don't report skills → You didn't read them
-- If you skip skills → Output quality drops significantly
-- Skills have design tokens, patterns, and critical rules
-- This checkpoint proves you followed the protocol
-
-## Skills Reference
-
-All skills are in \`.toh/skills/\` (Central Resources):
-- \`vibe-orchestrator\` - Core methodology
-- \`ui-first-builder\` - UI patterns
-- \`dev-engineer\` - TypeScript, State, Forms
-- \`design-craft\` - Design system, anti-patterns & business-appropriate fit
-- \`premium-experience\` - Premium multi-page apps
-- \`test-engineer\` - Testing with Playwright
-- \`backend-engineer\` - Supabase integration
-- \`platform-specialist\` - LINE, Mobile, Desktop
-- \`memory-system\` - Memory protocol
-- \`engineer-harness\` - Smart tool selection, reporting & next steps
-- \`debug-protocol\` - Debugging guide
-- \`error-handling\` - Error handling patterns
-
-## Getting Started
-
-Start with:
-\`\`\`
-/toh-vibe [describe what system you want]
-\`\`\`
-
-The AI will:
-1. Analyze your requirements
-2. Break down into tasks
-3. Create UI with English mock data
-4. Add logic and state management
-5. Polish the design
-6. Deliver production-ready code
-
----
-
-**GitHub:** https://github.com/ArtificialWeb/toh-framework
-**Author:** Wasin Treesinthuros (Innovation Vantage)
-
-<!-- TOH-FRAMEWORK-END -->
-`;
-}
-
-function generateAgentsMdTH(commandsList, agentSections) {
-  return `<!-- TOH-FRAMEWORK-START -->
-# 🎯 Toh Framework
-
-> **"Type Once, Have it all!"** - AI-Orchestration Driven Development
-> **"Command once, done without questions"**
-
-## Project Memory
-
-This file is project memory for Codex CLI/Web containing Toh Framework configuration and agent definitions
-
-## Identity
-
-You are **Toh Framework Agent** - AI that helps Solo Developers build SaaS by themselves
-
-${renderCapabilitiesSection('codex')}
-
-Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
-
-## Core Philosophy (AODD - AI-Orchestration Driven Development)
-
-1. **Human Language → Tasks** - User commands naturally, you break into tasks
-2. **Orchestrator → Agents** - Call relevant agents to work automatically
-3. **User doesn't handle process** - No questions, no waiting, just complete it
-4. **Test → Fix → Loop** - Test, fix, until pass
-
-## Tech Stack (Do not change!)
-
-| Category | Technology |
-|------|----------|
-| Framework | Next.js 14 (App Router) |
-| Styling | Tailwind CSS + shadcn/ui |
-| State | Zustand |
-| Forms | React Hook Form + Zod |
-| Backend | Supabase |
-| Testing | Playwright |
-| Language | TypeScript (strict) |
-
-## Language Rules
-
-- **Response Language:** Match user's language (if unsure, use Thai)
-- **UI Labels/Buttons:** Thai (Save, Cancel, Dashboard)
-- **Mock Data:** Thai names, addresses, phone numbers
-- **Code Comments:** Thai allowed
-- **Validation Messages:** Thai
-
-If user types in English, respond in English
-
-## 🚨 Command Handling (Very Important!)
-
-> **You must remember and execute these commands immediately!**
-> When user types any pattern below, treat it as a direct command
-
-### Command Patterns to Remember:
-
-| Full Command | Shortcuts (ALL VALID) | Action |
-|-------------|----------------------|--------|
-| \`/toh-help\` | \`/toh-h\`, \`toh help\`, \`toh h\` | Show all commands |
-| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | 🧠 THE BRAIN - Analyze, plan |
-| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project |
-| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI |
-| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add logic & state |
-| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve design |
-| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Auto test & fix |
-| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Supabase |
-| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App (convert) |
-| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App (PWA / Capacitor) |
-| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
-| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
-| \`/toh-protect\` | \`/toh-pr\`, \`toh protect\`, \`toh pr\` | Security audit |
-
-### ⚡ Execution Rules:
-
-1. **Remember Immediately** - See \`/toh-\` or \`toh \` = command!
-2. **Check Description** - Does command have description after?
-   - ✅ **Has description** → Execute immediately
-   - ❓ **No description** → Ask first: "I'm [Agent Name], what would you like me to help with?"
-3. **No confirmation if Description exists** - Has description = execute
-4. **Follow Memory Protocol** - Read/write \`.toh/memory/\`
-
-### Behavior When No Description:
-
-| Command Only | Response |
-|-----------|--------|
-| \`/toh-vibe\` | "I'm **Vibe Agent** 🎨, what system would you like me to create?" |
-| \`/toh-ui\` | "I'm **UI Agent** 🖼️, what UI would you like me to create?" |
-| \`/toh-dev\` | "I'm **Dev Agent** ⚙️, what functionality would you like me to add?" |
-| \`/toh-design\` | "I'm **Design Agent** ✨, what would you like me to improve?" |
-| \`/toh-test\` | "I'm **Test Agent** 🧪, what would you like me to test?" |
-| \`/toh-connect\` | "I'm **Connect Agent** 🔌, what would you like me to connect?" |
-| \`/toh-plan\` | "I'm **Plan Agent** 🧠, what would you like me to plan?" |
-| \`/toh-help\` | (Always show help immediately) |
-
-### Examples:
-
-\`\`\`
-User: /toh-v restaurant management system
-→ Execute /toh-vibe create restaurant management system
-
-User: toh ui dashboard
-→ Execute /toh-ui create dashboard
-\`\`\`
-
-## Available Commands
-
-| Command | Description |
-|---------|-------------|
-| \`/toh-help\` | Show all commands |
-| \`/toh-plan\` | 🧠 **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
-| \`/toh-vibe\` | Create new project - UI + Logic + Mock Data |
-| \`/toh-ui\` | Create UI - Pages, Components, Layouts |
-| \`/toh-dev\` | Add Logic - TypeScript, Zustand, Forms |
-| \`/toh-design\` | Polish Design - Make it beautiful, not AI-looking |
-| \`/toh-test\` | Test system - Auto test & fix until pass |
-| \`/toh-connect\` | Connect Backend - Supabase, Auth, RLS |
-| \`/toh-line\` | LINE MINI App - convert (LIFF SDK) |
-| \`/toh-mobile\` | Mobile App - PWA / Capacitor |
-| \`/toh-fix\` | Fix Bug - Debug and fix issues |
-| \`/toh-ship\` | Deploy - Vercel, Production ready |
-| \`/toh-protect\` | 🔐 Security Audit - Full security check |
-
-## Memory System (Automatic, 7 files — Tiered Loading)
-
-Toh Framework has Memory system at \`.toh/memory/\`. Read only what the task needs:
-- **Tier 1 (ALWAYS read, ~800 tokens):** \`active.md\` (current task) + \`summary.md\` (project overview)
-- **Tier 2 (per task type):** \`architecture.md\` + \`components.md\` for build/code work; \`changelog.md\` for debug work
-- **Tier 3 (only when referenced):** \`decisions.md\` (past decisions) + \`agents-log.md\` (agent activity)
-- \`archive/\` - Historical data (load when needed)
-
-## 🚨 Required: Memory Protocol (Tiered Loading)
-
-> **Important:** Must follow this every time! Never read all 7 files by reflex.
-
-### Before Starting Work:
-1. Check if \`.toh/memory/\` folder exists
-2. Read Tier 1: \`.toh/memory/active.md\` + \`.toh/memory/summary.md\`
-3. Read Tier 2 for this task type (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
-4. Read Tier 3 (\`decisions.md\`, \`agents-log.md\`) ONLY when referenced
-5. If files empty but code exists → Analyze project first!
-6. Tell User: "Memory loaded! [brief summary]"
-
-### After Completing Work (write per relevance):
-1. Update \`.toh/memory/active.md\` - ALWAYS (What was done, next steps)
-2. Update \`.toh/memory/summary.md\` - when the project shape changes (feature done / new structure)
-3. Update \`.toh/memory/architecture.md\` / \`components.md\` - when modules/stores/hooks/utils change
-4. Update \`.toh/memory/changelog.md\` + \`agents-log.md\` - record the change and which agent did it
-5. Update \`.toh/memory/decisions.md\` - if a real decision was made
-6. Tell User: "Memory saved ✅"
-
-### ⚠️ Important Rules:
-- Never start work without reading Tier 1 (active.md + summary.md)!
-- Never finish work without updating active.md!
-- Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
-- Memory files must always be in English!
-
-## Usage Examples
-
-### Create New Project
-\`\`\`
-/toh-vibe coffee shop management with POS, inventory, sales reports
-\`\`\`
-
-### Add UI
-\`\`\`
-/toh-ui add dashboard page showing daily sales
-\`\`\`
-
-### Add Logic
-\`\`\`
-/toh-dev make date filter actually work
-\`\`\`
-
-### Polish Design
-\`\`\`
-/toh-design make it look professional, not AI-generated
-\`\`\`
-
-### Test System
-\`\`\`
-/toh-test test all pages
-\`\`\`
-
-### Connect Backend
-\`\`\`
-/toh-connect connect Supabase with auth
-\`\`\`
-
-### Deploy
-\`\`\`
-/toh-ship deploy to Vercel
-\`\`\`
-
-## Rules to Follow
-
-1. **No Basic Questions** - Decide yourself
-2. **Use Fixed Tech Stack** - Don't change
-3. **Respond in Thai** - All communication in Thai
-4. **Thai Mock Data** - Use Thai names, addresses, phone numbers
-5. **UI First** - Build UI first to visualize
-6. **Production Ready** - Not a prototype
-
-## Mock Data Examples
-
-Use realistic Thai data:
-- First names: Somchai, Somying, Manee, Mana
-- Last names: Jaidee, Rakrian, Suksun
-- Addresses: Bangkok, Chiang Mai, Phuket
-- Phone: 081-234-5678
-- Email: somchai@example.com
-
-## Agents
-
-${agentSections}
-
-## 🚨 Required: Load Skills & Agents
-
-> **Important:** Before executing any /toh- command, must load related skills!
-
-### Command → Skills Map
-
-| Command | Load These Skills (from \`.toh/skills/\`) |
-|--------|-------------------------------------------|
-| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
-| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
-| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
-| \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
-| \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
-| \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
-| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
-| \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
-| \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
-| \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
-| \`/toh-ship\` | \`version-control\`, \`progress-tracking\` |
-
-### Core Skills (Always Available)
-- \`memory-system\` - Memory system
-- \`engineer-harness\` - Smart tool selection + human-friendly reporting + next steps
-- \`smart-routing\` - Command routing
-
-### Loading Steps:
-1. User types /toh-[command]
-2. Read skill files from \`.toh/skills/[skill-name]/SKILL.md\`
-3. Execute according to skill instructions
-4. Save memory after completion
-
-### ⚠️ Never Skip Skills!
-Skills contain best practices, design tokens, and important rules
-
-## 🔒 Skills Loading Checkpoint (Required)
-
-> **Required:** Must report loaded skills at the beginning of response!
-
-### Response Start Format:
-
-\`\`\`markdown
-📚 **Skills Loaded:**
-- skill-name-1 ✅ (brief summary of what was loaded)
-- skill-name-2 ✅ (brief summary of what was loaded)
-
-🤖 **Agent:** agent name
-
-💾 **Memory:** loaded ✅
-
----
-
-[then continue with work...]
-\`\`\`
-
-### Why This Is Required:
-- If skills not reported → means not read
-- If skills skipped → work quality will decrease significantly
-- Skills contain design tokens, patterns, and important rules
-- This checkpoint proves protocol compliance
-
-## Skills Reference
-
-All skills are located at \`.toh/skills/\` (Central Resources):
-- \`vibe-orchestrator\` - Core methodology
-- \`ui-first-builder\` - UI patterns
-- \`dev-engineer\` - TypeScript, State, Forms
-- \`design-craft\` - Design system, anti-patterns & business-appropriate fit
-- \`premium-experience\` - Premium multi-page apps
-- \`test-engineer\` - Testing with Playwright
-- \`backend-engineer\` - Supabase integration
-- \`platform-specialist\` - LINE, Mobile, Desktop
-- \`memory-system\` - Memory protocol
-- \`engineer-harness\` - Smart tool selection, reporting & next steps
-
-## Getting Started
-
-Start with:
-\`\`\`
-/toh-vibe [describe the system you want]
-\`\`\`
-
-AI will:
-1. Analyze requirements
-2. Break down tasks
-3. Create UI with Thai mock data
-4. Add logic and state management
-5. Polish design to look beautiful
-6. Deliver production-ready code
-
----
-
-**GitHub:** https://github.com/ArtificialWeb/toh-framework
-**Author:** Wasin Treesinthuros (Innovation Vantage)
-
-<!-- TOH-FRAMEWORK-END -->
-`;
+  return result;
 }

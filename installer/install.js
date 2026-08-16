@@ -12,12 +12,18 @@ import { dirname, join } from 'path';
 import { setupClaudeCode } from './ide-handlers/claude-code.js';
 import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
-import { setupCodex } from './ide-handlers/codex.js';
+import { setupCodex, uninstallCodex } from './ide-handlers/codex.js';
 import { transformCommand, writeCapabilitiesJson } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SRC_DIR = join(__dirname, '..', 'src');
+
+// ora corrupts the node:test child-process IPC channel (Node 24), so tests set
+// TOH_QUIET=1 to silence spinners. Default CLI behavior is unchanged.
+function startSpinner(text) {
+  return ora({ text, isSilent: process.env.TOH_QUIET === '1' }).start();
+}
 
 // Read version from package.json (Single Source of Truth)
 const PKG_PATH = join(__dirname, '..', 'package.json');
@@ -45,17 +51,21 @@ export async function install(options) {
   }
 
   // Validate target directory
-  const spinner = ora('Validating target directory...').start();
+  const spinner = startSpinner('Validating target directory...');
   
   if (!fs.existsSync(config.targetDir)) {
-    spinner.warn('Target directory does not exist');
-    const { create } = await inquirer.prompt([{
-      type: 'confirm',
-      name: 'create',
-      message: `Create directory ${config.targetDir}?`,
-      default: true
-    }]);
-    
+    // --quick is the non-interactive path: create the directory and proceed.
+    let create = quick;
+    if (!quick) {
+      spinner.warn('Target directory does not exist');
+      ({ create } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'create',
+        message: `Create directory ${config.targetDir}?`,
+        default: true
+      }]));
+    }
+
     if (create) {
       fs.mkdirSync(config.targetDir, { recursive: true });
       spinner.succeed('Directory created');
@@ -70,22 +80,26 @@ export async function install(options) {
   // Check for existing installation
   const existingInstall = await checkExistingInstall(config.targetDir);
   if (existingInstall) {
-    const { action } = await inquirer.prompt([{
-      type: 'list',
-      name: 'action',
-      message: 'Existing Toh Framework installation detected. What would you like to do?',
-      choices: [
-        { name: '🔄 Quick Update (preserve customizations)', value: 'update' },
-        { name: '🗑️  Fresh Install (overwrite all)', value: 'fresh' },
-        { name: '❌ Cancel', value: 'cancel' }
-      ]
-    }]);
+    // --quick must stay non-interactive: a reinstall defaults to Quick Update.
+    let action = 'update';
+    if (!quick) {
+      ({ action } = await inquirer.prompt([{
+        type: 'list',
+        name: 'action',
+        message: 'Existing Toh Framework installation detected. What would you like to do?',
+        choices: [
+          { name: '🔄 Quick Update (preserve customizations)', value: 'update' },
+          { name: '🗑️  Fresh Install (overwrite all)', value: 'fresh' },
+          { name: '❌ Cancel', value: 'cancel' }
+        ]
+      }]));
+    }
 
     if (action === 'cancel') {
       console.log(chalk.yellow('\nInstallation cancelled.'));
       return;
     }
-    
+
     if (action === 'fresh') {
       await cleanExistingInstall(config.targetDir);
     }
@@ -218,8 +232,8 @@ async function checkExistingInstall(targetDir) {
 }
 
 async function cleanExistingInstall(targetDir) {
-  const spinner = ora('Cleaning existing installation...').start();
-  
+  const spinner = startSpinner('Cleaning existing installation...');
+
   const pathsToClean = [
     join(targetDir, '.toh'),
     join(targetDir, '.claude', 'skills'),
@@ -232,12 +246,16 @@ async function cleanExistingInstall(targetDir) {
       await fs.remove(p);
     }
   }
-  
+
+  // Codex: remove TOH-managed .codex/skills + the AGENTS.md TOH block,
+  // preserving any user skills and user AGENTS.md content.
+  await uninstallCodex(targetDir);
+
   spinner.succeed('Cleaned existing installation');
 }
 
 async function setupIDEWithSpinner(ideName, setupFn) {
-  const spinner = ora(`Configuring ${ideName}...`).start();
+  const spinner = startSpinner(`Configuring ${ideName}...`);
   try {
     const detail = await setupFn();
     const configFile = (typeof detail === 'string' && detail) ? detail : getIDEConfigFile(ideName);
@@ -252,13 +270,13 @@ function getIDEConfigFile(ideName) {
     'Claude Code': 'created CLAUDE.md',
     'Cursor': '.cursor/rules/*.mdc',
     'Gemini CLI': '.gemini/GEMINI.md',
-    'Codex CLI': 'AGENTS.md'
+    'Codex CLI': '.codex/skills/ + AGENTS.md'
   };
   return configs[ideName] || 'configured';
 }
 
 async function installComponent(componentName, targetDir) {
-  const spinner = ora(`Installing ${componentName}...`).start();
+  const spinner = startSpinner(`Installing ${componentName}...`);
   
   const srcPath = join(SRC_DIR, componentName);
   let destPath;
@@ -308,7 +326,7 @@ async function countFiles(dir) {
 }
 
 async function generateManifest(config) {
-  const spinner = ora('Generating manifest...').start();
+  const spinner = startSpinner('Generating manifest...');
   
   const manifest = {
     version: VERSION,
@@ -340,7 +358,7 @@ async function normalizeUniversalCommands(targetDir) {
   const commandsDir = join(targetDir, '.toh', 'commands');
   if (!fs.existsSync(commandsDir)) return;
 
-  const spinner = ora('Normalizing shared commands (universal variant)...').start();
+  const spinner = startSpinner('Normalizing shared commands (universal variant)...');
   try {
     let changed = 0;
     const walk = async (dir) => {
@@ -371,7 +389,7 @@ async function normalizeUniversalCommands(targetDir) {
  * orchestration-protocol 2-step survey (identity lives in each context file).
  */
 async function declareCapabilities(config) {
-  const spinner = ora('Declaring runtime capabilities...').start();
+  const spinner = startSpinner('Declaring runtime capabilities...');
   try {
     await writeCapabilitiesJson(config.targetDir, config.ides);
     spinner.succeed('Capabilities declared (.toh/capabilities.json)');
@@ -381,7 +399,7 @@ async function declareCapabilities(config) {
 }
 
 async function setupMemoryFolder(targetDir) {
-  const spinner = ora('Setting up Memory System (7 files)...').start();
+  const spinner = startSpinner('Setting up Memory System (7 files)...');
 
   const memoryDir = join(targetDir, '.toh', 'memory');
   const archiveDir = join(memoryDir, 'archive');
@@ -536,14 +554,24 @@ async function setupMemoryFolder(targetDir) {
 *Last updated: ${today}*
 `;
 
-    // Write all 7 memory files
-    await fs.writeFile(join(memoryDir, 'active.md'), activeTemplate);
-    await fs.writeFile(join(memoryDir, 'summary.md'), summaryTemplate);
-    await fs.writeFile(join(memoryDir, 'decisions.md'), decisionsTemplate);
-    await fs.writeFile(join(memoryDir, 'changelog.md'), changelogTemplate);
-    await fs.writeFile(join(memoryDir, 'agents-log.md'), agentsLogTemplate);
-    await fs.writeFile(join(memoryDir, 'architecture.md'), architectureTemplate);
-    await fs.writeFile(join(memoryDir, 'components.md'), componentsTemplate);
+    // Write all 7 memory files — seed ONLY if absent (v2.1.0). These hold live
+    // project state; the README promises "reinstalling ... without deleting
+    // your existing memory", so a reinstall must never clobber them.
+    const memorySeeds = {
+      'active.md': activeTemplate,
+      'summary.md': summaryTemplate,
+      'decisions.md': decisionsTemplate,
+      'changelog.md': changelogTemplate,
+      'agents-log.md': agentsLogTemplate,
+      'architecture.md': architectureTemplate,
+      'components.md': componentsTemplate
+    };
+    for (const [file, content] of Object.entries(memorySeeds)) {
+      const p = join(memoryDir, file);
+      if (!fs.existsSync(p)) {
+        await fs.writeFile(p, content);
+      }
+    }
 
     // v2.0.0: seed THE TOH LOOP artifacts — ONLY if absent (they hold live
     // loop state; a reinstall must NEVER clobber an in-flight plan/ledger).
@@ -639,10 +667,11 @@ function printNextSteps(config) {
 
   if (config.ides.includes('codex') || config.ides.includes('codex-cli')) {
     console.log(row(chalk.white(pad('  Codex CLI:'))));
-    // 9 chars green + 51 chars gray = 60
-    console.log(row(chalk.green('    codex') + chalk.gray('     - Start Codex CLI in project'.padEnd(51))));
-    // 13 chars green + 47 chars gray = 60
-    console.log(row(chalk.green('    /toh-vibe') + chalk.gray(' - Create new project'.padEnd(47))));
+    // Native skills are the canonical integration; `/toh-*` is compat text.
+    // 13 green + 47 gray = 60 ; 11 green + 49 gray = 60 ; 18 green + 42 gray = 60
+    console.log(row(chalk.green('    $toh-vibe') + chalk.gray(' - Native skill: new project'.padEnd(47))));
+    console.log(row(chalk.green('    /skills') + chalk.gray(' - Browse all TOH skills'.padEnd(49))));
+    console.log(row(chalk.green('    .codex/skills/') + chalk.gray(' - 14 native skills installed'.padEnd(42))));
     console.log(empty);
   }
 

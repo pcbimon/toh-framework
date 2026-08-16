@@ -162,6 +162,39 @@ gemini
 /toh-vibe ระบบจัดการ inventory
 ```
 
+### Codex CLI
+
+Codex ไม่มี slash command แบบกำหนดเอง ดังนั้น TOH จะติดตั้ง **native Codex
+skills** ไว้ที่ `.codex/skills/` — หนึ่ง skill ต่อหนึ่งเวิร์กโฟลว์
+(`toh-vibe`, `toh-plan`, `toh-ui`, `toh-dev`, `toh-design`, `toh-test`,
+`toh-connect`, `toh-line`, `toh-mobile`, `toh-fix`, `toh-ship`,
+`toh-protect`, `toh-help`, `toh`)
+
+```bash
+# เปิดโฟลเดอร์โปรเจคใน Codex
+codex
+
+# เรียก skill ตรงๆ ด้วย $ + ชื่อ skill (หรือพิมพ์ /skills เพื่อดูทั้งหมด)
+$toh-vibe ระบบจัดการร้านกาแฟ
+$toh-plan สร้างแอปจองห้องพร้อมชำระเงิน
+
+# หรือแค่บรรยายงาน — Codex จะเลือก skill จาก description ให้เอง
+"สร้างระบบจัดการ inventory"
+```
+
+TOH เก็บ state ของ framework ไว้ที่ `.toh/` (`plan.md`, `progress.md`,
+`memory/`) และกฎระดับโปรเจคไว้ใน block ที่ TOH จัดการของ `AGENTS.md`
+เพื่อความเข้ากันได้แบบเดิม ถ้าพิมพ์ `/toh-vibe ...` เป็นข้อความธรรมดา
+ระบบจะตีความ (ผ่าน `AGENTS.md`) ว่าเป็นการเรียก skill ที่ตรงกัน —
+แต่มัน **ไม่ใช่** native slash command ของ Codex
+
+ถอนการติดตั้ง (ลบเฉพาะไฟล์ Codex ที่ TOH สร้าง — skill ของคุณเองและข้อความ
+ใน `AGENTS.md` จะถูกเก็บไว้):
+
+```bash
+npx toh-framework uninstall --ide codex
+```
+
 ---
 
 ## 📋 คำสั่งทั้งหมด

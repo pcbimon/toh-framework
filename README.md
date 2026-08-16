@@ -179,6 +179,38 @@ gemini
 /toh-vibe Inventory management system
 ```
 
+### Codex CLI
+
+Codex has no custom slash commands, so TOH installs **native Codex skills**
+under `.codex/skills/` — one per TOH workflow (`toh-vibe`, `toh-plan`,
+`toh-ui`, `toh-dev`, `toh-design`, `toh-test`, `toh-connect`, `toh-line`,
+`toh-mobile`, `toh-fix`, `toh-ship`, `toh-protect`, `toh-help`, `toh`).
+
+```bash
+# Open the project root in Codex
+codex
+
+# Invoke a TOH skill explicitly ($ + skill name), or browse with /skills
+$toh-vibe coffee shop management system
+$toh-plan build a booking app with payments
+
+# Or just describe the task — Codex matches the skill by its description
+"Create an inventory management system"
+```
+
+TOH stores framework state under `.toh/` (`plan.md`, `progress.md`,
+`memory/`) and project-level rules in the managed block of `AGENTS.md`.
+For compatibility, typing `/toh-vibe ...` as plain text is interpreted (via
+`AGENTS.md`) as a request for the matching skill — but it is **not** a native
+Codex slash command.
+
+Uninstall (removes only TOH-managed Codex files; your own skills and
+`AGENTS.md` text are kept):
+
+```bash
+npx toh-framework uninstall --ide codex
+```
+
 ---
 
 ## 📋 Available Commands
@@ -304,7 +336,7 @@ claude -p "/toh-vibe coffee shop management system" --permission-mode acceptEdit
 | 🇹🇭 Thai documentation | [docs/README-TH.md](docs/README-TH.md) |
 | Full version history | [CHANGELOG.md](CHANGELOG.md) |
 | All commands + cheatsheet | run `/toh-help` in your IDE |
-| Per-project guide (auto-generated) | `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules` in your project after install |
+| Per-project guide (auto-generated) | `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules` / `.codex/skills` in your project after install |
 | The plan artifact | `.toh/plan.md` — your app's live checklist (open it anytime to see progress) |
 | Design contract | `DESIGN.md` at your project root — generated per project, edit it to steer the look |
 

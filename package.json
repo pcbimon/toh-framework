@@ -1,6 +1,6 @@
 {
   "name": "toh-framework",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "description": "AI-Orchestration Driven Development - Type Once, Have it all! Approve once and the TOH LOOP builds, tests, and fixes a whole app until verified DONE. For Claude Code, Cursor, Codex, Gemini CLI, and Antigravity.",
   "author": {
@@ -50,7 +50,8 @@
     "install:local": "node bin/toh-cli.js install",
     "list": "node bin/toh-cli.js list",
     "status": "node bin/toh-cli.js status",
-    "bundle": "node bin/toh-cli.js bundle"
+    "bundle": "node bin/toh-cli.js bundle",
+    "test": "node tests/run.js"
   },
   "engines": {
     "node": ">=18.0.0"

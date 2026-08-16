@@ -51,7 +51,20 @@ const SRC_DIR = join(__dirname, '..', 'src');
  * short form when that is literally how this process was started.
  */
 const INVOKED_AS = basename(process.argv[1] || '');
-const CLI = INVOKED_AS === 'toh' || INVOKED_AS === 'toh-framework' ? INVOKED_AS : 'npx toh-framework';
+const INVOKED_PATH = (process.argv[1] || '').replace(/\\/g, '/');
+// The short name only works when it is actually on the user's PATH — i.e. a
+// global install. `npx toh-framework ...` runs the very same bin file out of a
+// throwaway cache (/_npx/) or a project's node_modules/.bin, where echoing
+// `toh-framework install` back would print "command not found".
+const IS_EPHEMERAL_BIN =
+  INVOKED_PATH.includes('/_npx/') ||
+  INVOKED_PATH.includes('/node_modules/.bin/') ||
+  process.env.npm_command === 'exec' ||
+  /\bnpm\/[\d.]+ .*\bexec\b/.test(process.env.npm_config_user_agent || '');
+const CLI =
+  !IS_EPHEMERAL_BIN && (INVOKED_AS === 'toh' || INVOKED_AS === 'toh-framework')
+    ? INVOKED_AS
+    : 'npx toh-framework';
 const CMD_UNINSTALL = `${CLI} uninstall`;
 const CMD_INSTALL = `${CLI} install`;
 

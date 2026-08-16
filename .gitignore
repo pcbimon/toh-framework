@@ -33,3 +33,6 @@ installer_file/
 .playwright-mcp/
 TFW-CustomEdition/
 CLAUDE.local.md
+
+# Private planning docs (roadmap / designs stay local)
+docs/plans/

@@ -1,20 +1,11 @@
 /**
  * Codex CLI IDE Handler
  *
- * Native Codex integration (v2.1.0):
- *   .codex/skills/<toh-*>/SKILL.md  -> native Codex skills (the canonical layer,
- *                                      discovered by Codex from the project root)
- *   AGENTS.md (managed block)       -> concise project-level TOH rules +
- *                                      legacy `/toh-*` compatibility note
- *   .toh/                           -> TOH runtime/state (plan, progress, memory,
- *                                      skills, commands) — owned by install.js
- *
- * Codex has no custom slash commands, subagents, or Stop hooks, so the old
- * "simulate /toh-* via a giant AGENTS.md" approach was unreliable. Skills are
- * the supported discovery/invocation mechanism; AGENTS.md now only carries
- * project-level orchestration rules inside a TOH-managed marker block.
+ * Codex discovers repository skills from .agents/skills. TOH keeps the full
+ * runtime in .toh/ and installs thin wrappers for commands and skills.
  */
 
+import crypto from 'crypto';
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,27 +17,74 @@ const __dirname = path.dirname(__filename);
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf-8'));
 const VERSION = pkg.version;
 
+export const CODEX_SKILLS_DIR = path.join('.agents', 'skills');
+export const AGENTS_MAX_BYTES = 24 * 1024;
+export const CODEX_PROJECT_DOC_MAX_BYTES = 64 * 1024;
+
 const AGENTS_BLOCK_START = '<!-- TOH-FRAMEWORK-START -->';
 const AGENTS_BLOCK_END = '<!-- TOH-FRAMEWORK-END -->';
 const AGENTS_BLOCK_RE = /[ \t]*<!-- TOH-FRAMEWORK-START -->[\s\S]*?<!-- TOH-FRAMEWORK-END -->[ \t]*\r?\n?/g;
-
-// Generated Codex skills carry this frontmatter marker so we can tell
-// TOH-managed skills apart from a user's own skills on reinstall/uninstall.
+const CONFIG_BLOCK_START = '# TOH-FRAMEWORK-START';
+const CONFIG_BLOCK_END = '# TOH-FRAMEWORK-END';
+const CONFIG_BLOCK_RE = /[ \t]*# TOH-FRAMEWORK-START\r?\n[\s\S]*?[ \t]*# TOH-FRAMEWORK-END[ \t]*\r?\n?/g;
 const SKILL_GENERATOR = 'toh-framework';
-
-// Codex skill names: 1-64 chars, lowercase letters, numbers, hyphens.
+const MANIFEST_PATH = path.join('.codex', 'toh-framework.json');
 const SKILL_NAME_RE = /^[a-z0-9-]{1,64}$/;
 
-// ============================================================
-// Command catalog (single source: src/commands/*.md frontmatter)
-// ============================================================
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
 
-/**
- * Read src/commands/*.md and return one entry per TOH command:
- *   { skillName, command, aliases, description, skills, file }
- * Sorted by skillName for deterministic output. Throws an actionable error
- * when the catalog cannot be read (the skills layer depends on it).
- */
+function relativePath(...parts) {
+  return path.posix.join(...parts.map((part) => String(part).replaceAll(path.sep, '/')));
+}
+
+function skillFileRelativePath(name) {
+  return relativePath(CODEX_SKILLS_DIR, name, 'SKILL.md');
+}
+
+async function readManifest(targetDir) {
+  const manifestPath = path.join(targetDir, MANIFEST_PATH);
+  if (!(await fs.pathExists(manifestPath))) {
+    return { generator: SKILL_GENERATOR, version: VERSION, files: {} };
+  }
+
+  try {
+    const manifest = await fs.readJson(manifestPath);
+    if (manifest.generator !== SKILL_GENERATOR || typeof manifest.files !== 'object') {
+      return { generator: SKILL_GENERATOR, version: VERSION, files: {} };
+    }
+    return manifest;
+  } catch {
+    return { generator: SKILL_GENERATOR, version: VERSION, files: {} };
+  }
+}
+
+async function writeManifest(targetDir, manifest) {
+  const manifestPath = path.join(targetDir, MANIFEST_PATH);
+  await fs.ensureDir(path.dirname(manifestPath));
+  await fs.writeJson(manifestPath, manifest, { spaces: 2 });
+}
+
+async function fileMatchesHash(filePath, expectedHash) {
+  if (!expectedHash || !(await fs.pathExists(filePath))) return false;
+  try {
+    return sha256(await fs.readFile(filePath)) === expectedHash;
+  } catch {
+    return false;
+  }
+}
+
+function parseFrontmatter(raw, label) {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) throw new Error(`${label} must start with YAML frontmatter.`);
+  try {
+    return yaml.load(match[1]) || {};
+  } catch (error) {
+    throw new Error(`Invalid YAML frontmatter in ${label}: ${error.message}`);
+  }
+}
+
 export async function readCommandCatalog(srcDir) {
   const commandsDir = path.join(srcDir, 'commands');
   if (!(await fs.pathExists(commandsDir))) {
@@ -54,27 +92,28 @@ export async function readCommandCatalog(srcDir) {
   }
 
   const files = (await fs.readdir(commandsDir))
-    .filter((f) => f.endsWith('.md') && f !== 'README.md')
+    .filter((file) => file.endsWith('.md') && file !== 'README.md')
     .sort();
-
   const catalog = [];
+
   for (const file of files) {
     const raw = await fs.readFile(path.join(commandsDir, file), 'utf8');
-    const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-    if (!fmMatch) continue; // no frontmatter -> not a command definition
+    const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+    if (!match) continue;
 
     let parsed;
     try {
-      parsed = yaml.load(fmMatch[1]) || {};
-    } catch (err) {
-      throw new Error(`Invalid YAML frontmatter in src/commands/${file}: ${err.message}`);
+      parsed = yaml.load(match[1]) || {};
+    } catch (error) {
+      throw new Error(`Invalid YAML frontmatter in src/commands/${file}: ${error.message}`);
     }
 
     const command = String(parsed.command || '').trim();
     const skillName = command.replace(/^\//, '');
-    if (!SKILL_NAME_RE.test(skillName)) continue; // not a slash command -> skip
+    if (!SKILL_NAME_RE.test(skillName)) continue;
 
     catalog.push({
+      kind: 'command',
       skillName,
       command,
       aliases: Array.isArray(parsed.aliases) ? parsed.aliases.map(String) : [],
@@ -90,247 +129,248 @@ export async function readCommandCatalog(srcDir) {
   return catalog;
 }
 
-// ============================================================
-// Codex skill generation
-// ============================================================
+export async function readSupportingSkillCatalog(srcDir) {
+  const skillsDir = path.join(srcDir, 'skills');
+  if (!(await fs.pathExists(skillsDir))) {
+    throw new Error(`TOH skill source not found: ${skillsDir} — is this a complete toh-framework package?`);
+  }
 
-/**
- * Build the SKILL.md body for one command. Deterministic: no timestamps.
- * Paths are project-root relative (Codex runs from the project root).
- */
-function renderSkillMd(entry) {
-  const triggers = [entry.command, ...entry.aliases].map((c) => `\`${c}\``).join(', ');
-  // Description rules (Codex): 1-1024 chars, key use case + trigger words
-  // front-loaded so implicit matching survives description shortening.
-  const description =
-    `${entry.description} — TOH Framework workflow (${entry.command}). ` +
-    `Trigger words: ${[entry.command, ...entry.aliases].join(', ')}.`.slice(0, 1024);
+  const catalog = [];
+  const entries = (await fs.readdir(skillsDir, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name));
 
+  for (const entry of entries) {
+    const file = path.join(skillsDir, entry.name, 'SKILL.md');
+    if (!(await fs.pathExists(file))) continue;
+    const raw = await fs.readFile(file, 'utf8');
+    const frontmatter = raw.startsWith('---\n') || raw.startsWith('---\r\n')
+      ? parseFrontmatter(raw, file)
+      : {};
+    const skillName = String(frontmatter.name || entry.name).trim();
+    if (!SKILL_NAME_RE.test(skillName) || skillName !== entry.name) continue;
+    const heading = raw.match(/^#\s+(.+)$/m)?.[1]?.trim();
+    const description = String(frontmatter.description || heading || `${entry.name} TOH supporting skill`).trim();
+    catalog.push({
+      kind: 'skill',
+      skillName,
+      description,
+      file: relativePath('skills', entry.name, 'SKILL.md'),
+      sourcePath: `.toh/skills/${entry.name}/SKILL.md`
+    });
+  }
+
+  if (catalog.length === 0) {
+    throw new Error(`No TOH supporting skills found in ${skillsDir} — cannot generate Codex skills.`);
+  }
+  return catalog;
+}
+
+async function readWrapperCatalog(srcDir) {
+  const [commands, skills] = await Promise.all([
+    readCommandCatalog(srcDir),
+    readSupportingSkillCatalog(srcDir)
+  ]);
+  const wrappers = [
+    ...skills,
+    ...commands.map((entry) => ({
+      ...entry,
+      sourcePath: `.toh/commands/${entry.file}`
+    }))
+  ].sort((a, b) => a.skillName.localeCompare(b.skillName));
+
+  const names = new Set();
+  for (const wrapper of wrappers) {
+    if (names.has(wrapper.skillName)) throw new Error(`Duplicate Codex skill name: ${wrapper.skillName}`);
+    names.add(wrapper.skillName);
+  }
+  return { commands, skills, wrappers };
+}
+
+function wrapperFrontmatter(entry) {
+  return yaml.dump({
+    name: entry.skillName,
+    description: entry.description.slice(0, 1024),
+    metadata: {
+      generator: SKILL_GENERATOR,
+      version: VERSION,
+      kind: entry.kind,
+      source: entry.sourcePath
+    }
+  }, { lineWidth: -1, noRefs: true }).trimEnd();
+}
+
+function renderCommandWrapper(entry) {
+  const triggers = [entry.command, ...entry.aliases].map((command) => `\`${command}\``).join(', ');
   const supporting = entry.skills.length
     ? `2. Read every supporting skill BEFORE executing:\n${entry.skills
-        .map((s) => `   - \`.toh/skills/${s}/SKILL.md\``)
+        .map((skill) => `   - \`.toh/skills/${skill}/SKILL.md\``)
         .join('\n')}\n3. Execute the workflow in this session, in order.`
     : '2. Execute the workflow in this session, in order.';
 
-  return `---
-name: ${entry.skillName}
-description: ${yaml.dump(description, { lineWidth: -1, noRefs: true }).trim()}
-metadata:
-  generator: ${SKILL_GENERATOR}
-  version: ${VERSION}
----
-
-# ${entry.command} — ${entry.description}
-
-> Codex-native wrapper for the TOH Framework workflow ${entry.command}.
-> Generated by ${SKILL_GENERATOR} — do not edit by hand; re-run
-> \`npx toh-framework install --ide codex\` to update.
-> All paths below are relative to the project root (the directory holding \`.codex/\`).
-
-## When to use
-
-${entry.description}. Triggers: ${triggers}, or any plain-language request that matches.
-
-## Workflow
-
-1. Read the full workflow definition: \`.toh/commands/${entry.file}\`
-${supporting}
-
-If \`.toh/commands/${entry.file}\` is missing (TOH commands component not
-installed), follow the supporting skills directly — they carry the same rules.
-
-## Codex constraints
-
-- **No subagents/teams** — where the workflow says "spawn" or "delegate", do
-  that work inline, one task at a time, in this session.
-- **No Claude Code Stop hook** — self-enforce THE TOH LOOP: do not end the run
-  while \`.toh/plan.md\` has unchecked, unblocked tasks.
-- **No model routing** — ignore haiku/sonnet/opus tiers mentioned in TOH docs.
-- **State** — persist everything under \`.toh/\` (\`plan.md\`, \`progress.md\`,
-  \`memory/\`); resume = continue at the first unchecked \`[ ]\` task.
-
-## Legacy command text
-
-If the user typed ${triggers} as text: that is this skill. \`/toh-*\` is
-compatibility text interpreted via AGENTS.md, not a native Codex slash command.
-`;
+  return `---\n${wrapperFrontmatter(entry)}\n---\n\n# ${entry.command} — ${entry.description}\n\n> Thin Codex wrapper for the TOH Framework workflow ${entry.command}.\n> Read the runtime workflow from \`${entry.sourcePath}\`; do not duplicate it here.\n\n## When to use\n\n${entry.description}. Triggers: ${triggers}, or any plain-language request that matches.\n\n## Workflow\n\n1. Read the full workflow definition: \`${entry.sourcePath}\`\n${supporting}\n\n## Codex constraints\n\n- **No subagents or teams** — execute delegated work inline, one task at a time.\n- **No Stop hook** — do not end while \`.toh/plan.md\` has unchecked, unblocked tasks.\n- **No model routing** — ignore model tiers in TOH docs.\n- **State** — persist work under \`.toh/\` and resume from the first unchecked task.\n`;
 }
 
-/**
- * Install .codex/skills/<toh-*>/SKILL.md for every command in the catalog.
- * - writes are idempotent (same input -> same bytes)
- * - stale TOH-managed skills (generator marker, no longer in catalog) are removed
- * - user skills (including user skills named toh-*) are never touched
- * Returns the list of installed skill names.
- */
+function renderSupportingSkillWrapper(entry) {
+  return `---\n${wrapperFrontmatter(entry)}\n---\n\n# ${entry.skillName}\n\nThis is a thin Codex discovery wrapper for the TOH supporting skill.\nRead the complete instructions from \`${entry.sourcePath}\` before acting.\n\nThe runtime copy under \`.toh/skills/\` is the source of truth; this wrapper exists\nonly so Codex can discover and invoke the skill from the repository skill path.\n`;
+}
+
+function renderWrapper(entry) {
+  return entry.kind === 'command'
+    ? renderCommandWrapper(entry)
+    : renderSupportingSkillWrapper(entry);
+}
+
 export async function installCodexSkills(targetDir, srcDir) {
-  const catalog = await readCommandCatalog(srcDir);
-  const skillsRoot = path.join(targetDir, '.codex', 'skills');
+  const { wrappers } = await readWrapperCatalog(srcDir);
+  const skillsRoot = path.join(targetDir, CODEX_SKILLS_DIR);
   await fs.ensureDir(skillsRoot);
+  const previous = await readManifest(targetDir);
+  const nextFiles = {};
+  const wanted = new Set(wrappers.map((entry) => skillFileRelativePath(entry.skillName)));
 
-  const wanted = new Set(catalog.map((c) => c.skillName));
-
-  // Remove stale TOH-managed skills (identified by the generator marker —
-  // never by directory name alone, so user skills are safe).
-  for (const entry of await fs.readdir(skillsRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory() || wanted.has(entry.name)) continue;
-    const skillFile = path.join(skillsRoot, entry.name, 'SKILL.md');
-    if (!(await fs.pathExists(skillFile))) continue;
-    try {
-      const head = (await fs.readFile(skillFile, 'utf8')).slice(0, 4096);
-      if (head.includes(`generator: ${SKILL_GENERATOR}`)) {
-        await fs.remove(path.join(skillsRoot, entry.name));
-      }
-    } catch {
-      // Unreadable file -> leave it alone; never delete what we can't classify.
+  for (const [relative, record] of Object.entries(previous.files || {})) {
+    if (!relative.startsWith(`${CODEX_SKILLS_DIR}/`) || wanted.has(relative)) continue;
+    const filePath = path.join(targetDir, relative);
+    if (await fileMatchesHash(filePath, record.sha256)) {
+      await fs.remove(filePath);
+      const parent = path.dirname(filePath);
+      if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);
     }
   }
 
-  for (const entry of catalog) {
-    const dir = path.join(skillsRoot, entry.skillName);
-    await fs.ensureDir(dir);
-    await fs.writeFile(path.join(dir, 'SKILL.md'), renderSkillMd(entry));
+  const installed = [];
+  for (const entry of wrappers) {
+    const relative = skillFileRelativePath(entry.skillName);
+    const filePath = path.join(targetDir, relative);
+    const content = renderWrapper(entry);
+    const existingRecord = previous.files?.[relative];
+    const canReplace = !(await fs.pathExists(filePath)) ||
+      await fileMatchesHash(filePath, existingRecord?.sha256);
+
+    if (!canReplace) continue;
+    await fs.ensureDir(path.dirname(filePath));
+    await fs.writeFile(filePath, content);
+    nextFiles[relative] = {
+      sha256: sha256(content),
+      kind: entry.kind,
+      source: entry.sourcePath
+    };
+    installed.push(entry.skillName);
   }
 
-  return catalog.map((c) => c.skillName);
+  await writeManifest(targetDir, {
+    ...previous,
+    generator: SKILL_GENERATOR,
+    version: VERSION,
+    files: nextFiles
+  });
+  return installed;
 }
 
-// ============================================================
-// AGENTS.md (managed block only)
-// ============================================================
-
-function renderSkillTable(catalog) {
-  const rows = catalog
-    .map((c) => `| \`$${c.skillName}\` | ${c.description} |`)
+function renderSkillTable(wrappers) {
+  const rows = wrappers
+    .map((entry) => `| \`$${entry.skillName}\` | ${entry.description} |`)
     .join('\n');
-  return `| Skill | Use it to |
-|-------|-----------|
-${rows}`;
+  return `| Skill | Use it to |\n|-------|-----------|\n${rows}`;
 }
 
-function generateAgentsMdEN(catalog) {
+function generateAgentsBlock(wrappers, language) {
+  const capabilities = renderCapabilitiesSection('codex');
+  const thai = language === 'th';
+  const title = thai
+    ? 'คุณคือ **Toh Framework Agent** ที่รันอยู่บน **Codex CLI** — ช่วย Solo Developer สร้าง SaaS คนเดียวจนจบ'
+    : 'You are the **Toh Framework Agent** running in **Codex CLI**, helping solo developers build SaaS systems by themselves.';
+  const intro = thai
+    ? 'เวิร์กโฟลว์และกฎของ TOH ถูกติดตั้งเป็น native skills ไว้ที่ `.agents/skills/`:'
+    : 'TOH workflows and supporting rules are installed as native skills under `.agents/skills/`:';
+  const runtime = thai
+    ? '- `.toh/plan.md` + `.toh/progress.md` — แผนคือไฟล์และใช้ resume จาก task แรกที่ยังไม่ติ๊ก\n- `.toh/memory/` — memory 7 ไฟล์'
+    : '- `.toh/plan.md` + `.toh/progress.md` — the plan is a file; resume from the first unchecked task\n- `.toh/memory/` — 7-file memory';
+  const constraints = thai
+    ? '- **ไม่มี subagents/teams** — รัน THE TOH LOOP แบบ sequential ใน session นี้\n- **ไม่มี Stop hook** — ห้ามจบ session ถ้าแผนยังมี task ที่ไม่ได้ติ๊กและไม่ blocked\n- **ไม่มี model routing** — ข้าม tier haiku/sonnet/opus ในเอกสาร TOH'
+    : '- **No subagents or teams** — run THE TOH LOOP sequentially in this session\n- **No Stop hook** — never end while `.toh/plan.md` has unchecked, unblocked tasks\n- **No model routing** — ignore haiku/sonnet/opus tiers in TOH docs';
+  const compatibility = thai
+    ? '- เรียกตรงๆ ด้วย `$<skill>` หรือพิมพ์ `/skills` เพื่อดูทั้งหมด\n- แต่ละ wrapper อ่านเนื้อหาจริงจาก `.toh/commands/` หรือ `.toh/skills/`\n- ถ้าพิมพ์ `/toh-*` ให้ตีความเป็นคำขอใช้ skill ที่ตรงกัน ไม่ใช่ custom slash command'
+    : '- Invoke explicitly with `$<skill>` or browse with `/skills`, or describe the task for implicit matching.\n- Each wrapper reads the full source from `.toh/commands/` or `.toh/skills/`.\n- If the user types `/toh-*`, interpret it as a request for the matching skill, not a custom slash command.';
+
   return `${AGENTS_BLOCK_START}
 # 🎯 Toh Framework
 
-> **"Type Once, Have it all!"** — AI-Orchestration Driven Development
+> **"Type Once, Have it all!"** — AI-Orchestration Driven Development${thai ? '\n> "สั่งครั้งเดียว จบครบโดยไม่ต้องถาม"' : ''}
 
 ## Identity
 
-You are the **Toh Framework Agent** running in **Codex CLI**, helping solo developers build SaaS systems by themselves.
+${title}
 
-${renderCapabilitiesSection('codex')}
+${capabilities}
 
-## Using TOH in Codex (native skills)
+## ${thai ? 'การใช้ TOH ใน Codex (native skills)' : 'Using TOH in Codex (native skills)'}
 
-TOH workflows are installed as **native Codex skills** under \`.codex/skills/\` — this is the canonical integration:
+${intro}
 
-${renderSkillTable(catalog)}
+${renderSkillTable(wrappers)}
 
-- Invoke explicitly with \`$<skill>\` (or browse with \`/skills\`), or describe the task — Codex matches skills by description.
-- Each skill reads its workflow from \`.toh/commands/\` and supporting rules from \`.toh/skills/\`.
-
-### Legacy \`/toh-*\` compatibility text
-
-Codex has no custom slash commands. If the user types \`/toh-plan\` or \`toh plan\`, interpret it as a request to use the matching skill in \`.codex/skills/\` — compatibility behavior, not a native command.
+${compatibility}
 
 ## TOH runtime & state (\`.toh/\`)
 
-- \`.toh/plan.md\` + \`.toh/progress.md\` — the plan IS a file; resume = first unchecked \`[ ]\` task
-- \`.toh/memory/\` — 7-file memory (protocol below)
+${runtime}
 - \`.toh/skills/\` · \`.toh/commands/\` · \`.toh/capabilities.json\`
 
-## Codex constraints (vs Claude Code)
+## ${thai ? 'ข้อจำกัดของ Codex' : 'Codex constraints'}
 
-- **No subagents/teams** — run THE TOH LOOP sequentially in this session (see \`.toh/skills/orchestration-protocol/SKILL.md\`): implement → run the task's checkpoint → quote real output → fix if red (max 5 tries; 3 consecutive failures = \`- [!] BLOCKED\`) → tick the checkbox → next task without asking.
-- **No Stop hook** — self-enforce: never end the session while \`.toh/plan.md\` has unchecked, unblocked tasks.
-- **No model routing** — ignore haiku/sonnet/opus tiers in TOH docs.
-
-## Memory protocol (tiered)
-
-- BEFORE work: read \`.toh/memory/active.md\` + \`summary.md\` (always); \`architecture.md\` + \`components.md\` for build tasks; \`changelog.md\` for debugging; \`decisions.md\` / \`agents-log.md\` only when referenced.
-- AFTER work: always update \`active.md\`; update the others per relevance. Memory files are always in English.
-- Close every stage per \`.toh/skills/engineer-harness/SKILL.md\` (Status / Result / Evidence / exactly 3 next actions).
+${constraints}
 
 ${AGENTS_BLOCK_END}`;
 }
 
-function generateAgentsMdTH(catalog) {
-  return `${AGENTS_BLOCK_START}
-# 🎯 Toh Framework
-
-> **"Type Once, Have it all!"** — AI-Orchestration Driven Development
-> "สั่งครั้งเดียว จบครบโดยไม่ต้องถาม"
-
-## Identity
-
-คุณคือ **Toh Framework Agent** ที่รันอยู่บน **Codex CLI** — ช่วย Solo Developer สร้าง SaaS คนเดียวจนจบ
-
-${renderCapabilitiesSection('codex')}
-
-## การใช้ TOH ใน Codex (native skills)
-
-เวิร์กโฟลว์ TOH ถูกติดตั้งเป็น **native Codex skills** ไว้ที่ \`.codex/skills/\` — นี่คือช่องทางหลัก:
-
-${renderSkillTable(catalog)}
-
-- เรียกตรงๆ ด้วย \`$<skill>\` (หรือพิมพ์ \`/skills\` เพื่อดูทั้งหมด) หรือแค่บรรยายงาน — Codex จะจับคู่ skill จาก description เอง
-- แต่ละ skill อ่านเวิร์กโฟลว์จาก \`.toh/commands/\` และกฎประกอบจาก \`.toh/skills/\`
-
-### ข้อความ \`/toh-*\` แบบเดิม (compatibility)
-
-Codex ไม่มี slash command แบบกำหนดเอง ถ้าผู้ใช้พิมพ์ \`/toh-plan\` หรือ \`toh plan\` ให้ตีความว่าเป็นคำขอใช้ skill ที่ตรงกันใน \`.codex/skills/\` — เป็น compatibility behavior ไม่ใช่ native command
-
-## TOH runtime & state (\`.toh/\`)
-
-- \`.toh/plan.md\` + \`.toh/progress.md\` — แผนคือไฟล์; resume = task แรกที่ยังไม่ติ๊ก \`[ ]\`
-- \`.toh/memory/\` — memory 7 ไฟล์ (protocol ด้านล่าง)
-- \`.toh/skills/\` · \`.toh/commands/\` · \`.toh/capabilities.json\`
-
-## ข้อจำกัดของ Codex (เทียบ Claude Code)
-
-- **ไม่มี subagents/teams** — รัน THE TOH LOOP แบบ sequential ใน session นี้ (ดู \`.toh/skills/orchestration-protocol/SKILL.md\`): implement → รัน checkpoint ของ task → quote output จริง → แก้ถ้าแดง (สูงสุด 5 ครั้ง; แพ้ 3 ครั้งติด = \`- [!] BLOCKED\`) → ติ๊ก checkbox → ทำ task ถัดไปโดยไม่ต้องถาม
-- **ไม่มี Stop hook** — บังคับตัวเอง: ห้ามจบ session ถ้า \`.toh/plan.md\` ยังมี task ที่ไม่ได้ติ๊กและไม่ blocked
-- **ไม่มี model routing** — ข้าม tier haiku/sonnet/opus ในเอกสาร TOH
-
-## Memory protocol (tiered)
-
-- ก่อนทำงาน: อ่าน \`.toh/memory/active.md\` + \`summary.md\` เสมอ; \`architecture.md\` + \`components.md\` สำหรับงาน build; \`changelog.md\` สำหรับงาน debug; \`decisions.md\` / \`agents-log.md\` เฉพาะเมื่อถูกอ้างถึง
-- หลังทำงาน: อัปเดต \`active.md\` เสมอ; ไฟล์อื่นตามความเกี่ยวข้อง — memory ทุกไฟล์เป็นภาษาอังกฤษ
-- ปิดทุก stage ตาม \`.toh/skills/engineer-harness/SKILL.md\` (Status / Result / Evidence / next actions 3 ข้อ)
-
-${AGENTS_BLOCK_END}`;
-}
-
-/**
- * Insert or replace the TOH-managed block in AGENTS.md. All existing user
- * content outside the markers is preserved; duplicate TOH blocks collapse
- * into one, so repeated installs are idempotent by construction.
- */
-export async function updateAgentsMd(targetDir, catalog, language = 'en') {
-  const block = language === 'th' ? generateAgentsMdTH(catalog) : generateAgentsMdEN(catalog);
-  const agentsPath = path.join(targetDir, 'AGENTS.md');
-
-  if (await fs.pathExists(agentsPath)) {
-    const existing = await fs.readFile(agentsPath, 'utf8');
-    const stripped = existing.replace(AGENTS_BLOCK_RE, '').trimEnd();
-    const next = stripped ? `${stripped}\n\n${block}\n` : `${block}\n`;
-    await fs.writeFile(agentsPath, next);
-  } else {
-    await fs.writeFile(agentsPath, `${block}\n`);
+export function assertAgentsMdSize(content) {
+  const bytes = Buffer.byteLength(content, 'utf8');
+  if (bytes > AGENTS_MAX_BYTES) {
+    throw new Error(`AGENTS.md is ${bytes} bytes; Codex limit is ${AGENTS_MAX_BYTES} bytes.`);
   }
+}
+
+async function updateManifest(targetDir, changes) {
+  const manifest = await readManifest(targetDir);
+  await writeManifest(targetDir, { ...manifest, ...changes });
+}
+
+export async function updateAgentsMd(targetDir, wrappers, language = 'en') {
+  const block = generateAgentsBlock(wrappers, language);
+  const agentsPath = path.join(targetDir, 'AGENTS.md');
+  const existing = await fs.pathExists(agentsPath) ? await fs.readFile(agentsPath, 'utf8') : '';
+  const stripped = existing.replace(AGENTS_BLOCK_RE, '').trimEnd();
+  const next = stripped ? `${stripped}\n\n${block}\n` : `${block}\n`;
+  assertAgentsMdSize(next);
+  await fs.writeFile(agentsPath, next);
+  await updateManifest(targetDir, { agentsBlockSha256: sha256(block) });
   return agentsPath;
 }
 
-// ============================================================
-// .toh runtime (seed-if-absent — install.js is the primary seeder)
-// ============================================================
+function codexConfigBlock() {
+  return `${CONFIG_BLOCK_START}\n# Keep Codex project instructions below its discovery ceiling.\nproject_doc_max_bytes = ${CODEX_PROJECT_DOC_MAX_BYTES}\n${CONFIG_BLOCK_END}`;
+}
 
-/**
- * Guarantee the TOH runtime skeleton exists. Seeds only when absent so a
- * reinstall never clobbers live memory/plan state. install.js already creates
- * the full runtime before IDE handlers run; this makes setupCodex() safe to
- * call standalone (tests, partial reinstalls).
- */
+export async function setupCodexConfig(targetDir) {
+  const configPath = path.join(targetDir, '.codex', 'config.toml');
+  const existing = await fs.pathExists(configPath) ? await fs.readFile(configPath, 'utf8') : '';
+  const withoutToh = existing.replace(CONFIG_BLOCK_RE, '').trimEnd();
+  const hasUserQuota = /^\s*project_doc_max_bytes\s*=/m.test(withoutToh);
+  if (hasUserQuota) {
+    await updateManifest(targetDir, { configSha256: null });
+    return configPath;
+  }
+
+  const block = codexConfigBlock();
+  const next = withoutToh ? `${withoutToh}\n\n${block}\n` : `${block}\n`;
+  await fs.ensureDir(path.dirname(configPath));
+  await fs.writeFile(configPath, next);
+  await updateManifest(targetDir, { configSha256: sha256(next) });
+  return configPath;
+}
+
 export async function ensureTohRuntime(targetDir) {
   const tohDir = path.join(targetDir, '.toh');
   const memoryDir = path.join(tohDir, 'memory');
@@ -338,97 +378,119 @@ export async function ensureTohRuntime(targetDir) {
 
   const today = new Date().toISOString().split('T')[0];
   const seeds = {
-    'active.md': `# 🔥 Active Task\n\n## Current Work\n[No active task - Waiting for user command]\n\n## Last Action\n[None]\n\n## Next Steps\n- Waiting for user command\n\n## Blockers\n[None]\n`,
-    'summary.md': `# 📋 Project Summary\n\n## Project Info\n- **Name:** [Not specified]\n- **Type:** [Not specified]\n\n## Completed Features\n[None yet]\n\n## In Progress\n[None yet]\n`,
+    'active.md': '# 🔥 Active Task\n\n## Current Work\n[No active task - Waiting for user command]\n\n## Last Action\n[None]\n\n## Next Steps\n- Waiting for user command\n\n## Blockers\n[None]\n',
+    'summary.md': '# 📋 Project Summary\n\n## Project Info\n- **Name:** [Not specified]\n- **Type:** [Not specified]\n\n## Completed Features\n[None yet]\n\n## In Progress\n[None yet]\n',
     'decisions.md': `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${today} | Use Toh Framework v${VERSION} | AI-Orchestration Driven Development |\n`,
     'changelog.md': `# 📝 Session Changelog\n\n## [Current Session] - ${today}\n\n### Changes Made\n| Agent | Action | File/Component |\n|-------|--------|----------------|\n| - | - | - |\n`,
-    'agents-log.md': `# 🤖 Agents Activity Log\n\n## Recent Activity\n| Time | Agent | Task | Status | Files |\n|------|-------|------|--------|-------|\n| - | - | - | - | - |\n`,
-    'architecture.md': `# 🏗️ Code Architecture\n\n## Directory Structure\n\`\`\`\n[Will be auto-generated when project starts]\n\`\`\`\n`,
-    'components.md': `# 🧩 Component Registry\n\n## UI Components\n| Component | Path | Props | Used In |\n|-----------|------|-------|---------|\n| - | - | - | - |\n`
+    'agents-log.md': '# 🤖 Agents Activity Log\n\n## Recent Activity\n| Time | Agent | Task | Status | Files |\n|------|-------|------|--------|-------|\n| - | - | - | - | - |\n',
+    'architecture.md': '# 🏗️ Code Architecture\n\n## Directory Structure\n```\n[Will be auto-generated when project starts]\n```\n',
+    'components.md': '# 🧩 Component Registry\n\n## UI Components\n| Component | Path | Props | Used In |\n|-----------|------|-------|---------|\n| - | - | - | - |\n'
   };
 
   for (const [file, content] of Object.entries(seeds)) {
-    const p = path.join(memoryDir, file);
-    if (!(await fs.pathExists(p))) await fs.writeFile(p, content);
+    const filePath = path.join(memoryDir, file);
+    if (!(await fs.pathExists(filePath))) await fs.writeFile(filePath, content);
   }
 
   const planPath = path.join(tohDir, 'plan.md');
   if (!(await fs.pathExists(planPath))) {
-    await fs.writeFile(
-      planPath,
-      `# Plan: (no active plan yet)\nStatus: draft\nCreated: ${today} by toh-framework installer\n\n> This file is THE TOH LOOP's backlog. Full schema + loop protocol:\n> \`.toh/skills/orchestration-protocol/SKILL.md\` (Section D).\n\nEmpty backlog — no stories yet. Run the \`toh-plan\` skill to draft a plan here, or\n\`toh-vibe\` to auto-generate a mini-plan and build it.\n`
-    );
+    await fs.writeFile(planPath, `# Plan: (no active plan yet)\nStatus: draft\nCreated: ${today} by toh-framework installer\n\n> This file is THE TOH LOOP's backlog. Full schema + loop protocol:\n> \.toh/skills/orchestration-protocol/SKILL.md\n\nEmpty backlog — no stories yet. Run the \.toh-plan skill to draft a plan here, or\n\.toh-vibe to auto-generate a mini-plan and build it.\n`);
   }
 
   const progressPath = path.join(tohDir, 'progress.md');
   if (!(await fs.pathExists(progressPath))) {
-    await fs.writeFile(
-      progressPath,
-      `# Progress Ledger\n\n> Append-only, one line per state change: \`queued → running → done/failed/blocked\`.\n> Format: \`YYYY-MM-DD HH:MM T00x <state> — <detail>\`. Never rewrite history — append.\n`
-    );
+    await fs.writeFile(progressPath, '# Progress Ledger\n\n> Append-only, one line per state change: `queued → running → done/failed/blocked`.\n> Format: `YYYY-MM-DD HH:MM T00x <state> — <detail>`. Never rewrite history — append.\n');
   }
 }
 
-// ============================================================
-// Public API
-// ============================================================
-
-/**
- * Install the Codex integration. Returns a short detail string for the
- * install spinner.
- */
 export async function setupCodex(targetDir, srcDir, language = 'en') {
   await ensureTohRuntime(targetDir);
-  const catalog = await readCommandCatalog(srcDir);
+  const { wrappers } = await readWrapperCatalog(srcDir);
+  await setupCodexConfig(targetDir);
   const installed = await installCodexSkills(targetDir, srcDir);
-  await updateAgentsMd(targetDir, catalog, language);
-  return `.codex/skills/ (${installed.length} skills) + AGENTS.md`;
+  await updateAgentsMd(targetDir, wrappers, language);
+  return `${CODEX_SKILLS_DIR}/ (${installed.length}/${wrappers.length} wrappers) + AGENTS.md + .codex/config.toml`;
 }
 
-/**
- * Remove ONLY the TOH-managed Codex files:
- *   - .codex/skills/<skill> dirs whose SKILL.md carries the TOH generator marker
- *   - the TOH-managed block in AGENTS.md (file deleted if it becomes empty)
- * User skills, user AGENTS.md content, and .toh/ runtime state are preserved.
- * Returns { removedSkills, agentsMd: 'updated'|'removed'|'absent' }.
- */
-export async function uninstallCodex(targetDir) {
-  const result = { removedSkills: [], agentsMd: 'absent' };
+async function makeBackup(targetDir, files) {
+  if (files.length === 0) return null;
+  const backupDir = path.join(targetDir, '.toh-backups', `codex-${Date.now()}`);
+  for (const relative of files) {
+    const source = path.join(targetDir, relative);
+    if (!(await fs.pathExists(source))) continue;
+    const destination = path.join(backupDir, relative);
+    await fs.ensureDir(path.dirname(destination));
+    await fs.copy(source, destination);
+  }
+  return backupDir;
+}
 
-  const skillsRoot = path.join(targetDir, '.codex', 'skills');
-  if (await fs.pathExists(skillsRoot)) {
-    for (const entry of await fs.readdir(skillsRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const dir = path.join(skillsRoot, entry.name);
-      const skillFile = path.join(dir, 'SKILL.md');
-      if (!(await fs.pathExists(skillFile))) continue;
-      try {
-        const head = (await fs.readFile(skillFile, 'utf8')).slice(0, 4096);
-        if (head.includes(`generator: ${SKILL_GENERATOR}`)) {
-          await fs.remove(dir);
-          result.removedSkills.push(entry.name);
-        }
-      } catch {
-        // Leave unreadable entries untouched.
-      }
-    }
-    result.removedSkills.sort();
+export async function uninstallCodex(targetDir, options = {}) {
+  const { dryRun = false, backup = true } = options;
+  const manifest = await readManifest(targetDir);
+  const skillRemovals = [];
+  const backupFiles = [];
+
+  for (const [relative, record] of Object.entries(manifest.files || {})) {
+    if (!relative.startsWith(`${CODEX_SKILLS_DIR}/`) || !relative.endsWith('/SKILL.md')) continue;
+    const filePath = path.join(targetDir, relative);
+    if (!(await fileMatchesHash(filePath, record.sha256))) continue;
+    skillRemovals.push({ relative, filePath, name: path.basename(path.dirname(filePath)) });
+    backupFiles.push(relative);
   }
 
+  let agentsAction = 'absent';
   const agentsPath = path.join(targetDir, 'AGENTS.md');
-  if (await fs.pathExists(agentsPath)) {
+  if (await fs.pathExists(agentsPath) && manifest.agentsBlockSha256) {
+    const existing = await fs.readFile(agentsPath, 'utf8');
+    const blockMatch = existing.match(/<!-- TOH-FRAMEWORK-START -->[\s\S]*?<!-- TOH-FRAMEWORK-END -->/);
+    if (blockMatch && sha256(blockMatch[0]) === manifest.agentsBlockSha256) {
+      agentsAction = existing.replace(AGENTS_BLOCK_RE, '').trim() ? 'updated' : 'removed';
+      backupFiles.push('AGENTS.md');
+    }
+  }
+
+  let configAction = 'absent';
+  const configPath = path.join(targetDir, '.codex', 'config.toml');
+  if (manifest.configSha256 && await fileMatchesHash(configPath, manifest.configSha256)) {
+    const existing = await fs.readFile(configPath, 'utf8');
+    const stripped = existing.replace(CONFIG_BLOCK_RE, '').trim();
+    configAction = stripped ? 'updated' : 'removed';
+    backupFiles.push(path.relative(targetDir, configPath));
+  }
+
+  const result = {
+    removedSkills: skillRemovals.map((item) => item.name).sort(),
+    agentsMd: agentsAction,
+    config: configAction,
+    dryRun,
+    backupPath: null
+  };
+
+  if (dryRun) return result;
+  if (backup) result.backupPath = await makeBackup(targetDir, [...new Set(backupFiles)]);
+
+  for (const item of skillRemovals) {
+    await fs.remove(item.filePath);
+    const parent = path.dirname(item.filePath);
+    if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);
+  }
+
+  if (agentsAction !== 'absent') {
     const existing = await fs.readFile(agentsPath, 'utf8');
     const stripped = existing.replace(AGENTS_BLOCK_RE, '').trim();
-    if (stripped === existing.trim()) {
-      result.agentsMd = 'absent'; // no TOH block -> nothing to do
-    } else if (stripped) {
-      await fs.writeFile(agentsPath, `${stripped}\n`);
-      result.agentsMd = 'updated';
-    } else {
-      await fs.remove(agentsPath); // block was the whole file -> file was ours
-      result.agentsMd = 'removed';
-    }
+    if (stripped) await fs.writeFile(agentsPath, `${stripped}\n`);
+    else await fs.remove(agentsPath);
   }
 
+  if (configAction !== 'absent') {
+    const existing = await fs.readFile(configPath, 'utf8');
+    const stripped = existing.replace(CONFIG_BLOCK_RE, '').trim();
+    if (stripped) await fs.writeFile(configPath, `${stripped}\n`);
+    else await fs.remove(configPath);
+  }
+
+  const manifestPath = path.join(targetDir, MANIFEST_PATH);
+  if (await fs.pathExists(manifestPath)) await fs.remove(manifestPath);
   return result;
 }

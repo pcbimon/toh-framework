@@ -165,10 +165,12 @@ gemini
 ### Codex CLI
 
 Codex ไม่มี slash command แบบกำหนดเอง ดังนั้น TOH จะติดตั้ง **native Codex
-skills** ไว้ที่ `.codex/skills/` — หนึ่ง skill ต่อหนึ่งเวิร์กโฟลว์
+skills** ไว้ที่ `.agents/skills/` — wrapper ของ supporting skill 23 ตัวและ
+workflow 14 ตัว
 (`toh-vibe`, `toh-plan`, `toh-ui`, `toh-dev`, `toh-design`, `toh-test`,
 `toh-connect`, `toh-line`, `toh-mobile`, `toh-fix`, `toh-ship`,
-`toh-protect`, `toh-help`, `toh`)
+`toh-protect`, `toh-help`, `toh`) โดย quota ของเอกสารโปรเจคอยู่ใน
+`.codex/config.toml`
 
 ```bash
 # เปิดโฟลเดอร์โปรเจคใน Codex

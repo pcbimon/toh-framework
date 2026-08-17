@@ -16,7 +16,7 @@ src/agents/*.md              ← single source (superset frontmatter + canonical
         ├── Claude Code  → copy as-is → .claude/agents/*.md
         │                  (uses native name / description / tools / model)
         ├── Cursor       → strip frontmatter → bundle into a .mdc rules file
-        ├── Codex        → strip frontmatter → embed body in AGENTS.md
+        ├── Codex        → generate thin wrappers in .agents/skills/; keep runtime body in .toh/
         └── Gemini / Antigravity → convert frontmatter to each IDE's format
 ```
 
@@ -78,7 +78,7 @@ The same source produces IDE-appropriate output at install time:
 |-----|----------------|------------------------|
 | Claude Code | `.claude/agents/*.md` | Copied as-is (native `name`/`description`/`tools`/`model`) |
 | Cursor | `.cursor/rules/…` | Frontmatter stripped → bundled as rules |
-| Codex CLI | `AGENTS.md` | Frontmatter stripped → body embedded |
+| Codex CLI | `.agents/skills/*.md` + `AGENTS.md` | 23 supporting-skill + 14 command wrappers; runtime body stays in `.toh/` |
 | Gemini / Antigravity | `.toh/agents/*.md` | Frontmatter converted per IDE |
 
 ```

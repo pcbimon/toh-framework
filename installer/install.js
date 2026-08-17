@@ -224,6 +224,8 @@ async function promptConfiguration(defaults) {
 async function checkExistingInstall(targetDir) {
   const markers = [
     join(targetDir, '.toh'),
+    join(targetDir, '.agents', 'skills'),
+    join(targetDir, '.codex', 'config.toml'),
     join(targetDir, '.claude', 'skills', 'vibe-orchestrator'),
     join(targetDir, '.cursor', 'rules', 'toh-framework.mdc')
   ];
@@ -247,7 +249,7 @@ async function cleanExistingInstall(targetDir) {
     }
   }
 
-  // Codex: remove TOH-managed .codex/skills + the AGENTS.md TOH block,
+  // Codex: remove TOH-managed .agents/skills + the AGENTS.md TOH block,
   // preserving any user skills and user AGENTS.md content.
   await uninstallCodex(targetDir);
 
@@ -262,6 +264,7 @@ async function setupIDEWithSpinner(ideName, setupFn) {
     spinner.succeed(`${ideName} configured (${configFile})`);
   } catch (error) {
     spinner.fail(`Failed to configure ${ideName}: ${error.message}`);
+    throw error;
   }
 }
 
@@ -270,7 +273,7 @@ function getIDEConfigFile(ideName) {
     'Claude Code': 'created CLAUDE.md',
     'Cursor': '.cursor/rules/*.mdc',
     'Gemini CLI': '.gemini/GEMINI.md',
-    'Codex CLI': '.codex/skills/ + AGENTS.md'
+    'Codex CLI': '.agents/skills/ + AGENTS.md + .codex/config.toml'
   };
   return configs[ideName] || 'configured';
 }
@@ -671,7 +674,7 @@ function printNextSteps(config) {
     // 13 green + 47 gray = 60 ; 11 green + 49 gray = 60 ; 18 green + 42 gray = 60
     console.log(row(chalk.green('    $toh-vibe') + chalk.gray(' - Native skill: new project'.padEnd(47))));
     console.log(row(chalk.green('    /skills') + chalk.gray(' - Browse all TOH skills'.padEnd(49))));
-    console.log(row(chalk.green('    .codex/skills/') + chalk.gray(' - 14 native skills installed'.padEnd(42))));
+    console.log(row(chalk.green('    .agents/skills/') + chalk.gray(' - 37 native wrappers installed'.padEnd(42))));
     console.log(empty);
   }
 

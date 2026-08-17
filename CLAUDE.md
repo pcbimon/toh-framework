@@ -31,7 +31,7 @@ All npm scripts wrap `node bin/toh-cli.js <cmd>`, which lazy-loads `installer/*.
 (.github/workflows/ci.yml runs both on Node 18 + 22):
 
 1. Run what you touched — `npm test`, install into a scratch dir, `npm run list`/`status`, `npm pack --dry-run`.
-   Inspect the generated output (.toh/, .claude/, .cursor/rules/, AGENTS.md, .codex/skills/, .gemini/, .agent/workflows/) — never assume a transform worked.
+  Inspect the generated output (.toh/, .claude/, .cursor/rules/, AGENTS.md, .agents/skills/, .codex/config.toml, .gemini/, .agent/workflows/) — never assume a transform worked.
 2. Coffee-Shop-Owner Test for any user-facing change: Could a coffee-shop owner use this
    without tech vocabulary? Does the system ever ask a question they can't answer? When it
    breaks, do they know what to do next? Does the output look professionally made?
@@ -54,9 +54,9 @@ then 4 handlers in `installer/ide-handlers/` (plus shared.js utilities) cover th
 - gemini-cli.js → BOTH Gemini CLI (.gemini/: TOML commands from src/gemini-commands/, skills,
   GEMINI.md) and Antigravity (.agent/workflows/ from src/antigravity-workflows/); selecting
   gemini auto-adds antigravity. There is no antigravity.js.
-- codex.js → NATIVE Codex skills: one thin wrapper per command at
-  .codex/skills/<toh-*>/SKILL.md (generated from src/commands/ frontmatter; each wrapper
-  points at .toh/commands/*.md + .toh/skills/* and states Codex constraints — no subagents,
+- codex.js → NATIVE Codex skills: one thin wrapper per supporting skill and command at
+  .agents/skills/<name>/SKILL.md (generated from src/skills/ and src/commands/; each wrapper
+  points at .toh/commands/*.md or .toh/skills/* and states Codex constraints — no subagents,
   no Stop hook, sequential TOH LOOP) + a CONCISE managed AGENTS.md block
   (TOH-FRAMEWORK-START/END: identity, capabilities, skills table, legacy `/toh-*` compat
   note, memory protocol). Never embed agent bodies in AGENTS.md again (pre-v2.1 behavior —

@@ -6,28 +6,28 @@ All notable changes to Toh Framework will be documented in this file.
 
 ### 🧠 Native Codex Skills Integration
 
-The Codex integration no longer simulates `/toh-*` slash commands through a giant `AGENTS.md` — Codex has no custom slash commands, so that recognition was unreliable. TOH workflows now install as **native Codex skills** (`.codex/skills/<toh-*>/SKILL.md`), which Codex discovers from the project root and can invoke explicitly (`$toh-vibe`, `/skills`) or match implicitly from the task description.
+The Codex integration no longer simulates `/toh-*` slash commands through a giant `AGENTS.md` — Codex has no custom slash commands, so that recognition was unreliable. TOH now installs **native Codex skill wrappers** under `.agents/skills/`, which Codex discovers from the repository and can invoke explicitly (`$toh-vibe`, `/skills`) or match implicitly from the task description.
 
 #### Changed
 
 - **Codex handler rewritten** (`installer/ide-handlers/codex.js`) - now installs one thin native skill per TOH command (14 skills), each a wrapper that points at the real workflow in `.toh/commands/*.md` and the supporting skills in `.toh/skills/` — no duplicated workflow content. Codex constraints (no subagents, no Stop hook, no model routing) are stated explicitly with sequential fallbacks.
 - **`AGENTS.md` block slimmed** - the managed `<!-- TOH-FRAMEWORK-START/END -->` block now carries only project-level rules: identity, capabilities, the native-skills table, legacy `/toh-*` compatibility note, `.toh` runtime map, and the tiered memory protocol. The ~800-line embedded copy of every agent body is gone (Codex has no subagents to run them).
-- **Codex install output** - the success box now points at `$toh-vibe` / `/skills` and `.codex/skills/` instead of implying `/toh-*` is registered.
+- **Codex install output** - the success box now points at `$toh-vibe` / `/skills` and `.agents/skills/` instead of implying `/toh-*` is registered.
 - **Reinstall safety** - `.toh/memory/*.md` are now seeded only if absent (previously every reinstall overwrote them, contradicting the README's "without deleting your existing memory" promise); `plan.md` / `progress.md` were already protected.
 - **`--quick` reinstalls are non-interactive** - an existing install under `--quick` now defaults to Quick Update instead of prompting (interactive behavior unchanged).
 
 #### Added
 
-- **Native Codex skills** - `.codex/skills/toh/SKILL.md` + one per `/toh-*` command, generated deterministically from `src/commands/*.md` frontmatter (single source of truth), with a `metadata.generator: toh-framework` marker.
+- **Native Codex skills** - 23 supporting-skill wrappers + 14 command wrappers under `.agents/skills/`, generated from `src/skills/` and `src/commands/*.md` with a `metadata.generator: toh-framework` marker.
 - **Stale-skill cleanup** - reinstall removes previously TOH-generated skills that no longer exist, identified by the generator marker; user skills (even user skills named `toh-*`) are never touched.
 - **`toh uninstall`** - new CLI command. `--ide codex` removes only TOH-managed Codex files (skills + AGENTS.md block, user content preserved); without `--ide` it also removes `.toh` and the other TOH-owned IDE resource dirs. The installer's Fresh Install cleanup uses the same Codex teardown.
-- **`toh status`** - now reports `.codex/skills/` and `AGENTS.md`.
+- **`toh status`** - now reports `.agents/skills/`, `.codex/config.toml`, and `AGENTS.md`.
 - **Test suite** - `tests/codex.test.js` (node:test, in-band runner via `tests/run.js`) covers fresh install, AGENTS.md preservation, idempotency/determinism, user-skill preservation, stale-skill removal, uninstall scoping, and SKILL.md validity with resolving references. Runs in CI (`npm test`) on Node 18 + 22.
 
 #### Technical
 
 - Agent count (**8**), skill count (**23**), command count (**14**) unchanged — Codex skills are generated wrappers, not new content.
-- Synced IDE surfaces: Codex (`.codex/skills/` + `AGENTS.md` block), README.md, docs/README-TH.md, installer output, `toh status`.
+- Synced IDE surfaces: Codex (`.agents/skills/` + `.codex/config.toml` + `AGENTS.md` block), README.md, docs/README-TH.md, installer output, `toh status`.
 - Version bumped from **2.0.0** to **2.1.0**.
 
 ---

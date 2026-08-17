@@ -71,6 +71,8 @@ program
   .description('Remove Toh Framework from your project (keeps user files)')
   .option('-t, --target <path>', 'Target directory', process.cwd())
   .option('-i, --ide <ides>', 'IDE to remove (currently: codex). Omit for full uninstall')
+  .option('--dry-run', 'Preview owned files without removing them')
+  .option('--no-backup', 'Do not create a backup before removal')
   .action(async (options) => {
     const { uninstall } = await import('../installer/uninstall.js');
     await uninstall(options);

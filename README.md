@@ -182,9 +182,11 @@ gemini
 ### Codex CLI
 
 Codex has no custom slash commands, so TOH installs **native Codex skills**
-under `.codex/skills/` — one per TOH workflow (`toh-vibe`, `toh-plan`,
-`toh-ui`, `toh-dev`, `toh-design`, `toh-test`, `toh-connect`, `toh-line`,
-`toh-mobile`, `toh-fix`, `toh-ship`, `toh-protect`, `toh-help`, `toh`).
+under `.agents/skills/` — 23 supporting-skill wrappers plus 14 workflow
+wrappers (`toh-vibe`, `toh-plan`, `toh-ui`, `toh-dev`, `toh-design`,
+`toh-test`, `toh-connect`, `toh-line`, `toh-mobile`, `toh-fix`, `toh-ship`,
+`toh-protect`, `toh-help`, `toh`). Codex project-doc quota is configured in
+`.codex/config.toml`.
 
 ```bash
 # Open the project root in Codex
@@ -336,7 +338,7 @@ claude -p "/toh-vibe coffee shop management system" --permission-mode acceptEdit
 | 🇹🇭 Thai documentation | [docs/README-TH.md](docs/README-TH.md) |
 | Full version history | [CHANGELOG.md](CHANGELOG.md) |
 | All commands + cheatsheet | run `/toh-help` in your IDE |
-| Per-project guide (auto-generated) | `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules` / `.codex/skills` in your project after install |
+| Per-project guide (auto-generated) | `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` / `.cursor/rules` / `.agents/skills` in your project after install |
 | The plan artifact | `.toh/plan.md` — your app's live checklist (open it anytime to see progress) |
 | Design contract | `DESIGN.md` at your project root — generated per project, edit it to steer the look |
 

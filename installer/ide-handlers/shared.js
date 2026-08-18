@@ -94,6 +94,31 @@ export const CAPABILITY_PROFILES = {
     workflows: true,
     parallel: false,
     modelRouting: false
+  },
+  zcode: {
+    ide: 'zcode',
+    // v2.1: ZCode (Z.ai, GLM) reads the SAME two open surfaces we already write —
+    // workspace AGENTS.md as project memory, and project-scoped `.agents/skills/`.
+    // VERIFIED LIVE against ZCode CLI 0.16.3 on macOS:
+    //   `zcode skills list --cwd <project> --json`
+    //     -> 37 entries, "scope":"project", "source":"agents",
+    //        "rootPath":"<project>/.agents/skills", 0 diagnostics
+    //   `zcode commands list --cwd <project> --json`
+    //     -> "scope":"project", "source":"agents",
+    //        "rootPath":"<project>/.agents/commands"
+    // So unlike Codex, ZCode DOES take project slash commands — hence commands: true.
+    // subagents/hooks stay false: ZCode ships `/expert` and a plugin system, but
+    // neither was verified to load OUR files, and an unverified YES would make the
+    // model promise delegation it cannot perform. Raise only after a live check.
+    subagents: 'none',
+    teams: false,
+    goal: false,
+    loop: false,
+    hooks: false,
+    workflows: false,
+    commands: true,
+    parallel: false,
+    modelRouting: false
   }
 };
 
@@ -103,7 +128,8 @@ const IDE_DISPLAY = {
   cursor: { name: 'Cursor', contextFile: '.cursor/rules/toh-framework.mdc' },
   codex: { name: 'Codex CLI', contextFile: 'AGENTS.md' },
   'gemini-cli': { name: 'Gemini CLI', contextFile: 'GEMINI.md' },
-  antigravity: { name: 'Google Antigravity (agy CLI + IDE)', contextFile: '.agents/rules/toh-framework.md' }
+  antigravity: { name: 'Google Antigravity (agy CLI + IDE)', contextFile: '.agents/rules/toh-framework.md' },
+  zcode: { name: 'ZCode (Z.ai)', contextFile: 'AGENTS.md' }
 };
 
 /**
@@ -121,7 +147,11 @@ function normalizeIde(ide) {
     gemini: 'gemini-cli',
     'gemini-cli': 'gemini-cli',
     antigravity: 'antigravity',
-    agy: 'antigravity'
+    agy: 'antigravity',
+    zcode: 'zcode',
+    'z-code': 'zcode',
+    zai: 'zcode',
+    'z.ai': 'zcode'
   };
   return aliases[key] || key;
 }
@@ -288,6 +318,11 @@ export function renderCapabilitiesSection(ide) {
   } else {
     lines.push('- Workflows: NO');
   }
+  // Only runtimes that actually load project slash commands get this line, so
+  // the AGENTS.md/rules text of every other IDE is byte-for-byte unchanged.
+  if (p.commands) {
+    lines.push('- Slash commands: YES — `/toh-*` load natively from `.agents/commands/` (the same 14 commands also exist as skills)');
+  }
   lines.push(p.modelRouting
     ? '- Model routing: YES — haiku = scaffold/tests · sonnet = builders · opus = planning/QC'
     : '- Model routing: NO — ignore model tiers and proceed');
@@ -412,48 +447,105 @@ export async function writeAgentsSkills(targetDir, srcDir) {
   }
 
   // ---- (b) toh-* command skills converted from the TOML prompts ------
-  const tomlSources = [];
-  const rootToml = join(srcDir, 'gemini-commands', 'toh.toml');
-  if (await fs.pathExists(rootToml)) tomlSources.push({ file: rootToml, name: 'toh' });
-  const namespacedDir = join(srcDir, 'gemini-commands', 'toh');
-  if (await fs.pathExists(namespacedDir)) {
-    for (const f of (await fs.readdir(namespacedDir)).sort()) {
-      if (f.endsWith('.toml')) {
-        tomlSources.push({ file: join(namespacedDir, f), name: `toh-${f.replace(/\.toml$/, '')}` });
-      }
-    }
-  }
-
-  for (const { file, name } of tomlSources) {
-    const raw = await fs.readFile(file, 'utf8');
-    const descMatch = raw.match(/^description\s*=\s*"(.*)"\s*$/m);
-    const promptMatch = raw.match(/^prompt\s*=\s*"""\r?\n?([\s\S]*?)"""\s*$/m);
-    if (!descMatch || !promptMatch) {
-      throw new Error(`writeAgentsSkills: cannot parse description/prompt in ${file}`);
-    }
-
-    let body = transformCommand(promptMatch[1], 'antigravity');
-    // Colon namespace is dead in agy — skills register as /toh-vibe etc.
-    body = body.replace(/\/toh:(?=[a-z])/g, '/toh-');
-    // TOML @{...} file includes do not exist in agy skills — plain read lines.
-    body = body.replace(/\.gemini\/skills\//g, '.agents/skills/');
-    body = body.replace(/@\{([^}]+)\}/g, 'Read `$1`');
-    // {{args}} has no equivalent — skills receive the invocation text itself.
-    body = body.replace(/\{\{args\}\}/g, "the user's request following the command");
+  for (const { file, name } of await collectCommandTomls(srcDir)) {
+    const parsed = await renderCommandPrompt(file, 'writeAgentsSkills');
+    const description = parsed.description;
+    // A skill is invoked by name, not by a slash command with arguments, so
+    // {{args}} has no value to bind to — commands keep the placeholder, skills
+    // must not (an unbound {{args}} reads as literal text to the model).
+    const body = parsed.body.replace(/\{\{args\}\}/g, "the user's request following the command");
 
     const fmYaml = yaml
       .dump(
-        { name, description: descMatch[1], 'disable-model-invocation': true },
+        { name, description, 'disable-model-invocation': true },
         { lineWidth: -1, noRefs: true }
       )
       .trimEnd();
 
     await fs.ensureDir(join(outDir, name));
-    await fs.writeFile(join(outDir, name, 'SKILL.md'), `---\n${fmYaml}\n---\n\n${body.trimEnd()}\n`);
+    await fs.writeFile(join(outDir, name, 'SKILL.md'), `---\n${fmYaml}\n---\n\n${body}\n`);
     commandSkills++;
   }
 
   return { dir: outDir, skillWrappers, commandSkills };
+}
+
+/**
+ * Enumerate the 14 command prompts in src/gemini-commands/ (root toh.toml plus
+ * the toh/ namespace). This TOML set is the single conversion source for every
+ * non-Claude command surface — keep it in sync with src/commands/*.md.
+ */
+async function collectCommandTomls(srcDir) {
+  const sources = [];
+  const rootToml = join(srcDir, 'gemini-commands', 'toh.toml');
+  if (await fs.pathExists(rootToml)) sources.push({ file: rootToml, name: 'toh' });
+  const namespacedDir = join(srcDir, 'gemini-commands', 'toh');
+  if (await fs.pathExists(namespacedDir)) {
+    for (const f of (await fs.readdir(namespacedDir)).sort()) {
+      if (f.endsWith('.toml')) {
+        sources.push({ file: join(namespacedDir, f), name: `toh-${f.replace(/\.toml$/, '')}` });
+      }
+    }
+  }
+  return sources;
+}
+
+/**
+ * Parse one command TOML and rewrite its prompt for the shared `.agents/`
+ * surfaces. A parse failure is a packaging bug — throw, never emit a stub.
+ */
+async function renderCommandPrompt(file, caller) {
+  const raw = await fs.readFile(file, 'utf8');
+  const descMatch = raw.match(/^description\s*=\s*"(.*)"\s*$/m);
+  const promptMatch = raw.match(/^prompt\s*=\s*"""\r?\n?([\s\S]*?)"""\s*$/m);
+  if (!descMatch || !promptMatch) {
+    throw new Error(`${caller}: cannot parse description/prompt in ${file}`);
+  }
+
+  let body = transformCommand(promptMatch[1], 'antigravity');
+  // Colon namespace is dead in agy/ZCode — commands register as /toh-vibe etc.
+  body = body.replace(/\/toh:(?=[a-z])/g, '/toh-');
+  // TOML @{...} file includes do not exist here — plain read lines.
+  body = body.replace(/\.gemini\/skills\//g, '.agents/skills/');
+  body = body.replace(/@\{([^}]+)\}/g, 'Read `$1`');
+
+  return { description: descMatch[1], body: body.trimEnd() };
+}
+
+/**
+ * Write the shared `.agents/commands/` surface — real project slash commands.
+ *
+ * ZCode discovers these natively (verified live: `zcode commands list --json`
+ * reports scope "project", source "agents", rootPath "<project>/.agents/commands").
+ * Runtimes that ignore the directory are unaffected: they still reach the same
+ * 14 prompts through `.agents/skills/toh-*`.
+ *
+ * `{{args}}` is Gemini CLI's TOML placeholder and means nothing here, so it is
+ * rewritten to `$ARGUMENTS` — the placeholder that pairs with the
+ * description/argument-hint frontmatter this function emits. Leaving the raw
+ * token in would put a literal `{{args}}` where the user's request belongs.
+ *
+ * Returns { dir, commands }.
+ */
+export async function writeAgentsCommands(targetDir, srcDir) {
+  const outDir = join(targetDir, '.agents', 'commands');
+  await fs.ensureDir(outDir);
+  let commands = 0;
+
+  for (const { file, name } of await collectCommandTomls(srcDir)) {
+    const parsed = await renderCommandPrompt(file, 'writeAgentsCommands');
+    const body = parsed.body.replace(/\{\{args\}\}/g, '$ARGUMENTS');
+
+    const fm = { description: parsed.description };
+    // Only prompt for input the prompt actually consumes.
+    if (body.includes('$ARGUMENTS')) fm['argument-hint'] = '[what you want, in plain language]';
+
+    const fmYaml = yaml.dump(fm, { lineWidth: -1, noRefs: true }).trimEnd();
+    await fs.writeFile(join(outDir, `${name}.md`), `---\n${fmYaml}\n---\n\n${body}\n`);
+    commands++;
+  }
+
+  return { dir: outDir, commands };
 }
 
 export default {
@@ -461,5 +553,6 @@ export default {
   transformCommand,
   writeCapabilitiesJson,
   renderCapabilitiesSection,
-  writeAgentsSkills
+  writeAgentsSkills,
+  writeAgentsCommands
 };

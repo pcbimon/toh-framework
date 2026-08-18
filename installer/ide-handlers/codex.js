@@ -17,6 +17,25 @@ import { transformCommand, renderCapabilitiesSection } from './shared.js';
 // stay well under that. Exceeding this is a build bug, never a warning.
 const MAX_TOH_BLOCK_BYTES = 24 * 1024;
 
+// AGENTS.md is a shared open surface: Codex reads it as project memory, and so
+// does ZCode (Z.ai) — same filename, same location, same marker block. Only
+// three sentences differ per runtime, so both handlers build from one generator.
+// Keys must match the canonical IDE keys in shared.js CAPABILITY_PROFILES.
+const AGENTS_MD_RUNTIMES = {
+  codex: {
+    memoryEN: 'This file serves as project memory for Codex (CLI and desktop app). It contains the Toh Framework configuration and agent definitions.',
+    memoryTH: 'This file is project memory for Codex (CLI and desktop app) containing Toh Framework configuration and agent definitions',
+    runtimeName: 'Codex',
+    commandHint: ''
+  },
+  zcode: {
+    memoryEN: 'This file serves as project memory for ZCode (Z.ai). It contains the Toh Framework configuration and agent definitions.',
+    memoryTH: 'This file is project memory for ZCode (Z.ai) containing Toh Framework configuration and agent definitions',
+    runtimeName: 'ZCode',
+    commandHint: ' The 14 `/toh-*` commands are installed natively in `.agents/commands/` — invoke them directly; the same prompts are also discoverable as skills in `.agents/skills/`.'
+  }
+};
+
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,8 +54,8 @@ async function createMemoryFiles(memoryDir, language = 'en') {
     : `# 🔥 Active Task\n\n## Current Focus\n[Waiting for user command]\n\n## In Progress\n- (none)\n\n## Next Steps\n- Waiting for user command\n\n---\n*Last updated: ${timestamp}*\n`;
 
   const summaryContent = language === 'th'
-    ? `# 📋 Project Summary\n\n## Project Overview\n- Name: [ชื่อโปรเจค]\n- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (ยังไม่มี)\n\n## Important Notes\n- ใช้ Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`
-    : `# 📋 Project Summary\n\n## Project Overview\n- Name: [Project Name]\n- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (none)\n\n## Important Notes\n- Using Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`;
+    ? `# 📋 Project Summary\n\n## Project Overview\n- Name: [ชื่อโปรเจค]\n- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (ยังไม่มี)\n\n## Important Notes\n- ใช้ Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`
+    : `# 📋 Project Summary\n\n## Project Overview\n- Name: [Project Name]\n- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (none)\n\n## Important Notes\n- Using Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`;
 
   const decisionsContent = language === 'th'
     ? `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${timestamp} | ใช้ Toh Framework | AI-Orchestration Driven Development |\n\n---\n*Last updated: ${timestamp}*\n`
@@ -219,16 +238,17 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
   await fs.writeFile(path.join(memoryDir, 'agents-log.md'), agentsLogContent);
 }
 
-export async function setupCodex(targetDir, srcDir, language = 'en') {
-  // Create .toh/memory directory structure (v1.1.0 - Memory System)
-  const tohDir = path.join(targetDir, '.toh');
-  const memoryDir = path.join(tohDir, 'memory');
-  const archiveDir = path.join(memoryDir, 'archive');
-  await fs.ensureDir(archiveDir);
-
-  // Create memory template files
-  await createMemoryFiles(memoryDir, language);
-
+/**
+ * Build and write the root AGENTS.md marker block.
+ *
+ * Shared surface: Codex reads AGENTS.md as project memory, and so does ZCode
+ * (Z.ai) — same filename, same marker block, three runtime sentences apart.
+ * Exported so zcode.js reuses this instead of forking a second generator.
+ *
+ * Content outside <!-- TOH-FRAMEWORK-START/END --> is always preserved.
+ * Returns the byte size of the generated block.
+ */
+export async function writeAgentsMd(targetDir, srcDir, language = 'en', ide = 'codex') {
   // Read all agents — v2.1 (W1): embed a compact roster table ONLY.
   // Full agent bodies used to be inlined here, which pushed AGENTS.md to
   // ~117 KB while Codex silently truncates project docs at 32 KiB combined —
@@ -277,9 +297,9 @@ export async function setupCodex(targetDir, srcDir, language = 'en') {
   // <!-- tfw:fallback --> blocks are unwrapped for Codex (idempotent, additive).
   const agentsMd = transformCommand(
     language === 'th'
-      ? generateAgentsMdTH(agentRoster)
-      : generateAgentsMdEN(agentRoster),
-    'codex'
+      ? generateAgentsMdTH(agentRoster, ide)
+      : generateAgentsMdEN(agentRoster, ide),
+    ide
   );
 
   // W1 hard size assertion: never ship a block Codex would silently truncate.
@@ -318,6 +338,17 @@ export async function setupCodex(targetDir, srcDir, language = 'en') {
     await fs.writeFile(agentsPath, agentsMd);
   }
 
+  return tohBlockBytes;
+}
+
+export async function setupCodex(targetDir, srcDir, language = 'en') {
+  // Create .toh/memory directory structure (v1.1.0 - Memory System)
+  const memoryDir = path.join(targetDir, '.toh', 'memory');
+  await fs.ensureDir(path.join(memoryDir, 'archive'));
+  await createMemoryFiles(memoryDir, language);
+
+  await writeAgentsMd(targetDir, srcDir, language, 'codex');
+
   // W1 belt-and-braces: project-scoped .codex/config.toml raising Codex's
   // project-doc budget (officially supported key, per config-reference), so
   // even a large pre-existing user AGENTS.md above our marker cannot push the
@@ -338,7 +369,8 @@ export async function setupCodex(targetDir, srcDir, language = 'en') {
   return true;
 }
 
-function generateAgentsMdEN(agentRoster) {
+function generateAgentsMdEN(agentRoster, ide = 'codex') {
+  const rt = AGENTS_MD_RUNTIMES[ide] || AGENTS_MD_RUNTIMES.codex;
   return `<!-- TOH-FRAMEWORK-START -->
 # 🎯 Toh Framework
 
@@ -346,7 +378,7 @@ function generateAgentsMdEN(agentRoster) {
 
 ## Project Memory
 
-This file serves as project memory for Codex CLI/Web. It contains the Toh Framework configuration and agent definitions.
+${rt.memoryEN}
 
 This file is a compact index. Full specs live on disk and MUST be read at runtime:
 - Commands → \`.toh/commands/toh-<cmd>.md\`
@@ -357,9 +389,9 @@ This file is a compact index. Full specs live on disk and MUST be read at runtim
 
 You are the **Toh Framework Agent** - an AI that helps Solo Developers build SaaS systems by themselves.
 
-${renderCapabilitiesSection('codex')}
+${renderCapabilitiesSection(ide)}
 
-Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+Runtime Identity: you are running in ${rt.runtimeName}. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).${rt.commandHint}
 
 ## Core Philosophy (AODD - AI-Orchestration Driven Development)
 
@@ -372,7 +404,7 @@ Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
@@ -586,7 +618,8 @@ The AI will:
 `;
 }
 
-function generateAgentsMdTH(agentRoster) {
+function generateAgentsMdTH(agentRoster, ide = 'codex') {
+  const rt = AGENTS_MD_RUNTIMES[ide] || AGENTS_MD_RUNTIMES.codex;
   return `<!-- TOH-FRAMEWORK-START -->
 # 🎯 Toh Framework
 
@@ -595,7 +628,7 @@ function generateAgentsMdTH(agentRoster) {
 
 ## Project Memory
 
-This file is project memory for Codex CLI/Web containing Toh Framework configuration and agent definitions
+${rt.memoryTH}
 
 This file is a compact index. Full specs live on disk and MUST be read at runtime:
 - Commands → \`.toh/commands/toh-<cmd>.md\`
@@ -606,9 +639,9 @@ This file is a compact index. Full specs live on disk and MUST be read at runtim
 
 You are **Toh Framework Agent** - AI that helps Solo Developers build SaaS by themselves
 
-${renderCapabilitiesSection('codex')}
+${renderCapabilitiesSection(ide)}
 
-Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+Runtime Identity: you are running in ${rt.runtimeName}. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).${rt.commandHint}
 
 ## Core Philosophy (AODD - AI-Orchestration Driven Development)
 
@@ -621,7 +654,7 @@ Runtime Identity: you are running in Codex CLI. Multi-agent features (subagents/
 
 | Category | Technology |
 |------|----------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |

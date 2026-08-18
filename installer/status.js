@@ -40,10 +40,18 @@ export async function status() {
   const projectPaths = [
     { path: join(cwd, '.claude'), name: '.claude/' },
     { path: join(cwd, '.cursor', 'rules'), name: '.cursor/rules/' },
+    { path: join(cwd, '.cursor', 'agents'), name: '.cursor/agents/' },
+    { path: join(cwd, '.agents'), name: '.agents/' },
     { path: join(cwd, '.toh'), name: '.toh/' },
     { path: join(cwd, 'CLAUDE.md'), name: 'CLAUDE.md' },
-    { path: join(cwd, '.cursorrules'), name: '.cursorrules' }
-  ];
+    { path: join(cwd, 'AGENTS.md'), name: 'AGENTS.md' },
+    { path: join(cwd, '.codex'), name: '.codex/' },
+    // Legacy surfaces: only worth a line when they actually exist, otherwise
+    // every modern install would show a permanent "not found" for a file v2.1
+    // deliberately stopped writing.
+    { path: join(cwd, '.cursorrules'), name: '.cursorrules', legacy: true },
+    { path: join(cwd, '.gemini'), name: '.gemini/', legacy: true }
+  ].filter((p) => !p.legacy || fs.existsSync(p.path));
 
   for (const p of projectPaths) {
     if (fs.existsSync(p.path)) {

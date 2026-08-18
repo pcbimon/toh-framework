@@ -100,8 +100,10 @@ const CO_OWNED = new Set([
 const GROUPS = {
   claude: 'The Toh files for Claude Code (.claude/, CLAUDE.md)',
   cursor: 'The Toh files for Cursor (.cursor/)',
-  antigravity: 'The Toh files for Antigravity (.agents/, .agent/)',
-  codex: 'The Toh files for Codex (AGENTS.md, .codex/)',
+  // .agents/ is the shared open standard — Antigravity, Codex, Cursor 2.4 and
+  // ZCode all read it, so the label must not name only one of them.
+  antigravity: 'The shared Toh agent files (.agents/, .agent/) — Antigravity, Codex, Cursor, ZCode',
+  codex: 'The Toh files for Codex / ZCode (AGENTS.md, .codex/)',
   gemini: 'The Toh files for Gemini CLI (.gemini/) — the old setup',
   shared: 'The shared Toh folder (.toh/)',
   user: 'Your own files'
@@ -245,6 +247,8 @@ async function buildCatalog(srcDir) {
     f === 'toh.toml' ? 'toh' : `toh-${f.replace(/^toh\//, '').replace(/\.toml$/, '')}`
   );
   cat.agentsSkillDirs = [...new Set([...cat.skillDirs, ...commandSkillNames])];
+  // .agents/commands = one native slash command per TOML (ZCode reads these)
+  cat.agentsCommandFiles = commandSkillNames.map((n) => `${n}.md`);
 
   cat.ok = cat.skillDirs.length > 0 && cat.commandFiles.length > 0;
   return cat;
@@ -275,6 +279,7 @@ function derivedPaths(cat) {
     add(`.agents/agents/${n}`);
   }
   for (const d of cat.agentsSkillDirs) add(`.agents/skills/${d}/SKILL.md`);
+  for (const f of cat.agentsCommandFiles) add(`.agents/commands/${f}`);
   for (const f of cat.workflowFiles) {
     add(`.agents/workflows/${f}`);
     add(`.agent/workflows/${f}`);

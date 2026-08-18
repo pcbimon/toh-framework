@@ -2,7 +2,7 @@
   "name": "toh-framework",
   "version": "2.1.0",
   "type": "module",
-  "description": "AI-Orchestration Driven Development - Type Once, Have it all! Approve once and the TOH LOOP builds, tests, and fixes a whole app until verified DONE. For Claude Code, Cursor, Codex, and Antigravity (agy CLI + IDE).",
+  "description": "AI-Orchestration Driven Development - Type Once, Have it all! Approve once and the TOH LOOP builds, tests, and fixes a whole app until verified DONE. For Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex (CLI + desktop app), and ZCode.",
   "author": {
     "name": "Wasin Treesinthuros",
     "email": "dr.wasin@gmail.com"
@@ -35,7 +35,9 @@
     "orchestration",
     "nextjs",
     "typescript",
-    "thai"
+    "thai",
+    "zcode",
+    "z-ai"
   ],
   "bin": {
     "toh": "./bin/toh-cli.js",
@@ -48,6 +50,8 @@
     "src",
     "docs",
     "!docs/assets",
+    "!docs/plans",
+    "!docs/V2-UPGRADE-PLAN.md",
     "dist"
   ],
   "scripts": {

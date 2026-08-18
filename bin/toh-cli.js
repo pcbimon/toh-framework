@@ -49,7 +49,7 @@ program
   .command('install')
   .description('Install Toh Framework to your project')
   .option('-t, --target <path>', 'Target directory', process.cwd())
-  .option('-i, --ide <ides>', 'IDEs to configure (claude,cursor,antigravity,codex)', 'claude,cursor,antigravity')
+  .option('-i, --ide <ides>', 'IDEs to configure (claude,cursor,antigravity,codex,zcode)', 'claude')
   .option('-q, --quick', 'Quick install without prompts')
   .option('--legacy-gemini', 'Also configure legacy Gemini CLI (.gemini/) — Enterprise/GCP users only; consumer Gemini CLI was shut down 2026-06-18')
   .option('--legacy-cursorrules', 'Also write the legacy root .cursorrules file (very old Cursor versions)')

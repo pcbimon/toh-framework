@@ -15,6 +15,7 @@ import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
 import { setupAntigravityCLI } from './ide-handlers/antigravity-cli.js';
 import { setupCodex } from './ide-handlers/codex.js';
+import { setupZcode } from './ide-handlers/zcode.js';
 import { transformCommand, writeCapabilitiesJson, writeAgentsSkills } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -249,6 +250,19 @@ export async function install(options) {
   // Setup IDEs
   console.log(chalk.cyan('\n🛠️  Configuring IDEs...\n'));
   
+  // AGENTS.md is shared with Codex, so "is Codex in play?" must include Codex
+  // installs from EARLIER runs — capabilities.json is a union across installs.
+  // Without this, `install -i zcode` over an existing Codex project would
+  // rewrite AGENTS.md with the ZCode variant and tell Codex it has slash
+  // commands it does not have.
+  let declaredIdes = [];
+  try {
+    declaredIdes = (await fs.readJson(join(config.targetDir, '.toh', 'capabilities.json'))).ides || [];
+  } catch { /* first install, or unreadable — selection alone decides */ }
+  const codexSelected = [...config.ides, ...declaredIdes].some(
+    (name) => ['codex', 'codex-cli'].includes(String(name).toLowerCase())
+  );
+
   for (const ideName of config.ides) {
     switch (ideName.toLowerCase()) {
       case 'claude':
@@ -270,7 +284,18 @@ export async function install(options) {
         break;
       case 'codex':
       case 'codex-cli':
-        await setupIDEWithSpinner('Codex CLI', () => setupCodex(config.targetDir, SRC_DIR, config.language));
+        await setupIDEWithSpinner('Codex (CLI + desktop app)', () => setupCodex(config.targetDir, SRC_DIR, config.language));
+        break;
+      case 'zcode':
+      case 'z-code':
+      case 'zai':
+      case 'z.ai':
+        // AGENTS.md is ONE physical file shared with Codex. When Codex is also
+        // selected its handler already wrote the conservative variant (no
+        // subagents, no slash commands) — true for ZCode as well — so ZCode
+        // only adds .agents/commands/ and never rewrites the file.
+        await setupIDEWithSpinner('ZCode (Z.ai)', () =>
+          setupZcode(config.targetDir, SRC_DIR, config.language, { writeAgentsMd: !codexSelected }));
         break;
       default:
         console.log(chalk.yellow(`  ⚠️  Unknown IDE: ${ideName}`));
@@ -330,10 +355,11 @@ async function promptConfiguration(defaults) {
       name: 'ides',
       message: 'Which IDEs/CLI tools do you want to configure?',
       choices: [
-        { name: '🤖 Claude Code (Anthropic)', value: 'claude', checked: true },
-        { name: '📝 Cursor', value: 'cursor', checked: true },
-        { name: '💎 Antigravity CLI (agy) — Google', value: 'antigravity', checked: true },
-        { name: '🧠 Codex CLI (OpenAI)', value: 'codex', checked: false }
+        { name: 'Claude Code (Anthropic)', value: 'claude', checked: true },
+        { name: 'Cursor', value: 'cursor', checked: false },
+        { name: 'Antigravity CLI (agy) — Google', value: 'antigravity', checked: false },
+        { name: 'Codex (CLI + desktop app) — OpenAI', value: 'codex', checked: false },
+        { name: 'ZCode (Z.ai)', value: 'zcode', checked: false }
       ],
       validate: (input) => input.length > 0 ? true : 'Please select at least one IDE'
     },
@@ -376,7 +402,7 @@ function resolveGeminiLegacy(config) {
     if ((key === 'gemini' || key === 'gemini-cli') && !config.legacyGemini) {
       if (!warned) {
         console.log(chalk.yellow(
-          '  ⚠️  Google shut down consumer Gemini CLI on 2026-06-18 — installing "Antigravity CLI (agy)" instead.\n' +
+          '  ⚠️  Consumer Gemini CLI is no longer served — installing "Antigravity CLI (agy)", Google\'s current target, instead.\n' +
           '      Enterprise/GCP Gemini CLI users: re-run with --legacy-gemini to keep the .gemini/ setup.'
         ));
         warned = true;
@@ -399,10 +425,10 @@ function resolveGeminiLegacy(config) {
  * second competing implementation.
  */
 async function installAgentsSkills(config) {
-  const consumers = ['cursor', 'codex', 'codex-cli', 'antigravity', 'agy'];
+  const consumers = ['cursor', 'codex', 'codex-cli', 'antigravity', 'agy', 'zcode', 'z-code', 'zai', 'z.ai'];
   if (!config.ides.some(name => consumers.includes(name.toLowerCase()))) return;
 
-  const spinner = spin('Writing shared .agents/skills (Codex + Cursor + Antigravity)...').start();
+  const spinner = spin('Writing shared .agents/skills (Codex + Cursor + Antigravity + ZCode)...').start();
   try {
     const result = await writeAgentsSkills(config.targetDir, SRC_DIR);
     spinner.succeed(`Shared skills written (.agents/skills/ — ${result.skillWrappers} skill wrappers + ${result.commandSkills} toh-* command skills)`);
@@ -467,7 +493,8 @@ function getIDEConfigFile(ideName) {
     'Cursor': '.cursor/rules/*.mdc',
     'Antigravity CLI (agy)': '.agents/rules/toh-framework.md',
     'Gemini CLI (legacy)': '.gemini/GEMINI.md',
-    'Codex CLI': 'AGENTS.md'
+    'Codex (CLI + desktop app)': 'AGENTS.md',
+    'ZCode (Z.ai)': 'AGENTS.md + .agents/'
   };
   return configs[ideName] || 'configured';
 }
@@ -923,11 +950,20 @@ function printNextSteps(config) {
   }
 
   if (config.ides.includes('codex') || config.ides.includes('codex-cli')) {
-    console.log(row(chalk.white(pad('  Codex CLI:'))));
+    console.log(row(chalk.white(pad('  Codex (CLI + desktop app):'))));
     // 9 chars green + 51 chars gray = 60
     console.log(row(chalk.green('    codex') + chalk.gray('     - Start Codex CLI in project'.padEnd(51))));
     // 13 chars green + 47 chars gray = 60
     console.log(row(chalk.green('    /toh-vibe') + chalk.gray(' - Create new project'.padEnd(47))));
+    console.log(empty);
+  }
+
+  if (config.ides.some((n) => ['zcode', 'z-code', 'zai', 'z.ai'].includes(String(n).toLowerCase()))) {
+    console.log(row(chalk.white(pad('  ZCode (Z.ai):'))));
+    // 13 chars green + 47 chars gray = 60
+    console.log(row(chalk.green('    /toh-plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
+    console.log(row(chalk.green('    /toh-vibe') + chalk.gray(' - Create new project'.padEnd(47))));
+    console.log(row(chalk.green('    /toh-help') + chalk.gray(' - Show all commands'.padEnd(47))));
     console.log(empty);
   }
 
@@ -945,7 +981,7 @@ function printNextSteps(config) {
   console.log(row(chalk.white(pad('  * Codex: compact AGENTS.md, never truncated (24KiB guard)'))));
   console.log(row(chalk.white(pad('  * Antigravity (agy): .agents/ + deterministic Stop hook'))));
   console.log(row(chalk.white(pad('  * Cursor 2.4 native subagents (.cursor/agents/)'))));
-  console.log(row(chalk.white(pad('  * Shared .agents/skills: 37 skills for Codex/Cursor/agy'))));
+  console.log(row(chalk.white(pad('  * .agents/ standard: 37 skills + 14 commands shared'))));
   console.log(row(chalk.white(pad('  * Live-read catalog + real /toh-* aliases (incl. /toh-pt)'))));
   console.log(bot);
   console.log('');

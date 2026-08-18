@@ -150,8 +150,8 @@ async function createMemoryFiles(memoryDir, language = 'en') {
     : `# 🔥 Active Task\n\n## Current Focus\n[Waiting for user command]\n\n## In Progress\n- (none)\n\n## Just Completed\n- (none)\n\n## Next Steps\n- Waiting for user command\n\n---\n*Last updated: ${timestamp}*\n`;
 
   const summaryContent = language === 'th'
-    ? `# 📋 Project Summary\n\n## Project Overview\n- Name: [ชื่อโปรเจค]\n- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (ยังไม่มี)\n\n## Important Notes\n- ใช้ Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`
-    : `# 📋 Project Summary\n\n## Project Overview\n- Name: [Project Name]\n- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (none)\n\n## Important Notes\n- Using Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`;
+    ? `# 📋 Project Summary\n\n## Project Overview\n- Name: [ชื่อโปรเจค]\n- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (ยังไม่มี)\n\n## Important Notes\n- ใช้ Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`
+    : `# 📋 Project Summary\n\n## Project Overview\n- Name: [Project Name]\n- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (none)\n\n## Important Notes\n- Using Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`;
 
   const decisionsContent = language === 'th'
     ? `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${timestamp} | ใช้ Toh Framework | AI-Orchestration Driven Development |\n\n---\n*Last updated: ${timestamp}*\n`
@@ -377,7 +377,7 @@ Users can use these patterns to invoke Toh Framework:
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
@@ -677,7 +677,7 @@ Users can call Toh Framework in multiple ways:
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
@@ -963,7 +963,7 @@ Invoke Toh agents by typing the command followed by your request.
 \`\`\`
 
 The agent will:
-1. Create Next.js 14 project structure
+1. Create Next.js 16 project structure
 2. Build all UI pages with English mock data
 3. Add state management with Zustand
 4. Create type definitions
@@ -1011,7 +1011,7 @@ Invoke Toh agents by typing the command followed by your request
 \`\`\`
 
 Agent will:
-1. Create Next.js 14 project structure
+1. Create Next.js 16 project structure
 2. Build all UI pages with Thai mock data
 3. Add state management with Zustand
 4. Create type definitions
@@ -1046,7 +1046,7 @@ The **Toh Orchestrator** - an AI that builds complete web applications autonomou
 
 1. **Never ask basic questions** - Make decisions yourself
 2. **UI First** - Create working UI before anything else
-3. **Fixed Stack** - Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+3. **Fixed Stack** - Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 4. **All English** - Response, UI, mock data all in English
 
 ## Commands
@@ -1089,7 +1089,7 @@ function generateCursorRulesTH() {
 
 1. **Never ask basic questions** - Make decisions yourself
 2. **UI First** - Create UI before anything else
-3. **Fixed Stack** - Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+3. **Fixed Stack** - Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 4. **Thai Data** - Response, UI, mock data in Thai
 
 ## Commands

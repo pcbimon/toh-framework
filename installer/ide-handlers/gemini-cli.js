@@ -164,7 +164,7 @@ Use these native slash commands:
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
@@ -267,7 +267,7 @@ Runtime Identity: you are running in Gemini CLI. Multi-agent features (subagents
 
 | หมวด | เทคโนโลยี |
 |------|-----------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
@@ -353,7 +353,7 @@ async function createMemoryFiles(memoryDir) {
 ## Project Overview
 - Name: [Project Name]
 - Type: [Type]
-- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 
 ## Completed Features
 - (none)

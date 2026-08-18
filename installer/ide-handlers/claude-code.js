@@ -497,7 +497,7 @@ async function createMemoryFiles(memoryDir) {
 ## Project Overview
 - Name: [Project Name]
 - Type: [Type]
-- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 
 ## Completed Features
 - (none)
@@ -849,7 +849,7 @@ ${renderCapabilitiesSection('claude-code')}
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |

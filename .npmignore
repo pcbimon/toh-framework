@@ -10,5 +10,14 @@ coverage/
 # Claude Project (private docs)
 claude-project/
 
-# Big binaries stay on GitHub only (README uses absolute raw URLs)
+# Big binaries stay on GitHub only — shipping them triples the tarball.
+# README references the banner with a RELATIVE path, which GitHub resolves
+# in-repo and npmjs.com rewrites against the package's repository URL, so
+# the image renders in both places without being packaged.
 docs/assets/
+# Private planning docs. .gitignore keeps these off GitHub, but npm ignores
+# .gitignore whenever an .npmignore exists — so they MUST be listed here too,
+# or the package.json "docs" whitelist ships them to the registry.
+docs/plans/
+# Superseded internal v2.0 proposal — never belonged in the package.
+docs/V2-UPGRADE-PLAN.md

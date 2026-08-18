@@ -51,6 +51,7 @@ When user calls `/toh-help`, display the following:
 | `/toh-fix` | `/toh-f` | 🔧 **Fix Bug** - Evidence-first debug: prove the root cause before touching code |
 | `/toh-ship` | `/toh-s` | 🚀 **Deploy** - Vercel, Production ready |
 | `/toh-protect` | `/toh-pt` | 🔐 **Security Audit** - Full security check |
+| `/toh-help` | `/toh-h` | 📖 **Help** - Show every command, agent, and skill |
 
 ---
 
@@ -145,15 +146,16 @@ Every response from Toh includes:
 - 📚 **23 Skills** - Including Orchestration Protocol & Security Engineer
 - 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
-- 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity (agy CLI + IDE), Codex, Gemini CLI (legacy)
+- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex (CLI + desktop app), ZCode, Gemini CLI (legacy)
 
 ---
 
 ### 🆕 What's New in v2.1.0
 
 - 🔌 **Codex Un-truncated** - Codex now reads the whole framework instead of silently dropping 6 of 8 agents: `AGENTS.md` slimmed from ~117 KB to under 13 KB with a hard size guard (Codex เห็นทีมผู้ช่วยครบทุกตัวแล้ว)
-- 🌌 **Antigravity CLI (agy)** - replaces the retired consumer Gemini CLI as the default terminal target: `.agents/` rules, workflows, subagents, skills + a deterministic Stop hook (Gemini CLI แบบเดิมยังใช้ได้ผ่าน `--legacy-gemini`)
-- 🧩 **Shared `.agents/skills/`** - one write, three tools: Codex, Cursor 2.4, and Antigravity all discover the same 37 skills — 23 framework skills + 14 `/toh-*` command skills (ลงครั้งเดียว ใช้ได้สามเครื่องมือ)
+- 🌌 **Antigravity + Antigravity CLI (agy)** - a native target with the full workspace `.agents/` surface: rules, workflows, subagents, skills + a deterministic Stop hook (Gemini CLI แบบเดิมยังใช้ได้ผ่าน `--legacy-gemini`)
+- 🧩 **Shared `.agents/skills/`** - one write, four tools: Codex, Cursor 2.4, Antigravity, and ZCode all discover the same 37 skills — 23 framework skills + 14 `/toh-*` command skills (ลงครั้งเดียว ใช้ได้สี่เครื่องมือ)
+- 💠 **ZCode (Z.ai) supported** - reads `AGENTS.md` + `.agents/skills/`, plus 14 native `/toh-*` slash commands from `.agents/commands/`; verified live with `zcode skills list` / `zcode commands list` (ZCode ใช้ /toh ได้ครบเหมือน IDE อื่น)
 - ⌨️ **Real Slash Aliases** - `/toh-v`, `/toh-p`, `/toh-pt` are now real Claude Code commands — no more "Unknown command"; `/toh-p` belongs solely to `/toh-plan`, `/toh-protect` moved to `/toh-pt` (ทางลัดใช้ได้จริงทุกตัว)
 - 🤖 **Native Agent Upgrades** - Claude Code subagents preload their skills natively, and Cursor 2.4 runs all 8 agents as native subagents instead of being told they don't exist (ทีมผู้ช่วยทำงานเต็มระบบทั้งใน Claude Code และ Cursor)
 
@@ -166,7 +168,8 @@ Every response from Toh includes:
 | Claude Code | `CLAUDE.md` |
 | Cursor | `.cursor/rules/*.mdc` |
 | Antigravity CLI (agy) + IDE | `.agents/` — rules, skills, `.agents/workflows/` (legacy: `.agent/workflows/`) |
-| Codex CLI | `AGENTS.md` |
+| Codex (CLI + desktop app) | `AGENTS.md` |
+| ZCode (Z.ai) | `AGENTS.md` + `.agents/` — skills and `/toh-*` commands |
 | Gemini CLI (legacy, `--legacy-gemini`) | `.gemini/GEMINI.md` |
 
 ---

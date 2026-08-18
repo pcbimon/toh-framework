@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/wasintoh/toh-framework/main/docs/assets/toh-framework-banner.png" alt="Toh Framework" width="760" />
+  <img src="docs/assets/toh-framework-banner.png" alt="Toh Framework" width="760" />
 </p>
 
 <h3 align="center">"Type Once, Have it all!" — AI-Orchestration Driven Development</h3>
@@ -11,11 +11,17 @@
 [![License](https://img.shields.io/npm/l/toh-framework.svg?style=flat-square)](https://github.com/wasintoh/toh-framework/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/wasintoh/toh-framework?style=flat-square)](https://github.com/wasintoh/toh-framework)
 
-**Toh Framework** installs an AI "build department" into your project: **14 slash commands, 8 specialist agents, and 23 skills** — configured for Claude Code, Cursor, Antigravity, and Codex in one install. You type one sentence (like `/toh-vibe coffee shop management system`), approve once, and it plans, builds, tests, and fixes until the app is verified done.
+**Toh Framework** installs an AI "build department" into your project: **14 slash commands, 8 specialist agents, and 23 skills** — configured for Claude Code, Cursor, Antigravity, Codex, and ZCode in one install. You type one sentence (like `/toh-vibe coffee shop management system`), approve once, and it plans, builds, tests, and fixes until the app is verified done.
 
 ```bash
 npx toh-framework install
 ```
+
+**If you don't write code:** you get one screen that asks for your idea in plain language and one "Go". No stack to choose, no config to fill in, no jargon to decode. The AI writes the plan as a checklist you can actually read, then works down it — building, running its own tests, fixing what breaks — and comes back when the thing is finished. If it gets stuck, it says which step and why, in a sentence.
+
+**If you do write code:** it's a plan-as-file loop your agent cannot fake its way out of. The backlog lives in `.toh/plan.md` as checkboxes, so any session in any of the 6 supported IDEs resumes exactly where the last one stopped. The orchestrator re-runs each task's checkpoint itself and must quote real output before ticking the box — "done" means a command exited zero, not that a model said so. Model routing keeps cost sane (haiku scaffolds and tests, sonnet builds, opus plans and reviews), and everything is generated from one source of truth, so nothing drifts between IDEs.
+
+Changed your mind? `npx toh-framework uninstall` shows you exactly what it will remove, keep, or edit — and asks first.
 
 🌐 **Official Website:** [tohframework.dev](https://tohframework.dev)
 
@@ -27,11 +33,13 @@ npx toh-framework install
 
 | Feature | What it means for you |
 |---------|----------------------|
-| 🛰️ **Antigravity CLI (agy) — reborn** | Google shut down consumer Gemini CLI (2026-06-18), so the old default install wrote files nothing reads. v2.1 targets Antigravity (agy CLI + IDE) natively: a new `.agents/` surface with an Always-On rule, 14 workflows, 8 file-based subagents, a deterministic Stop hook (`.agents/hooks.json`), and all skills — plus a legacy `.agent/workflows/` mirror for older builds. |
+| 🛰️ **Antigravity, first-class** | Antigravity and the Antigravity CLI (`agy`) are now a native target, not an afterthought: a full workspace `.agents/` surface with an Always-On rule, 14 workflows, 8 file-based subagents, every skill, and a deterministic Stop hook (`.agents/hooks.json`) that refuses to end a session while `.toh/plan.md` still has unchecked work. |
 | 📦 **Codex — un-truncated** | Codex silently cuts project docs at 32 KB; our old AGENTS.md was 3.6× over, so 6 of 8 agents never loaded. The new AGENTS.md is a ~12.7 KB compact roster — everything fits, agents and commands are read from `.toh/` at runtime, and the installer hard-fails if the file ever outgrows the budget. It also writes a guarded `.codex/config.toml` that raises the doc limit (never overwriting yours). |
-| 🤝 **One skills standard, three IDEs** | All 37 skills (23 framework skills + 14 `/toh-*` command skills) are written once into `.agents/skills/` — the open standard natively discovered by Codex, Cursor 2.4+, and Antigravity. One write, three tools, zero drift. |
+| 🤝 **One skills standard, four IDEs** | All 37 skills (23 framework skills + 14 `/toh-*` command skills) are written once into `.agents/skills/` — the open standard natively discovered by Codex, Cursor 2.4+, Antigravity, and ZCode. One write, four tools, zero drift. |
+| 💠 **ZCode support, verified live** | ZCode (Z.ai) reads the same open surfaces, so it needs no bespoke files: `AGENTS.md` for project memory, `.agents/skills/` for all 37 skills, and `.agents/commands/` for 14 real `/toh-*` slash commands. Verified against ZCode CLI 0.16.3, not assumed — `zcode skills list` reports 37 project-scope skills and `zcode commands list` reports all 14 commands, both with zero diagnostics. |
 | 🧩 **Cursor 2.4 native subagents** | Cursor now gets a real team: 8 Toh specialists installed as native subagents in `.cursor/agents/` that Cursor can delegate to (before, our rule told Cursor "no team here" — leaving free speed on the table). |
 | ⚡ **Claude Code skills preload** | Subagents now start with their skills fully loaded via the native `skills` frontmatter key — no more hoping the model remembers to open the file. |
+| 🧹 **`toh uninstall` — finally** | Until now, installing Toh Framework was a one-way door. Now `npx toh-framework uninstall` prints a plain-language preview of every file it would remove, keep, or edit, and asks once before touching anything. It only deletes what it can *prove* it installed (a sha256 record written at install time); a file you edited is kept and named on screen, shared files like `CLAUDE.md` are edited surgically instead of rewritten, and your plan, notes, and memory survive unless you opt in separately. `--dry-run` to look without touching. |
 
 ### Also in 2.1.0
 
@@ -47,8 +55,9 @@ npx toh-framework install
 | 🧠 **Claude Code** | ✅ Full Support | Native subagents + skills preload, Stop hook, slash commands & shortcuts |
 | 📝 **Cursor (2.4+)** | ✅ Full Support | Native subagents (`.cursor/agents/`), skills via `.agents/skills/`, always-on rules |
 | 🛰️ **Antigravity CLI (agy) + IDE** | ✅ Full Support | `.agents/` rules + skills + workflows + subagents + Stop hook |
-| 🤖 **Codex CLI + ChatGPT Desktop** | ✅ Supported | Compact AGENTS.md + repo-level skills |
-| 💎 **Gemini CLI** | 🏢 Legacy | Enterprise/GCP only — behind `--legacy-gemini` (consumer service shut down 2026-06-18) |
+| 🤖 **Codex** — CLI + Codex desktop app (ChatGPT app) | ✅ Supported | Compact AGENTS.md + repo-level skills |
+| 💠 **ZCode (Z.ai)** | ✅ Supported | AGENTS.md + `.agents/skills/` + native `/toh-*` in `.agents/commands/` |
+| 💎 **Gemini CLI** | 🏢 Legacy | Enterprise/GCP only, behind `--legacy-gemini` |
 
 ## 💡 Why Toh?
 
@@ -71,7 +80,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 | Version | Date | Key Feature |
 |---------|------|-------------|
 | v2.1.0 | 2026-08-16 | Compatibility release: agy support, Codex un-truncated, Cursor native subagents, shared `.agents/skills` |
-| v2.0.0 | 2026-07-16 | One-Go Build, TOH LOOP, Design Identity, Auto-Resume |
+| v2.0.0 | 2026-07-14 | One-Go Build, TOH LOOP, Design Identity, Auto-Resume |
 | v1.8.0 | 2026-01-11 | 7-File Memory System, Agent Announcements |
 | v1.7.0 | 2025-12-26 | Security Engineer, `/toh-protect` command |
 | v1.6.0 | 2025-12-18 | Claude Code Sub-Agents, Multi-Agent Orchestration |
@@ -99,7 +108,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete version history.
 # Interactive install (choose IDEs and language)
 npx toh-framework install
 
-# Quick install (Claude Code + Cursor + Antigravity, English)
+# Quick install (Claude Code, English)
 npx toh-framework install --quick
 
 # Specific IDE only
@@ -107,9 +116,10 @@ npx toh-framework install --ide claude
 npx toh-framework install --ide cursor
 npx toh-framework install --ide antigravity
 npx toh-framework install --ide codex
+npx toh-framework install --ide zcode
 
 # Multiple IDEs
-npx toh-framework install --ide "claude,cursor,antigravity,codex"
+npx toh-framework install --ide "claude,cursor,antigravity,codex,zcode"
 
 # Legacy targets (off by default)
 npx toh-framework install --legacy-gemini       # .gemini/ for Enterprise/GCP Gemini CLI
@@ -221,13 +231,31 @@ agy
 /toh-vibe Inventory management system
 ```
 
-### Codex CLI / ChatGPT Desktop
+### Codex — CLI and Codex desktop app (ChatGPT app)
 
 ```bash
 codex
 
 # Same commands — AGENTS.md teaches Codex the full command set
 /toh-vibe Inventory management system
+```
+
+### ZCode (Z.ai)
+
+Open the project in the ZCode app, or run the bundled CLI:
+
+```bash
+zcode
+
+# The 14 /toh-* commands are installed as real slash commands
+/toh-vibe Inventory management system
+```
+
+Check what ZCode picked up at any time:
+
+```bash
+zcode skills list      # 37 project-scope skills
+zcode commands list    # 14 /toh-* commands
 ```
 
 ---
@@ -346,7 +374,7 @@ claude -p "/toh-vibe coffee shop management system" --permission-mode acceptEdit
 - 📚 **23 Skills** - Comprehensive AI capabilities, shipped once to `.agents/skills/` for every IDE that reads the open standard `[NEW in 2.1]`
 - 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
-- 🌐 **5 IDEs** - Claude Code, Cursor, Antigravity (agy CLI + IDE), Codex, Gemini CLI (legacy)
+- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex (CLI + desktop app), ZCode, Gemini CLI (legacy)
 
 ---
 

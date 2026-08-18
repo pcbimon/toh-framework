@@ -88,7 +88,7 @@ User can always see:
 
 ## Progress Tracking Structure
 
-### In Memory (`.toh/memory/progress.md`)
+### In Memory (`.toh/progress.md`)
 
 ```markdown
 # 📊 Project Progress
@@ -338,11 +338,13 @@ When reaching milestones:
 
 ### Cross-IDE Sync
 
-Progress is saved in `.toh/memory/progress.md`, so it syncs across:
+Progress is saved in `.toh/progress.md`, so it syncs across:
 - Claude Code
 - Cursor
-- Gemini CLI
-- Codex CLI
+- Antigravity (+ Antigravity CLI)
+- Codex (CLI + desktop app)
+- ZCode (Z.ai)
+- Gemini CLI (legacy)
 
 ---
 

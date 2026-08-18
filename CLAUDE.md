@@ -6,9 +6,9 @@ Guide for a Claude Code agent developing the framework itself. Repo-only: not in
 ## What this is
 
 Toh Framework ("Type Once, Have it all") is the npm package `toh-framework` (v2.1.0, MIT, ESM,
-Node >= 18, no build step) that installs an AI-orchestration development system into 5 IDEs:
-Claude Code, Cursor (2.4+), Antigravity (agy CLI + IDE), Codex CLI, and — Enterprise-only, behind
-`--legacy-gemini` — Gemini CLI (consumer service shut down 2026-06-18).
+Node >= 18, no build step) that installs an AI-orchestration development system into 6 IDEs:
+Claude Code, Cursor (2.4+), Antigravity (agy CLI + IDE), Codex CLI, ZCode (Z.ai), and —
+Enterprise-only, behind `--legacy-gemini` — Gemini CLI (consumer service shut down 2026-06-18).
 
 North Star: a non-technical person types one sentence, approves once ("Go"), and THE TOH LOOP
 builds, tests, and fixes a real, beautiful app until verified DONE. Quality is measured at the END
@@ -34,8 +34,12 @@ There is NO automated test suite — .github/workflows/ci.yml only smoke-tests t
 
 1. Run what you touched — install into a scratch dir, `npm run list`/`status`, `npm pack --dry-run`.
    Inspect the generated output (.toh/, .claude/, .cursor/rules/ + .cursor/agents/, AGENTS.md +
-   .codex/config.toml, .agents/ + legacy .agent/workflows/ mirror; .gemini/ only under
-   --legacy-gemini) — never assume a transform worked.
+   .codex/config.toml, .agents/skills + .agents/commands + legacy .agent/workflows/ mirror;
+   .gemini/ only under --legacy-gemini) — never assume a transform worked.
+   For ZCode, ask the runtime instead of reading files: `zcode skills list --cwd <dir> --json`
+   must report 37 entries at scope "project" and `zcode commands list --cwd <dir> --json` all 14,
+   both with an empty diagnostics array. The CLI ships inside the app
+   (/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs) and is usually not on PATH.
 2. Coffee-Shop-Owner Test for any user-facing change: could a coffee-shop owner use this without
    tech vocabulary, never face an unanswerable question, know what to do when it breaks — and does the output look professionally made?
 
@@ -46,7 +50,7 @@ There is NO automated test suite — .github/workflows/ci.yml only smoke-tests t
 
 `installer/install.js` first copies shared resources into the target's `.toh/` (skills, agents,
 commands, templates, 7 memory files, plan.md, progress.md, manifest.json, capabilities.json),
-then 5 handlers in `installer/ide-handlers/` cover the IDEs. When cursor/codex/antigravity is
+then 6 handlers in `installer/ide-handlers/` cover the IDEs. When cursor/codex/antigravity/zcode is
 selected, shared.js writeAgentsSkills() also writes `.agents/skills/` — 37 wrappers (23 skills,
 descriptions terse-capped at 300 chars for Codex's 8,000-char listing budget, + 14 toh-* command
 skills converted from the TOML; throws on unparseable sources):
@@ -65,6 +69,12 @@ skills converted from the TOML; throws on unparseable sources):
 - codex.js → one root AGENTS.md between TOH-FRAMEWORK-START/END markers — compact agent roster +
   indexed command table; bodies read at runtime from .toh/. Hard-asserts the block <=24 KiB (Codex
   silently truncates at 32 KiB) and emits .codex/config.toml raising project_doc_max_bytes, never overwriting an existing one.
+- zcode.js → thin by design. ZCode reads the same open surfaces, so it writes NO `.zcode/`: it
+  reuses codex.js's exported writeAgentsMd() for AGENTS.md (ide 'zcode' swaps three sentences) and
+  shared.js writeAgentsCommands() for `.agents/commands/` — 14 native `/toh-*` slash commands, the
+  one surface Codex lacks. When codex is ALSO selected install.js passes `{ writeAgentsMd: false }`:
+  AGENTS.md is one physical file, and codex.js's conservative variant stays true for both. Skips the
+  memory templates on purpose (install.js already seeds them) — do not add a 7th inline copy.
 - gemini-cli.js → LEGACY (.gemini/: TOML commands, skills, GEMINI.md, settings.json), only via
   --legacy-gemini; off the menu; no longer implies Antigravity. `--ide gemini` without the flag
   warns and substitutes antigravity.
@@ -93,7 +103,8 @@ transformCommand(). install.js normalizes .toh/commands to the universal variant
 - `src/templates/` — structural-only starters (components/, pages/, nextjs-pro/): Next.js 16 /
   React 19 / Tailwind 4, pinned in nextjs-pro/package.json. Visual character always comes from each project's DESIGN.md.
 - `src/memory/` — spec/docs ONLY; the installer never copies it. Memory templates are
-  generated inline in 6 code sites (install.js + all 5 IDE handlers).
+  generated inline in 6 code sites (install.js + 5 of the 6 IDE handlers; zcode.js deliberately
+  does not duplicate them).
 - `bin/` — toh-cli.js is the only entry (toh-npx-wrapper.js was deleted in v2.1).
 - `docs/` — README-TH.md (Thai mirror of README.md), V2-UPGRADE-PLAN.md, assets/.
 
@@ -124,10 +135,10 @@ transformCommand(). install.js normalizes .toh/commands to the universal variant
   for this to work: CLAUDE.md and AGENTS.md both use `<!-- TOH-FRAMEWORK-START/END -->`. Directories
   go only when empty; the user's plan/ledger/memory need a separate explicit opt-in.
 
-## Change checklist (5-IDE parity)
+## Change checklist (6-IDE parity)
 
 - Command change → src/commands/*.md (keep both tfw marker branches in sync) +
-  src/gemini-commands/*.toml + src/antigravity-workflows/*.md + stats in toh-help.md and both READMEs (list.js and .agents/skills regenerate from source — no manual sync).
+  src/gemini-commands/*.toml + src/antigravity-workflows/*.md + stats in toh-help.md and both READMEs (list.js, .agents/skills and .agents/commands regenerate from source — no manual sync).
 - Agent change → src/agents/*.md + its README.md table + hardcoded agent tables in
   cursor.js; never widen a tools allowlist (per-agent security boundary).
 - Memory format change → 6 inline code sites plus src/memory/ docs.
@@ -139,7 +150,7 @@ transformCommand(). install.js normalizes .toh/commands to the universal variant
    subsections; Technical records agent/skill/command counts and every synced IDE surface.
 3. Sync user-facing text in README.md AND docs/README-TH.md.
 4. `npm pack --dry-run`: the files whitelist stays [bin, installer, src, docs, !docs/assets, dist]
-   (+ auto package.json, README.md, LICENSE) — ~306 kB at v2.1.0. Keep the !docs/assets negation
+   (+ auto package.json, README.md, LICENSE) — 325.5 kB / 142 files at v2.1.0. Keep the !docs/assets negation
    (and matching .npmignore line): dropping it triples the tarball. CHANGELOG.md does not ship.
 5. Tag lowercase vX.Y.Z on the release commit and push the tag — release.yml smoke-tests, publishes
    to npm with provenance (NPM_TOKEN secret), and creates the GitHub Release from that CHANGELOG section. Never publish unverified by hand.
@@ -152,10 +163,18 @@ transformCommand(). install.js normalizes .toh/commands to the universal variant
   toh-help.md); a bad YAML edit in src/ makes it throw with the file path — intentional.
 - Codex budgets are enforced: install hard-fails above the 24 KiB AGENTS.md block; long skill
   descriptions belong in src/skills frontmatter (wrappers cap at 300 chars; full text ships in .toh/skills/).
-- Known drift, do not propagate: generated per-IDE context files still say "Next.js 14" while
-  src/templates and toh-help.md pin 16 (cross-handler sweep pending); bin/toh-cli.js has no --lang flag, so Thai IDE output is unreachable via the CLI.
+- Known drift, do not propagate: bin/toh-cli.js has no --lang flag, so Thai IDE output is
+  unreachable via the CLI.
 - Antigravity live-verify is pending: if a real agy run shows .agents/workflows is never loaded,
   drop that surface and flip the capability profile — the 14 commands already ship as skills.
+- AGENTS.md has TWO readers (Codex and ZCode) but is ONE file — never let both handlers write it in
+  the same run, and never widen the shared block's claims to a capability only one of them has.
+  ZCode's profile is the only one with `commands: true`; renderCapabilitiesSection emits that line
+  only when the flag is set, which is what keeps every other IDE's generated text byte-identical.
+- ZCode's `.zcode/commands/` is a real native path we deliberately do NOT write — it would duplicate
+  `.agents/commands/` on disk for zero gain. Its subagents/hooks stay `false` in the profile until
+  someone verifies live that ZCode loads OUR files; an unverified YES makes the model promise
+  delegation it cannot perform.
 - src/agents/README.md oversimplifies two transforms — installer/ide-handlers/ is authoritative.
 - Internal skill version strings are independent of the package version — don't "fix" them.
   dist/ is gitignored and absent but whitelisted — a stray local build would silently ship.

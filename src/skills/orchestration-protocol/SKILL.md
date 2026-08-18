@@ -35,10 +35,11 @@ Your runtime identity is declared by the platform context file that loaded you:
 |------------------------------|---------|
 | `CLAUDE.md` | Claude Code |
 | `.cursor/rules/*.mdc` | Cursor |
-| `AGENTS.md` | Codex |
-| `GEMINI.md` | Gemini CLI / Antigravity |
+| `AGENTS.md` | Codex **or** ZCode — the `**Runtime:**` line inside the file names which |
+| `.agents/rules/toh-framework.md` | Antigravity (+ Antigravity CLI) |
+| `GEMINI.md` | Gemini CLI (legacy) |
 
-Confirm capabilities from `.toh/capabilities.json` (written by the installer). If it is missing, infer conservatively: only Claude Code has subagents, teams, hooks, `/goal`, `/loop`; every other runtime is single-session sequential.
+Confirm capabilities from `.toh/capabilities.json` (written by the installer). If it is missing, infer conservatively: Claude Code has subagents, teams, hooks, `/goal`, `/loop`; Cursor (2.4+) and Antigravity have native/file-based subagents but no teams; Codex and ZCode are single-session sequential.
 
 ### Step 2 — Runtime probe (ONLY for what install time cannot know)
 
@@ -69,7 +70,7 @@ Three rungs, best first. **Each rung: if unavailable, fall back one rung.** Sequ
 | <= 3 tasks total | SEQUENTIAL |
 | Same-file or dependent edits | SEQUENTIAL |
 | Debugging / fixing | SEQUENTIAL |
-| Runtime without subagents (Cursor / Codex / Gemini / Antigravity) | SEQUENTIAL |
+| Runtime without subagents (Codex / ZCode / Gemini) | SEQUENTIAL |
 | >= 2 independent tasks on disjoint files, each substantial (~5+ min) | PARALLEL subagents |
 | MVP-scale: >= 3 independent modules + a QC role, teams flag set | TEAMS |
 
@@ -224,7 +225,7 @@ Section E is the floor on every runtime. On Claude Code the installer ships mach
 | **`/goal` recipe** (>= 2.1.139) | Set the finish line before coding: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. A Haiku evaluator judges the condition FROM THE TRANSCRIPT — one more reason the QC gate quotes actual output: unquoted results are invisible to the evaluator. |
 | **Workflows** (>= 2.1.154, optional) | `/toh-sweep` (not shipped — optional pattern you can save to `.claude/workflows/`) can fan out fixers per failing task until checks pass. |
 
-**Every other runtime** (Cursor / Codex / Gemini / Antigravity) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
+**Antigravity** runs the same loop and also gets a deterministic Stop hook (`.agents/hooks.json`) that blocks ending a session while `.toh/plan.md` has unchecked tasks. **Every other runtime** (Cursor / Codex / ZCode / Gemini) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
 
 ---
 

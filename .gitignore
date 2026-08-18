@@ -36,3 +36,6 @@ CLAUDE.local.md
 
 # Private planning docs (roadmap / designs stay local)
 docs/plans/
+
+# npm pack artifacts (smoke-test tarballs)
+*.tgz

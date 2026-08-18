@@ -19,5 +19,3 @@ docs/assets/
 # .gitignore whenever an .npmignore exists — so they MUST be listed here too,
 # or the package.json "docs" whitelist ships them to the registry.
 docs/plans/
-# Superseded internal v2.0 proposal — never belonged in the package.
-docs/V2-UPGRADE-PLAN.md

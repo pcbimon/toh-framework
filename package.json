@@ -51,7 +51,6 @@
     "docs",
     "!docs/assets",
     "!docs/plans",
-    "!docs/V2-UPGRADE-PLAN.md",
     "dist"
   ],
   "scripts": {

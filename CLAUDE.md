@@ -121,11 +121,19 @@ transformCommand(). install.js normalizes .toh/commands to the universal variant
   design-craft/DESIGN-TEMPLATE.md) as task T000 before any UI code; the versioned
   AVOID-LIST.md ships inside src/skills/design-craft/, never per-project.
 - Stop hooks: mergeSettingsStopHook in claude-code.js appends an idempotent (`<TFW-STOP-HOOK>`
-  marker), strictly additive prompt hook to .claude/settings.json — frozen byte-identical for v2.1
-  by owner decision. antigravity-cli.js writes a deterministic command-script Stop hook (grep for
-  unchecked plan.md tasks, exit 2) into .agents/hooks.json, same marker idempotence. The other IDEs run the same loop as prose — keep it self-sufficient without hooks.
-- Reinstall safety: .toh/plan.md / .toh/progress.md are seeded only if absent (live loop state —
-  never clobber); never remove/reorder user hook entries; never overwrite a user .claude/loop.md or .codex/config.toml.
+  marker) prompt hook to .claude/settings.json; both hooks exempt a terminal-status plan
+  (Status: done/draft/blocked/paused), and since v2.1.1 a reinstall upgrades OUR entry in place —
+  but ONLY when its text exactly equals a historical shipped version (the
+  TFW_STOP_HOOK_PROMPT_HISTORY / TFW_STOP_HOOK_COMMAND_HISTORY allowlists; append the outgoing
+  string whenever the shipped text changes). A marker-carrying entry with ANY other text is
+  user-owned and stays byte-identical. antigravity-cli.js writes a deterministic command-script
+  Stop hook (grep for unchecked plan.md tasks, exit 2) into .agents/hooks.json, same marker
+  idempotence and same exact-match upgrade rule. The other IDEs run the same loop as prose — keep it self-sufficient without hooks.
+- Reinstall safety: .toh/plan.md / .toh/progress.md AND the 7 .toh/memory files are seeded only if
+  absent, at all 6 inline template sites (live loop state/memory — never clobber; the explicit,
+  user-confirmed Fresh Install path is the one exception: it also cleans .claude/memory); never
+  remove/reorder/rewrite user hook entries; never overwrite a user .claude/loop.md,
+  .codex/config.toml, .gemini/settings.json, or a non-generated .gemini/GEMINI.md.
 - Uninstall safety (installer/uninstall.js): ownership must be PROVED before deleting — manifestSchema 2
   (path + sha256 + pre-install state of every file the install wrote; install.js snapshots its own
   surfaces before/after and uses mtime, not just bytes, since reinstalls rewrite identical content),

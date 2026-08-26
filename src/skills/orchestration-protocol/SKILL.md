@@ -156,6 +156,7 @@ Created: <date> by /toh-plan
 - **Blocked marker:** flip `- [ ]` to `- [!]` and append `BLOCKED: <one-line diagnosis>`.
 - **NO Progress Log in plan.md** — state history lives in `.toh/progress.md`. Keep plan.md a compact snapshot: checkboxes ARE the state.
 - **Status lifecycle:** `draft` (written, awaiting one approval) → `approved` (user said Go, or /toh-vibe auto-approves its own mini-plan) → `building` (loop running) → `done` (all Done When verified).
+- **Terminal statuses — auto-resume exemption:** a plan whose Status is `done`, `draft`, `blocked`, or `paused` (any case) is TERMINAL for auto-resume: report the status, do not resume its checkboxes. `blocked`/`paused` are manual header overrides for parking a plan; flip Status back to `approved`/`building` (or say "continue the plan") to make it resumable again.
 - **Archive:** when a new plan is needed and Status is `done` (or the user says "fresh start"), move the old file to `.toh/memory/archive/plan-<date>.md` first. One active plan at a time.
 - **Memory pointer:** `.toh/memory/active.md` holds only a POINTER — plan status + next unchecked task — never a plan dump.
 
@@ -195,7 +196,7 @@ The universal execution protocol. Runs identically on every runtime; Claude Code
 
 - **Never ask "continue?" between tasks or phases.** Interrupt only for genuine blockers: missing credentials, destructive/irreversible choices, or a contradiction in the plan itself.
 - **Foundation deadlock:** if a blocked task makes everything downstream dependent (nothing independent remains), stop and deliver one clear blocker report — do not thrash on dependent tasks.
-- **Checkbox-resume:** any fresh session (any IDE, any day) reads plan.md and continues at the first unchecked task. This is the crash/context-loss recovery mechanism — keep the file states accurate at all times.
+- **Checkbox-resume:** any fresh session (any IDE, any day) reads plan.md and continues at the first unchecked task — unless the plan header carries a terminal status (`Status: done/draft/blocked/paused`): then report the status and stop, do not resume. This is the crash/context-loss recovery mechanism — keep the file states accurate at all times.
 - **Completion is a contract:** `<promise>COMPLETE</promise>` may only follow quoted, passing Done When runs. Never emit it on feel.
 
 ---
@@ -220,12 +221,12 @@ Section E is the floor on every runtime. On Claude Code the installer ships mach
 
 | Mechanism | What it does |
 |-----------|--------------|
-| **Stop hook** (prompt-type, in `.claude/settings.json`) | Blocks ending the session while plan.md has unchecked, unblocked tasks — returns `{"ok": false, "reason": "<first unchecked task>"}`. Guarded: if `stop_hook_active` and no progress since the last block, or every remaining task is `[!]` blocked, it returns ok — respecting the 8-consecutive-block cap. |
-| **`.claude/loop.md`** (<= 25KB) | Heartbeat prompt for bare `/loop`: continue the first unchecked task per the TOH Loop, fix from quoted failure output, say COMPLETE in one line when green. Note: on Bedrock/Vertex/Foundry, bare `/loop` prints usage instead of reading this file — run `/loop <prompt>` explicitly there. |
+| **Stop hook** (prompt-type, in `.claude/settings.json`) | Blocks ending the session while plan.md has unchecked, unblocked tasks — returns `{"ok": false, "reason": "<first unchecked task>"}`. Guarded: if `stop_hook_active` and no progress since the last block, or every remaining task is `[!]` blocked, or plan.md is absent or its header says `Status: done/draft/blocked/paused`, it returns ok — respecting the 8-consecutive-block cap. |
+| **`.claude/loop.md`** (<= 25KB) | Heartbeat prompt for bare `/loop`: if plan.md is absent or its header carries a terminal status (`Status: done/draft/blocked/paused`), report that in one line and stop — never auto-resume a parked plan (same exemptions as the Stop hook); otherwise continue the first unchecked task per the TOH Loop, fix from quoted failure output, say COMPLETE in one line when green. Note: on Bedrock/Vertex/Foundry, bare `/loop` prints usage instead of reading this file — run `/loop <prompt>` explicitly there. |
 | **`/goal` recipe** (>= 2.1.139) | Set the finish line before coding: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. A Haiku evaluator judges the condition FROM THE TRANSCRIPT — one more reason the QC gate quotes actual output: unquoted results are invisible to the evaluator. |
 | **Workflows** (>= 2.1.154, optional) | `/toh-sweep` (not shipped — optional pattern you can save to `.claude/workflows/`) can fan out fixers per failing task until checks pass. |
 
-**Antigravity** runs the same loop and also gets a deterministic Stop hook (`.agents/hooks.json`) that blocks ending a session while `.toh/plan.md` has unchecked tasks. **Every other runtime** (Cursor / Codex / ZCode / Gemini) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
+**Antigravity** runs the same loop and also gets a deterministic Stop hook (`.agents/hooks.json`) that blocks ending a session while `.toh/plan.md` has unchecked tasks (both hooks exempt a terminal-status plan). **Every other runtime** (Cursor / Codex / ZCode / Gemini) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task — unless the plan header carries a terminal status (done/draft/blocked/paused), which is reported instead of resumed. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
 
 ---
 

@@ -14,9 +14,9 @@ import { setupClaudeCode } from './ide-handlers/claude-code.js';
 import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
 import { setupAntigravityCLI } from './ide-handlers/antigravity-cli.js';
-import { setupCodex } from './ide-handlers/codex.js';
+import { setupCodex, writeAgentsMd } from './ide-handlers/codex.js';
 import { setupZcode } from './ide-handlers/zcode.js';
-import { transformCommand, writeCapabilitiesJson, writeAgentsSkills } from './ide-handlers/shared.js';
+import { transformCommand, writeCapabilitiesJson, writeAgentsSkills, seedFileIfAbsent } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -262,6 +262,15 @@ export async function install(options) {
   const codexSelected = [...config.ides, ...declaredIdes].some(
     (name) => ['codex', 'codex-cli'].includes(String(name).toLowerCase())
   );
+  // Same union rule for ZCode: the probed-subagents AGENTS.md sentence (issue
+  // #2 problem 2) is allowed ONLY when Codex is the file's sole reader —
+  // ZCode selected now OR declared by an earlier install both veto it.
+  const zcodeInPlay = [...config.ides, ...declaredIdes].some(
+    (name) => ['zcode', 'z-code', 'zai', 'z.ai'].includes(String(name).toLowerCase())
+  );
+  const codexInThisRun = config.ides.some(
+    (name) => ['codex', 'codex-cli'].includes(String(name).toLowerCase())
+  );
 
   for (const ideName of config.ides) {
     switch (ideName.toLowerCase()) {
@@ -284,7 +293,11 @@ export async function install(options) {
         break;
       case 'codex':
       case 'codex-cli':
-        await setupIDEWithSpinner('Codex (CLI + desktop app)', () => setupCodex(config.targetDir, SRC_DIR, config.language));
+        // allowProbedSubagents: the AGENTS.md Runtime Identity sentence may
+        // reflect probed codex subagents ONLY when ZCode is nowhere in play
+        // (AGENTS.md has two readers; never claim what only one has).
+        await setupIDEWithSpinner('Codex (CLI + desktop app)', () =>
+          setupCodex(config.targetDir, SRC_DIR, config.language, { allowProbedSubagents: !zcodeInPlay }));
         break;
       case 'zcode':
       case 'z-code':
@@ -294,6 +307,15 @@ export async function install(options) {
         // selected its handler already wrote the conservative variant (no
         // subagents, no slash commands) — true for ZCode as well — so ZCode
         // only adds .agents/commands/ and never rewrites the file.
+        // Adding ZCode over a Codex install from an EARLIER run: that run may
+        // have written the probed-subagents Runtime Identity variant while
+        // Codex was still the sole reader. Now that ZCode shares the file,
+        // restore the conservative sentence first (idempotent marker rewrite;
+        // when Codex is in THIS run its handler already wrote conservatively
+        // because zcodeInPlay vetoed the probe variant).
+        if (codexSelected && !codexInThisRun) {
+          await writeAgentsMd(config.targetDir, SRC_DIR, config.language, 'codex');
+        }
         await setupIDEWithSpinner('ZCode (Z.ai)', () =>
           setupZcode(config.targetDir, SRC_DIR, config.language, { writeAgentsMd: !codexSelected }));
         break;
@@ -450,11 +472,15 @@ async function checkExistingInstall(targetDir) {
 async function cleanExistingInstall(targetDir) {
   const spinner = spin('Cleaning existing installation...').start();
   
+  // Fresh Install is the explicitly destructive, user-confirmed path: removing
+  // .toh wipes .toh/memory + plan.md + progress.md, and .claude/memory goes too
+  // so a fresh install genuinely resets memory (issue #2).
   const pathsToClean = [
     join(targetDir, '.toh'),
     join(targetDir, '.claude', 'skills'),
     join(targetDir, '.claude', 'agents'),
-    join(targetDir, '.claude', 'commands')
+    join(targetDir, '.claude', 'commands'),
+    join(targetDir, '.claude', 'memory')
   ];
 
   for (const p of pathsToClean) {
@@ -845,14 +871,21 @@ async function setupMemoryFolder(targetDir) {
 *Last updated: ${today}*
 `;
 
-    // Write all 7 memory files
-    await fs.writeFile(join(memoryDir, 'active.md'), activeTemplate);
-    await fs.writeFile(join(memoryDir, 'summary.md'), summaryTemplate);
-    await fs.writeFile(join(memoryDir, 'decisions.md'), decisionsTemplate);
-    await fs.writeFile(join(memoryDir, 'changelog.md'), changelogTemplate);
-    await fs.writeFile(join(memoryDir, 'agents-log.md'), agentsLogTemplate);
-    await fs.writeFile(join(memoryDir, 'architecture.md'), architectureTemplate);
-    await fs.writeFile(join(memoryDir, 'components.md'), componentsTemplate);
+    // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall must
+    // never clobber live memory; even an empty file is the user's).
+    const memorySeeds = [
+      ['active.md', activeTemplate],
+      ['summary.md', summaryTemplate],
+      ['decisions.md', decisionsTemplate],
+      ['changelog.md', changelogTemplate],
+      ['agents-log.md', agentsLogTemplate],
+      ['architecture.md', architectureTemplate],
+      ['components.md', componentsTemplate]
+    ];
+    let seededCount = 0;
+    for (const [fileName, template] of memorySeeds) {
+      if (await seedFileIfAbsent(join(memoryDir, fileName), template)) seededCount++;
+    }
 
     // v2.0.0: seed THE TOH LOOP artifacts — ONLY if absent (they hold live
     // loop state; a reinstall must NEVER clobber an in-flight plan/ledger).
@@ -893,7 +926,10 @@ Empty backlog — no stories yet. Run \`/toh-plan\` to draft a plan here, or
       await fs.writeFile(progressPath, progressSeed);
     }
 
-    spinner.succeed('Memory System ready - 7 files (.toh/memory/) + plan/progress artifacts');
+    const kept = memorySeeds.length - seededCount;
+    spinner.succeed(kept === 0
+      ? 'Memory System ready - 7 files seeded (.toh/memory/) + plan/progress artifacts'
+      : `Memory System ready - seeded ${seededCount} missing file(s), preserved ${kept} existing (.toh/memory/) + plan/progress artifacts`);
   } catch (error) {
     spinner.fail(`Failed to setup Memory System: ${error.message}`);
   }

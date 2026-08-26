@@ -15,6 +15,7 @@ import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { probeCodexCapabilitiesCached } from './capability-probe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -199,6 +200,25 @@ export function transformCommand(content, ide) {
 }
 
 // ============================================================
+// 2b. seedFileIfAbsent() - reinstall-safe template seeding
+// ============================================================
+
+/**
+ * Write `content` to `filePath` ONLY when the file does not exist yet.
+ * Existence alone counts — even an empty file belongs to the user and is
+ * preserved (GitHub issue #2: reinstalls must never clobber live memory /
+ * Auto-Resume state).
+ *
+ * @returns {Promise<boolean>} true if the file was written (seeded),
+ *                             false if an existing file was preserved.
+ */
+export async function seedFileIfAbsent(filePath, content) {
+  if (await fs.pathExists(filePath)) return false;
+  await fs.writeFile(filePath, content);
+  return true;
+}
+
+// ============================================================
 // 3. .toh/capabilities.json
 // ============================================================
 
@@ -240,6 +260,31 @@ export async function writeCapabilitiesJson(targetDir, ides) {
   const profiles = {};
   for (const key of ideList) profiles[key] = CAPABILITY_PROFILES[key];
 
+  // v2.1.x (GitHub issue #2, problem 2): modern codex-cli reports subagents/
+  // hooks/parallel/goal as stable features, but the static table above must
+  // stay the conservative floor — an unverified YES makes the model promise
+  // delegation it cannot perform. So when codex is in the final ideList
+  // (selected this run OR carried through the reinstall union — a union
+  // reinstall re-probes instead of silently reverting), probe the CLI that is
+  // actually installed. The probe can only UPGRADE the whitelisted flags
+  // (subagents/hooks/parallel/goal); any probe failure keeps the floor.
+  // No probe for other IDEs in this release.
+  if (ideList.includes('codex')) {
+    const probe = await probeCodexCapabilitiesCached();
+    profiles.codex = {
+      ...CAPABILITY_PROFILES.codex,
+      ...(probe.ok ? probe.overrides : {}),
+      // Provenance only — NOT the raw evidence blob (keep the file small).
+      probe: {
+        attempted: probe.attempted,
+        ok: probe.ok,
+        cliVersion: probe.cliVersion,
+        at: probe.at,
+        ...(probe.reason ? { reason: probe.reason } : {})
+      }
+    };
+  }
+
   const payload = {
     version: VERSION,
     generatedAt: new Date().toISOString(),
@@ -247,8 +292,9 @@ export async function writeCapabilitiesJson(targetDir, ides) {
     profiles,
     gates: {
       teams: 'Claude Code only — requires env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
-      goal: 'Claude Code >= 2.1.139',
-      workflows: 'Claude Code >= 2.1.154 (can be plan-disabled)'
+      goal: 'Claude Code >= 2.1.139; Codex only when the install-time probe verified it (see profiles.codex.probe)',
+      workflows: 'Claude Code >= 2.1.154 (can be plan-disabled)',
+      codexProbe: 'profiles.codex flags above the static floor (subagents/hooks/parallel/goal) come from probing `codex features list` at install time — stable AND enabled only; probe failure keeps the conservative floor'
     }
   };
 
@@ -551,6 +597,7 @@ export async function writeAgentsCommands(targetDir, srcDir) {
 export default {
   CAPABILITY_PROFILES,
   transformCommand,
+  seedFileIfAbsent,
   writeCapabilitiesJson,
   renderCapabilitiesSection,
   writeAgentsSkills,

@@ -2,6 +2,34 @@
 
 All notable changes to Toh Framework will be documented in this file.
 
+## [2.1.1] - 2026-08-26
+
+### 🩹 Patch: Updates That Respect Your Work
+
+v2.1.1 is a repair release — อัปเดตได้โดยไม่ทับงานเดิม. Every fix answers the same complaint, reported in GitHub issue #2 by @tumansdev: re-running the installer on a project that was already mid-work behaved as if the project were brand new. Updates now preserve live state, stop hooks now respect a plan you deliberately parked, and Codex capability claims are probed at install time instead of assumed.
+
+#### Fixed
+
+- **Memory survives an update** — re-running the installer over an existing project no longer resets `.toh/memory/`. All 7 memory files are now seeded only if absent, the same contract `.toh/plan.md` and `.toh/progress.md` have had since v2.0.0 — an update never clobbers what the loop has learned. Applied at every one of the 6 inline template code sites (`install.js` + 5 IDE handlers; zcode deliberately has none).
+- **Stop hooks respect a parked plan** — a plan whose header says `Status: blocked` or `Status: paused` is now terminal for the Claude Code prompt Stop hook, exactly like `Status: done`/`Status: draft`: the loop no longer refuses to end a session over work the user deliberately put down. The deterministic Antigravity command-script hook gains the same exemptions plus `Status: done` (which its grep previously never checked). Existing installs are **upgraded in place**: the installer recognises its own `<TFW-STOP-HOOK>` entry and rewrites just that entry to the new text instead of treating "marker present" as "nothing to do" — user hook entries are still never removed or reordered.
+- **Codex capabilities probed, not assumed** — the Codex handler now runs a runtime capability probe and falls back conservatively when the probe cannot confirm a feature, instead of hardcoding what the currently-installed Codex is presumed to support. An unverifiable capability is declared absent — the generated text never promises what the runtime was not proven to do.
+- **Version-drift sweep completed** — re-audited every user-visible and generated surface (`src/`, `installer/`, `README.md`, `docs/README-TH.md`, plus a real install of all 5 IDE targets) for stale `Next.js 14` / `React 18` / `Tailwind 3` stack mentions left after 0795eec. Result: zero remaining — generated output states only Next.js 16 / React 19 / Tailwind 4, matching the `src/templates/nextjs-pro/package.json` pins. Historical CHANGELOG entries and archived planning docs keep their original wording on purpose.
+
+Fixes [GitHub issue #2](https://github.com/wasintoh/toh-framework/issues/2) — thank you @tumansdev for the detailed report.
+
+#### Technical
+
+- Counts (from disk): **8 agents / 23 skills / 14 commands** — unchanged from 2.1.0; `toh-help.md`, README stats and both parallel command surfaces (14 Gemini CLI TOML, 14 Antigravity workflows) untouched.
+- Synced IDE surfaces touched by this patch:
+  - **All IDE installs** — `.toh/memory/` (7 files) now seed-if-absent at all 6 inline template sites: `installer/install.js` plus the claude-code, cursor, antigravity-cli, codex and gemini-cli handlers (zcode has no 7th copy by design).
+  - **Claude Code** — `<TFW-STOP-HOOK>` prompt hook in `.claude/settings.json`: new blocked/paused terminal semantics + in-place upgrade of our own entry on reinstall.
+  - **Antigravity (agy CLI + IDE)** — `<TFW-STOP-HOOK>` command-script hook in `.agents/hooks.json`: same terminal semantics (done/blocked/paused alongside draft) + in-place upgrade.
+  - **Codex** — capability probe with conservative fallback feeding the generated `AGENTS.md` claims and `.toh/capabilities.json`. Probe format verified live against codex-cli 0.149.1 and 0.145.0: the real interface is the plain-text `codex features list` table (no `--json` flag exists), and the real feature names are `multi_agent`, `hooks`, `goals` — `parallel` has no codex equivalent and stays declared false.
+- No source counts, templates, commands, agents or skills changed — README.md and docs/README-TH.md are untouched (the drift sweep found nothing left in either).
+- package.json: version **2.1.0 → 2.1.1**.
+
+---
+
 ## [2.1.0] - 2026-08-16
 
 ### 🔌 Compatibility Release: Every Living IDE, Verified For Real

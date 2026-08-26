@@ -9,7 +9,8 @@ import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
-import { transformCommand, renderCapabilitiesSection } from './shared.js';
+import { transformCommand, renderCapabilitiesSection, seedFileIfAbsent } from './shared.js';
+import { probeCodexCapabilitiesCached } from './capability-probe.js';
 
 // Hard budget for the TOH marker block inside AGENTS.md. Codex silently
 // truncates project docs at 32 KiB COMBINED (project_doc_max_bytes default),
@@ -35,6 +36,23 @@ const AGENTS_MD_RUNTIMES = {
     commandHint: ' The 14 `/toh-*` commands are installed natively in `.agents/commands/` — invoke them directly; the same prompts are also discoverable as skills in `.agents/skills/`.'
   }
 };
+
+/**
+ * The 'Runtime Identity' paragraph shared by the EN and TH generators.
+ *
+ * AGENTS.md is ONE file with TWO readers (Codex and ZCode) — it must never
+ * claim a capability only one reader has. `probedSubagents` is therefore true
+ * ONLY when codex is the sole writer of AGENTS.md for this run (no ZCode
+ * selected now or declared earlier) AND the install-time capability probe
+ * verified codex subagents as stable+enabled. In every other case the
+ * conservative sentence below is byte-identical to pre-probe releases.
+ */
+function runtimeIdentityLine(rt, probedSubagents = false) {
+  const capabilityClause = probedSubagents
+    ? 'Native subagents: available per probed codex features — delegate for independent tasks; otherwise run the TOH LOOP sequentially'
+    : 'Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially';
+  return `Runtime Identity: you are running in ${rt.runtimeName}. ${capabilityClause} in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md — unless its header carries a terminal status (Status: done/draft/blocked/paused): a terminal plan is reported, never auto-resumed. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).${rt.commandHint}`;
+}
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -228,14 +246,15 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
 *Auto-updated by agents during execution*
 `;
 
-  // Write all 7 memory files (v1.8.0)
-  await fs.writeFile(path.join(memoryDir, 'active.md'), activeContent);
-  await fs.writeFile(path.join(memoryDir, 'summary.md'), summaryContent);
-  await fs.writeFile(path.join(memoryDir, 'decisions.md'), decisionsContent);
-  await fs.writeFile(path.join(memoryDir, 'architecture.md'), architectureContent);
-  await fs.writeFile(path.join(memoryDir, 'components.md'), componentsContent);
-  await fs.writeFile(path.join(memoryDir, 'changelog.md'), changelogContent);
-  await fs.writeFile(path.join(memoryDir, 'agents-log.md'), agentsLogContent);
+  // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall
+  // must never clobber live memory; even an empty file is the user's).
+  await seedFileIfAbsent(path.join(memoryDir, 'active.md'), activeContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'summary.md'), summaryContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'decisions.md'), decisionsContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'architecture.md'), architectureContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'components.md'), componentsContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'changelog.md'), changelogContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'agents-log.md'), agentsLogContent);
 }
 
 /**
@@ -248,7 +267,19 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
  * Content outside <!-- TOH-FRAMEWORK-START/END --> is always preserved.
  * Returns the byte size of the generated block.
  */
-export async function writeAgentsMd(targetDir, srcDir, language = 'en', ide = 'codex') {
+export async function writeAgentsMd(targetDir, srcDir, language = 'en', ide = 'codex', options = {}) {
+  // v2.1.x (issue #2 problem 2): the Runtime Identity sentence may claim
+  // probed native subagents ONLY when the caller says codex is the SOLE
+  // reader/writer of AGENTS.md (options.allowProbedSubagents — install.js
+  // sets it to false whenever ZCode is selected now or was declared earlier)
+  // AND the live probe of the installed codex CLI verified the feature.
+  // Probe failure, ZCode co-install, or zcode-only installs all keep the
+  // conservative sentence byte-identical.
+  let probedSubagents = false;
+  if (ide === 'codex' && options.allowProbedSubagents === true) {
+    const probe = await probeCodexCapabilitiesCached();
+    probedSubagents = probe.ok === true && probe.overrides?.subagents === 'native';
+  }
   // Read all agents — v2.1 (W1): embed a compact roster table ONLY.
   // Full agent bodies used to be inlined here, which pushed AGENTS.md to
   // ~117 KB while Codex silently truncates project docs at 32 KiB combined —
@@ -297,8 +328,8 @@ export async function writeAgentsMd(targetDir, srcDir, language = 'en', ide = 'c
   // <!-- tfw:fallback --> blocks are unwrapped for Codex (idempotent, additive).
   const agentsMd = transformCommand(
     language === 'th'
-      ? generateAgentsMdTH(agentRoster, ide)
-      : generateAgentsMdEN(agentRoster, ide),
+      ? generateAgentsMdTH(agentRoster, ide, probedSubagents)
+      : generateAgentsMdEN(agentRoster, ide, probedSubagents),
     ide
   );
 
@@ -341,13 +372,13 @@ export async function writeAgentsMd(targetDir, srcDir, language = 'en', ide = 'c
   return tohBlockBytes;
 }
 
-export async function setupCodex(targetDir, srcDir, language = 'en') {
+export async function setupCodex(targetDir, srcDir, language = 'en', options = {}) {
   // Create .toh/memory directory structure (v1.1.0 - Memory System)
   const memoryDir = path.join(targetDir, '.toh', 'memory');
   await fs.ensureDir(path.join(memoryDir, 'archive'));
   await createMemoryFiles(memoryDir, language);
 
-  await writeAgentsMd(targetDir, srcDir, language, 'codex');
+  await writeAgentsMd(targetDir, srcDir, language, 'codex', options);
 
   // W1 belt-and-braces: project-scoped .codex/config.toml raising Codex's
   // project-doc budget (officially supported key, per config-reference), so
@@ -369,7 +400,7 @@ export async function setupCodex(targetDir, srcDir, language = 'en') {
   return true;
 }
 
-function generateAgentsMdEN(agentRoster, ide = 'codex') {
+function generateAgentsMdEN(agentRoster, ide = 'codex', probedSubagents = false) {
   const rt = AGENTS_MD_RUNTIMES[ide] || AGENTS_MD_RUNTIMES.codex;
   return `<!-- TOH-FRAMEWORK-START -->
 # 🎯 Toh Framework
@@ -391,7 +422,7 @@ You are the **Toh Framework Agent** - an AI that helps Solo Developers build Saa
 
 ${renderCapabilitiesSection(ide)}
 
-Runtime Identity: you are running in ${rt.runtimeName}. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).${rt.commandHint}
+${runtimeIdentityLine(rt, probedSubagents)}
 
 ## Core Philosophy (AODD - AI-Orchestration Driven Development)
 
@@ -618,7 +649,7 @@ The AI will:
 `;
 }
 
-function generateAgentsMdTH(agentRoster, ide = 'codex') {
+function generateAgentsMdTH(agentRoster, ide = 'codex', probedSubagents = false) {
   const rt = AGENTS_MD_RUNTIMES[ide] || AGENTS_MD_RUNTIMES.codex;
   return `<!-- TOH-FRAMEWORK-START -->
 # 🎯 Toh Framework
@@ -641,7 +672,7 @@ You are **Toh Framework Agent** - AI that helps Solo Developers build SaaS by th
 
 ${renderCapabilitiesSection(ide)}
 
-Runtime Identity: you are running in ${rt.runtimeName}. Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).${rt.commandHint}
+${runtimeIdentityLine(rt, probedSubagents)}
 
 ## Core Philosophy (AODD - AI-Orchestration Driven Development)
 

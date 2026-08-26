@@ -15,7 +15,7 @@ import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { transformCommand, renderCapabilitiesSection } from './shared.js';
+import { transformCommand, renderCapabilitiesSection, seedFileIfAbsent } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -324,14 +324,15 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
 *Auto-updated by agents during execution*
 `;
 
-  // Write all 7 memory files (v1.8.0)
-  await fs.writeFile(join(memoryDir, 'active.md'), activeContent);
-  await fs.writeFile(join(memoryDir, 'summary.md'), summaryContent);
-  await fs.writeFile(join(memoryDir, 'decisions.md'), decisionsContent);
-  await fs.writeFile(join(memoryDir, 'architecture.md'), architectureContent);
-  await fs.writeFile(join(memoryDir, 'components.md'), componentsContent);
-  await fs.writeFile(join(memoryDir, 'changelog.md'), changelogContent);
-  await fs.writeFile(join(memoryDir, 'agents-log.md'), agentsLogContent);
+  // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall
+  // must never clobber live memory; even an empty file is the user's).
+  await seedFileIfAbsent(join(memoryDir, 'active.md'), activeContent);
+  await seedFileIfAbsent(join(memoryDir, 'summary.md'), summaryContent);
+  await seedFileIfAbsent(join(memoryDir, 'decisions.md'), decisionsContent);
+  await seedFileIfAbsent(join(memoryDir, 'architecture.md'), architectureContent);
+  await seedFileIfAbsent(join(memoryDir, 'components.md'), componentsContent);
+  await seedFileIfAbsent(join(memoryDir, 'changelog.md'), changelogContent);
+  await seedFileIfAbsent(join(memoryDir, 'agents-log.md'), agentsLogContent);
 }
 
 function generateMainRule(lang) {
@@ -354,7 +355,7 @@ You are the **Toh Orchestrator** - an AI expert in building web applications wit
 
 ${renderCapabilitiesSection('cursor')}
 
-Runtime Identity: you are running in Cursor (2.4+). Native subagents ARE available here — the installer writes them to .cursor/agents/*.md (on dual installs Cursor also auto-loads .claude/agents/*.md; those are the SAME Toh agents, not a separate team). When a story clearly maps to one specialist (ui-builder, dev-builder, backend-connector, test-runner, root-cause-debugger, design-reviewer, platform-adapter, plan-orchestrator), delegate it to that subagent. Whether delegated or done yourself, the TOH LOOP contract is unchanged — and if subagents are unavailable (older Cursor) or the task is small/dependent, fall back to executing it sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+Runtime Identity: you are running in Cursor (2.4+). Native subagents ARE available here — the installer writes them to .cursor/agents/*.md (on dual installs Cursor also auto-loads .claude/agents/*.md; those are the SAME Toh agents, not a separate team). When a story clearly maps to one specialist (ui-builder, dev-builder, backend-connector, test-runner, root-cause-debugger, design-reviewer, platform-adapter, plan-orchestrator), delegate it to that subagent. Whether delegated or done yourself, the TOH LOOP contract is unchanged — and if subagents are unavailable (older Cursor) or the task is small/dependent, fall back to executing it sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md — unless its header carries a terminal status (Status: done/draft/blocked/paused): a terminal plan is reported, never auto-resumed. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
 
 Note: a root AGENTS.md may also exist in this project (written for Codex CLI) — it is the SAME Toh Framework, not a second system; when both are loaded, defer to this rule file (.cursor/rules/toh-framework.mdc).
 
@@ -654,7 +655,7 @@ You are **Toh Orchestrator** - AI specialized in building web applications "Type
 
 ${renderCapabilitiesSection('cursor')}
 
-Runtime Identity: you are running in Cursor (2.4+). Native subagents ARE available here — the installer writes them to .cursor/agents/*.md (on dual installs Cursor also auto-loads .claude/agents/*.md; those are the SAME Toh agents, not a separate team). When a story clearly maps to one specialist (ui-builder, dev-builder, backend-connector, test-runner, root-cause-debugger, design-reviewer, platform-adapter, plan-orchestrator), delegate it to that subagent. Whether delegated or done yourself, the TOH LOOP contract is unchanged — and if subagents are unavailable (older Cursor) or the task is small/dependent, fall back to executing it sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
+Runtime Identity: you are running in Cursor (2.4+). Native subagents ARE available here — the installer writes them to .cursor/agents/*.md (on dual installs Cursor also auto-loads .claude/agents/*.md; those are the SAME Toh agents, not a separate team). When a story clearly maps to one specialist (ui-builder, dev-builder, backend-connector, test-runner, root-cause-debugger, design-reviewer, platform-adapter, plan-orchestrator), delegate it to that subagent. Whether delegated or done yourself, the TOH LOOP contract is unchanged — and if subagents are unavailable (older Cursor) or the task is small/dependent, fall back to executing it sequentially in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md — unless its header carries a terminal status (Status: done/draft/blocked/paused): a terminal plan is reported, never auto-resumed. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).
 
 Note: a root AGENTS.md may also exist in this project (written for Codex CLI) — it is the SAME Toh Framework, not a second system; when both are loaded, defer to this rule file (.cursor/rules/toh-framework.mdc).
 

@@ -8,7 +8,7 @@ import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { transformCommand, renderCapabilitiesSection } from './shared.js';
+import { transformCommand, renderCapabilitiesSection, seedFileIfAbsent } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -181,7 +181,8 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
 
     // v2.0.0: THE TOH LOOP enforcement machinery (Claude Code only)
     // - Stop hook in .claude/settings.json blocks stopping mid-plan (deep-merged,
-    //   additive, idempotent via the <TFW-STOP-HOOK> marker)
+    //   additive, idempotent via the <TFW-STOP-HOOK> marker; reinstalls upgrade
+    //   our prompt string in place when it changed)
     // - .claude/loop.md heartbeat lets bare /loop keep finishing stories
     await mergeSettingsStopHook(claudeDir);
     await writeLoopHeartbeat(claudeDir);
@@ -368,8 +369,33 @@ const TFW_STOP_HOOK_PROMPT =
   '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
   'If stop_hook_active is true and no progress was made since the last block, ' +
   'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done/' +
-  'Status: draft, return {"ok": true}. These ok:true conditions take precedence ' +
+  'Status: draft/Status: blocked/Status: paused, return {"ok": true}. These ok:true ' +
+  'conditions take precedence ' +
   'even if the last QC run in the transcript failed.';
+
+// Every prompt string a released installer has EVER shipped for this hook.
+// Upgrade-in-place may rewrite an entry ONLY when its prompt exactly equals
+// one of these — merely containing the marker is not proof we wrote it (a
+// user's own hook may quote the marker, or the user may have customized our
+// entry), and user hook entries are never rewritten (reinstall contract).
+// Append the outgoing TFW_STOP_HOOK_PROMPT here whenever it changes.
+const TFW_STOP_HOOK_PROMPT_HISTORY = [
+  // v2.0.0 (pre-review, commit 9e2d706)
+  '<TFW-STOP-HOOK> Read .toh/plan.md. If it has unchecked, unblocked stories ' +
+  "('- [ ]' without '[!]') or the last QC run in the transcript failed, return " +
+  '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
+  'If stop_hook_active is true and no progress was made since the last block, ' +
+  'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done, ' +
+  'return {"ok": true}.',
+  // v2.0.0 final .. v2.1.0 (commits 2531416..78e96b7)
+  '<TFW-STOP-HOOK> Read .toh/plan.md. If it has unchecked, unblocked stories ' +
+  "('- [ ]' without '[!]') or the last QC run in the transcript failed, return " +
+  '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
+  'If stop_hook_active is true and no progress was made since the last block, ' +
+  'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done/' +
+  'Status: draft, return {"ok": true}. These ok:true conditions take precedence ' +
+  'even if the last QC run in the transcript failed.'
+];
 
 /**
  * v2.0.0: Deep-merge the TFW Stop hook into .claude/settings.json.
@@ -377,7 +403,12 @@ const TFW_STOP_HOOK_PROMPT =
  * Rules (additive + idempotent):
  * - settings.json absent      -> create it with just the Stop hook
  * - settings.json unparseable -> DO NOT touch it; warn and skip
- * - hook already present      -> no-op (detected via the <TFW-STOP-HOOK> marker)
+ * - hook already present      -> upgrade-in-place (detected via the <TFW-STOP-HOOK>
+ *   marker): if OUR entry's prompt exactly equals a historical shipped prompt
+ *   (TFW_STOP_HOOK_PROMPT_HISTORY), replace ONLY that prompt string so existing
+ *   users receive prompt fixes on reinstall; identical prompt -> pure no-op;
+ *   any other marker-carrying prompt is user-owned and kept byte-identical.
+ *   Never duplicates the entry either way.
  * - user entries              -> never removed, never reordered — we only append
  * - unexpected shapes (hooks/Stop not object/array) -> warn and skip, never corrupt
  */
@@ -404,8 +435,49 @@ async function mergeSettingsStopHook(claudeDir) {
     }
   }
 
-  // Idempotence: skip if any existing hook already carries the TFW marker.
+  // Idempotence + upgrade-in-place: if any existing hook already carries the
+  // TFW marker, never append a duplicate — but DO refresh our own prompt
+  // string when the shipped TFW_STOP_HOOK_PROMPT has changed since the user
+  // installed (otherwise existing users would never receive prompt fixes).
+  // "Our own" is proved by an EXACT match against a historical shipped prompt
+  // (TFW_STOP_HOOK_PROMPT_HISTORY) — a prompt that merely CONTAINS the marker
+  // (a user's own hook quoting it, or our entry customized by the user) is
+  // user-owned and stays byte-identical; user entries are never rewritten.
   if (settings.hooks !== undefined && JSON.stringify(settings.hooks).includes(TFW_STOP_HOOK_MARKER)) {
+    let upgraded = false;
+    let foundOurPrompt = false;
+    if (Array.isArray(settings.hooks.Stop)) {
+      for (const entry of settings.hooks.Stop) {
+        if (entry === null || typeof entry !== 'object' || !Array.isArray(entry.hooks)) continue;
+        for (const h of entry.hooks) {
+          if (
+            h !== null && typeof h === 'object' && h.type === 'prompt' &&
+            typeof h.prompt === 'string' && h.prompt.includes(TFW_STOP_HOOK_MARKER)
+          ) {
+            if (h.prompt === TFW_STOP_HOOK_PROMPT) {
+              foundOurPrompt = true; // current version — pure no-op
+            } else if (TFW_STOP_HOOK_PROMPT_HISTORY.includes(h.prompt)) {
+              foundOurPrompt = true;
+              h.prompt = TFW_STOP_HOOK_PROMPT; // upgrade ONLY our own, unmodified entry
+              upgraded = true;
+            }
+            // Any other marker-carrying prompt is user-authored or user-
+            // customized: left byte-identical, never replaced.
+          }
+        }
+      }
+    }
+    if (upgraded) {
+      await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    } else if (!foundOurPrompt) {
+      // Marker exists, but no entry exactly matches a prompt we ever shipped
+      // (user restructured or customized it) — same contract as every other
+      // unexpected shape: warn, never mutate.
+      console.log(chalk.yellow(
+        '\n  ⚠️  .claude/settings.json carries the TFW Stop hook marker only in customized or ' +
+        'user-authored entries — left untouched (Stop hook prompt not upgraded).'
+      ));
+    }
     return; // already installed — never duplicate
   }
 
@@ -443,7 +515,7 @@ async function mergeSettingsStopHook(claudeDir) {
 const TFW_LOOP_MARKER = '<!-- generated by toh-framework -->';
 
 const TFW_LOOP_HEARTBEAT = `${TFW_LOOP_MARKER}
-Read .toh/plan.md + .toh/progress.md. If unchecked stories remain, continue the first one per the TOH LOOP (orchestration-protocol skill): implement, run its checkpoint, quote output, fix if red (max 5), tick if green, update .toh/memory/active.md. If all green and no stories remain, say COMPLETE in one line and stop.
+Read .toh/plan.md + .toh/progress.md. If plan.md is absent or its header says Status: done, draft, blocked, or paused, report that in one line and stop — never auto-resume a parked plan (same exemptions as the Stop hook). Otherwise, if unchecked stories remain, continue the first one per the TOH LOOP (orchestration-protocol skill): implement, run its checkpoint, quote output, fix if red (max 5), tick if green, update .toh/memory/active.md. If all green and no stories remain, say COMPLETE in one line and stop.
 `;
 
 /**
@@ -736,14 +808,15 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
 *Auto-updated by agents during execution*
 `;
 
-  // Write all 7 memory files (v1.8.0)
-  await fs.writeFile(join(memoryDir, 'active.md'), activeContent);
-  await fs.writeFile(join(memoryDir, 'summary.md'), summaryContent);
-  await fs.writeFile(join(memoryDir, 'decisions.md'), decisionsContent);
-  await fs.writeFile(join(memoryDir, 'architecture.md'), architectureContent);
-  await fs.writeFile(join(memoryDir, 'components.md'), componentsContent);
-  await fs.writeFile(join(memoryDir, 'changelog.md'), changelogContent);
-  await fs.writeFile(join(memoryDir, 'agents-log.md'), agentsLogContent);
+  // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall
+  // must never clobber live memory; even an empty file is the user's).
+  await seedFileIfAbsent(join(memoryDir, 'active.md'), activeContent);
+  await seedFileIfAbsent(join(memoryDir, 'summary.md'), summaryContent);
+  await seedFileIfAbsent(join(memoryDir, 'decisions.md'), decisionsContent);
+  await seedFileIfAbsent(join(memoryDir, 'architecture.md'), architectureContent);
+  await seedFileIfAbsent(join(memoryDir, 'components.md'), componentsContent);
+  await seedFileIfAbsent(join(memoryDir, 'changelog.md'), changelogContent);
+  await seedFileIfAbsent(join(memoryDir, 'agents-log.md'), agentsLogContent);
 }
 
 // Delimiters around the Toh Framework section of a project's CLAUDE.md.

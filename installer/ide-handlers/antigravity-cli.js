@@ -20,9 +20,12 @@
  *   .agents/hooks.json               deterministic command-script Stop hook —
  *                                    greps .toh/plan.md for unchecked '- [ ]'
  *                                    tasks and exits 2 to block session end;
- *                                    a draft plan ('Status: draft', any case)
+ *                                    a terminal plan (header 'Status: draft',
+ *                                    'done', 'blocked' or 'paused', any case)
  *                                    never blocks (additive + idempotent via
- *                                    the <TFW-STOP-HOOK> marker)
+ *                                    the <TFW-STOP-HOOK> marker; reinstalls
+ *                                    upgrade our command string in place when
+ *                                    it changed)
  *
  * Deliberately NOT written: anything under .gemini/ (that surface lives only
  * in gemini-cli.js behind the explicit --legacy-gemini flag, owner decision D1).
@@ -42,7 +45,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
-import { transformCommand, renderCapabilitiesSection, writeAgentsSkills } from './shared.js';
+import { transformCommand, renderCapabilitiesSection, writeAgentsSkills, seedFileIfAbsent } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -65,6 +68,21 @@ if (!NEXT_MAJOR) {
 
 /** Idempotence marker for the Stop hook entry (mirrors claude-code.js). */
 const TFW_STOP_HOOK_MARKER = '<TFW-STOP-HOOK>';
+
+// Every command string a released installer has EVER shipped for this hook.
+// Upgrade-in-place may rewrite an entry ONLY when its command exactly equals
+// one of these — merely containing the marker is not proof we wrote it (our
+// own command echoes the marker, so a user wrapping or copying that echo into
+// their own hook carries the marker too), and user hook entries are never
+// rewritten (reinstall contract; mirrors TFW_STOP_HOOK_PROMPT_HISTORY in
+// claude-code.js). Append the outgoing command here whenever it changes.
+const TFW_STOP_HOOK_COMMAND_HISTORY = [
+  // v2.1.0 (commits 60c3de6..78e96b7): draft-only exemption
+  `if [ -f .toh/plan.md ] && ! grep -qi 'Status: draft' .toh/plan.md && grep -q '^[[:space:]]*- \\[ \\]' .toh/plan.md; then ` +
+  `echo '${TFW_STOP_HOOK_MARKER} THE TOH LOOP is not finished: .toh/plan.md still has unchecked "- [ ]" tasks. ` +
+  `Resume at the first unchecked task (checkbox-resume) or mark truly stuck tasks "- [!] BLOCKED: <one-line reason>".' >&2; ` +
+  `exit 2; fi`
+];
 
 /** Always On rule hard budget (Antigravity rule file limit). */
 const RULE_CHAR_BUDGET = 12000;
@@ -196,14 +214,20 @@ async function createAntigravityAgents(targetDir) {
  * shapes (root/hooks/Stop not object/object/array) are warned about and
  * left untouched (same contract as claude-code.js mergeSettingsStopHook —
  * never mutate or overwrite an unrecognized structure), and the
- * <TFW-STOP-HOOK> marker makes reinstalls a no-op.
+ * <TFW-STOP-HOOK> marker prevents duplicates on reinstall. Reinstalls
+ * UPGRADE IN PLACE: when our entry's command exactly equals a historical
+ * shipped command (TFW_STOP_HOOK_COMMAND_HISTORY), only that command string
+ * is replaced with the current one — a marker-carrying command with any
+ * other text is user-owned; every other hook entry stays byte-identical
+ * and in order.
  *
  * The hook is a plain command script (owner decision D2: deterministic
  * command-script Stop hooks belong to tools that support them — this one):
  * exit 2 + stderr reason blocks ending the session while .toh/plan.md still
  * has unchecked '- [ ]' tasks. Blocked tasks are '- [!]' and do not match,
- * a draft plan ('Status: draft', case-insensitive — same exemption as the
- * Claude Code prompt hook) never blocks, and the installer's seed plan.md
+ * a terminal plan (header line 'Status: draft', 'done', 'blocked' or
+ * 'paused', case-insensitive — same exemptions as the Claude Code prompt
+ * hook) never blocks, and the installer's seed plan.md
  * contains no real '- [ ]' line, so an empty backlog never blocks. POSIX
  * sh + grep — see VERIFY-LIVE note in the file header for the Windows caveat.
  */
@@ -226,16 +250,57 @@ async function mergeHooksStopHook(agentsDir) {
     return null;
   }
 
-  // Idempotence: marker anywhere in the existing hooks config = already installed.
-  if (JSON.stringify(config.hooks || {}).includes(TFW_STOP_HOOK_MARKER)) {
-    return hooksPath;
-  }
-
+  // POSIX sh + grep -E only (BSD/macOS-safe): a plan whose header carries a
+  // terminal status (draft/done/blocked/paused, case-insensitive) never blocks.
   const command =
-    `if [ -f .toh/plan.md ] && ! grep -qi 'Status: draft' .toh/plan.md && grep -q '^[[:space:]]*- \\[ \\]' .toh/plan.md; then ` +
+    `if [ -f .toh/plan.md ] && ! grep -qiE '^[[:space:]]*Status:[[:space:]]*(draft|done|blocked|paused)' .toh/plan.md && grep -q '^[[:space:]]*- \\[ \\]' .toh/plan.md; then ` +
     `echo '${TFW_STOP_HOOK_MARKER} THE TOH LOOP is not finished: .toh/plan.md still has unchecked "- [ ]" tasks. ` +
     `Resume at the first unchecked task (checkbox-resume) or mark truly stuck tasks "- [!] BLOCKED: <one-line reason>".' >&2; ` +
     `exit 2; fi`;
+
+  // Idempotence + upgrade-in-place: marker anywhere in the existing hooks
+  // config = already installed, never append a duplicate — but refresh OUR
+  // command string when the shipped command has changed since the user
+  // installed. "Ours" is proved by an EXACT match against a historical
+  // shipped command (TFW_STOP_HOOK_COMMAND_HISTORY) — a command that merely
+  // CONTAINS the marker (e.g. a user hook wrapping our echo) is user-owned
+  // and stays byte-identical; user entries are never rewritten.
+  if (JSON.stringify(config.hooks || {}).includes(TFW_STOP_HOOK_MARKER)) {
+    let upgraded = false;
+    let foundOurCommand = false;
+    const stop = config.hooks && config.hooks.Stop;
+    if (Array.isArray(stop)) {
+      for (const entry of stop) {
+        if (entry === null || typeof entry !== 'object' || !Array.isArray(entry.hooks)) continue;
+        for (const h of entry.hooks) {
+          if (
+            h !== null && typeof h === 'object' && h.type === 'command' &&
+            typeof h.command === 'string' && h.command.includes(TFW_STOP_HOOK_MARKER)
+          ) {
+            if (h.command === command) {
+              foundOurCommand = true; // current version — pure no-op
+            } else if (TFW_STOP_HOOK_COMMAND_HISTORY.includes(h.command)) {
+              foundOurCommand = true;
+              h.command = command; // upgrade ONLY our own, unmodified entry
+              upgraded = true;
+            }
+            // Any other marker-carrying command is user-authored or user-
+            // customized: left byte-identical, never replaced.
+          }
+        }
+      }
+    }
+    if (upgraded) {
+      await fs.writeFile(hooksPath, `${JSON.stringify(config, null, 2)}\n`);
+    } else if (!foundOurCommand) {
+      // Marker exists, but no entry exactly matches a command we ever shipped
+      // (user restructured or customized it) — warn, never mutate.
+      console.warn(
+        '  ⚠️  .agents/hooks.json carries the TFW Stop hook marker only in customized or user-authored entries — leaving it untouched; Stop hook command not upgraded.'
+      );
+    }
+    return hooksPath;
+  }
 
   if (config.hooks === undefined) config.hooks = {};
   if (config.hooks === null || typeof config.hooks !== 'object' || Array.isArray(config.hooks)) {
@@ -286,7 +351,7 @@ const RUNTIME_IDENTITY_EN =
   'Runtime Identity: you are running in Google Antigravity — the agy CLI or the Antigravity IDE (NOT Gemini CLI; never read or write `.gemini/`). ' +
   'When a story clearly maps to one specialist in `.agents/agents/` (ui-builder, dev-builder, backend-connector, test-runner, root-cause-debugger, design-reviewer, platform-adapter, plan-orchestrator), delegate it via `invoke_subagent`. ' +
   'Whether delegated or done yourself, execute THE TOH LOOP one task at a time: implement -> run the story\'s checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. ' +
-  'Interrupted runs resume at the first unchecked box in `.toh/plan.md`. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions). ' +
+  'Interrupted runs resume at the first unchecked box in `.toh/plan.md` — unless its header carries a terminal status (Status: done/draft/blocked/paused): a terminal plan is reported, never auto-resumed. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions). ' +
   'A Stop hook in `.agents/hooks.json` blocks ending the session while `.toh/plan.md` still has unchecked `- [ ]` tasks.';
 
 function generateRuleEN() {
@@ -740,12 +805,13 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
 *Auto-updated by agents during execution*
 `;
 
-  // Write all 7 memory files (v1.8.0)
-  await fs.writeFile(path.join(memoryDir, 'active.md'), activeContent);
-  await fs.writeFile(path.join(memoryDir, 'summary.md'), summaryContent);
-  await fs.writeFile(path.join(memoryDir, 'decisions.md'), decisionsContent);
-  await fs.writeFile(path.join(memoryDir, 'architecture.md'), architectureContent);
-  await fs.writeFile(path.join(memoryDir, 'components.md'), componentsContent);
-  await fs.writeFile(path.join(memoryDir, 'changelog.md'), changelogContent);
-  await fs.writeFile(path.join(memoryDir, 'agents-log.md'), agentsLogContent);
+  // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall
+  // must never clobber live memory; even an empty file is the user's).
+  await seedFileIfAbsent(path.join(memoryDir, 'active.md'), activeContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'summary.md'), summaryContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'decisions.md'), decisionsContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'architecture.md'), architectureContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'components.md'), componentsContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'changelog.md'), changelogContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'agents-log.md'), agentsLogContent);
 }

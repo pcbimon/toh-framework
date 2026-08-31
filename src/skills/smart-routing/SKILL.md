@@ -141,7 +141,8 @@ Probe exactly: the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env flag, plus the Cla
 Choose from the **execution ladder in `orchestration-protocol` (Section B)** — the full decision table lives there, once. Summary only:
 
 - **Claude Code** → ladder: teams > subagents > sequential
-- **Cursor / Codex** → sequential TOH LOOP in-session
+- **Cursor** → sequential TOH LOOP in-session
+- **Codex CLI** → native agents for independent tasks; sequential TOH LOOP for dependent work
 - **Gemini / Antigravity** → sequential prose loop
 
 ---

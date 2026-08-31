@@ -5,7 +5,7 @@ Guide for a Claude Code agent developing the framework itself. Repo-only: not in
 
 ## What this is
 
-Toh Framework ("Type Once, Have it all") is the npm package `toh-framework` (v2.0.0, MIT, ESM,
+Toh Framework ("Type Once, Have it all") is the npm package `toh-framework` (v2.1.0, MIT, ESM,
 Node >= 18, no build step) that installs an AI-orchestration development system into 5 IDEs:
 Claude Code, Cursor, Gemini CLI, Google Antigravity, and Codex CLI.
 
@@ -54,15 +54,16 @@ then 4 handlers in `installer/ide-handlers/` (plus shared.js utilities) cover th
 - gemini-cli.js → BOTH Gemini CLI (.gemini/: TOML commands from src/gemini-commands/, skills,
   GEMINI.md) and Antigravity (.agent/workflows/ from src/antigravity-workflows/); selecting
   gemini auto-adds antigravity. There is no antigravity.js.
-- codex.js → NATIVE Codex skills: one thin wrapper per supporting skill and command at
-  .agents/skills/<name>/SKILL.md (generated from src/skills/ and src/commands/; each wrapper
-  points at .toh/commands/*.md or .toh/skills/* and states Codex constraints — no subagents,
-  no Stop hook, sequential TOH LOOP) + a CONCISE managed AGENTS.md block
-  (TOH-FRAMEWORK-START/END: identity, capabilities, skills table, legacy `/toh-*` compat
-  note, memory protocol). Never embed agent bodies in AGENTS.md again (pre-v2.1 behavior —
-  Codex has no subagents to run them). Exports uninstallCodex() (removes only
-  generator-marked skills + the managed block); install.js cleanExistingInstall and the
-  `toh uninstall` CLI command both use it. `.toh/` runtime is seeded only-if-absent.
+- codex.js → NATIVE Codex workflows: one thin command wrapper per user-facing command at
+  .agents/skills/<name>/SKILL.md (generated from src/commands/; each wrapper points at
+  .toh/commands/*.md and internal skills stay in .toh/skills/) + native custom agents at
+  .codex/agents/<name>.toml (generated from src/agents/, with centralized model/reasoning
+  routing and read-only sandbox mapping) + a CONCISE managed AGENTS.md block
+  (TOH-FRAMEWORK-START/END: identity, capabilities, workflow table, native-agent pointer,
+  delegation/checkpoint contract, legacy `/toh-*` compat note, memory protocol). Never
+  embed agent bodies in AGENTS.md again. Exports uninstallCodex() (removes only
+  generator-marked skills/agents + the managed block); install.js cleanExistingInstall and
+  the `toh uninstall` CLI command both use it. `.toh/` runtime is seeded only-if-absent.
 
 Per-IDE command divergence lives in ONE markdown source via `<!-- tfw:claude -->` (kept only for
 Claude Code) / `<!-- tfw:fallback -->` (kept for everyone else) blocks, resolved by shared.js
@@ -73,9 +74,9 @@ loop — that is why claude-code.js transforms from package src/commands, not .t
 
 - `src/agents/` — exactly 8 agent .md files + README.md, no subdirectories (src/agents/subagents/
   was deleted in v2.0.0, commit c33dcf3 — never reference it). Superset frontmatter: name,
-  "Delegate when:" description, narrow per-agent tools allowlist, model, skills, triggers,
-  optional memory/isolation/maxTurns; keep filename == frontmatter name. Model tiers are
-  deliberate cost routing: opus = plan-orchestrator (THE BRAIN) + design-reviewer; sonnet =
+  "Delegate when:" description, narrow per-agent tools allowlist, model, modelIntent, skills,
+  triggers, optional memory/isolation/maxTurns; keep filename == frontmatter name. Model tiers
+  are deliberate Claude cost routing: opus = plan-orchestrator (THE BRAIN) + design-reviewer; sonnet =
   ui-builder, dev-builder, backend-connector, platform-adapter, root-cause-debugger (read-only
   Read/Grep/Glob/Bash — proves root cause, never edits); haiku = test-runner (Playwright
   auto-fix, maxTurns 30).

@@ -38,7 +38,7 @@ Your runtime identity is declared by the platform context file that loaded you:
 | `AGENTS.md` | Codex |
 | `GEMINI.md` | Gemini CLI / Antigravity |
 
-Confirm capabilities from `.toh/capabilities.json` (written by the installer). If it is missing, infer conservatively: only Claude Code has subagents, teams, hooks, `/goal`, `/loop`; every other runtime is single-session sequential.
+Confirm capabilities from `.toh/capabilities.json` (written by the installer). If it is missing, infer conservatively: Claude Code has Task subagents, teams, hooks, `/goal`, and `/loop`; Codex has native custom agents and native skill workflows when its client supports them; Cursor, Gemini, and Antigravity are single-session sequential. An unknown capability probe never disables a client-native feature.
 
 ### Step 2 — Runtime probe (ONLY for what install time cannot know)
 
@@ -59,7 +59,7 @@ Do NOT invent other detection heuristics. Identity comes from Step 1; the probe 
 Three rungs, best first. **Each rung: if unavailable, fall back one rung.** Sequential is the floor and is always available.
 
 1. **AGENT TEAMS** — Claude Code with the teams env flag set, AND the plan has >= 3 independent modules plus a QC role. Recipe in Section F. If unavailable, fall back one rung.
-2. **NATIVE SUBAGENTS** — the Task/Agent tool exists. Delegate tasks to TFW agents; parallel only under the rules below. If unavailable, fall back one rung.
+2. **NATIVE SUBAGENTS** — Claude's Task/Agent tool or Codex's `.codex/agents/*.toml` is available. Delegate tasks to TFW agents; parallel only under the rules below. If unavailable, fall back one rung.
 3. **SEQUENTIAL SELF** — execute every task yourself, in order, in this session. This is the default mode and the correct choice more often than not.
 
 ### When to use which
@@ -69,7 +69,8 @@ Three rungs, best first. **Each rung: if unavailable, fall back one rung.** Sequ
 | <= 3 tasks total | SEQUENTIAL |
 | Same-file or dependent edits | SEQUENTIAL |
 | Debugging / fixing | SEQUENTIAL |
-| Runtime without subagents (Cursor / Codex / Gemini / Antigravity) | SEQUENTIAL |
+| Runtime without subagents (Cursor / Gemini / Antigravity) | SEQUENTIAL |
+| Codex with native agents | NATIVE SUBAGENTS |
 | >= 2 independent tasks on disjoint files, each substantial (~5+ min) | PARALLEL subagents |
 | MVP-scale: >= 3 independent modules + a QC role, teams flag set | TEAMS |
 
@@ -107,7 +108,7 @@ Mirrors TFW agent frontmatter; teams and subagents both honor per-agent `model` 
 | **sonnet** | Builders — ui-builder, dev-builder, implementation work |
 | **opus** | Planning, QC/review, design review |
 
-On runtimes without model routing, ignore this table and proceed.
+On runtimes without model routing, ignore this table and proceed. Codex native agents use the generated `model` and `model_reasoning_effort` fields; do not map Claude tier names at runtime.
 
 ---
 
@@ -224,7 +225,7 @@ Section E is the floor on every runtime. On Claude Code the installer ships mach
 | **`/goal` recipe** (>= 2.1.139) | Set the finish line before coding: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. A Haiku evaluator judges the condition FROM THE TRANSCRIPT — one more reason the QC gate quotes actual output: unquoted results are invisible to the evaluator. |
 | **Workflows** (>= 2.1.154, optional) | `/toh-sweep` (not shipped — optional pattern you can save to `.claude/workflows/`) can fan out fixers per failing task until checks pass. |
 
-**Every other runtime** (Cursor / Codex / Gemini / Antigravity) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
+**Every other runtime** (Cursor / Gemini / Antigravity) runs the SAME loop as prose in one session — no hooks, no `/goal`. Codex also runs the same loop, but may delegate independent tasks to generated native agents; its parent still owns checkpoint verification and checkbox updates. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
 
 ---
 

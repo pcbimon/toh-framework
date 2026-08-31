@@ -2,7 +2,8 @@
  * Codex CLI IDE Handler
  *
  * Codex discovers repository skills from .agents/skills. TOH keeps the full
- * runtime in .toh/ and installs thin wrappers for commands and skills.
+ * runtime in .toh/, installs thin wrappers for commands, and translates source
+ * agents to native project-scoped TOML files.
  */
 
 import crypto from 'crypto';
@@ -10,6 +11,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
+import { parse as parseToml } from 'smol-toml';
 import { renderCapabilitiesSection } from './shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,6 +20,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'
 const VERSION = pkg.version;
 
 export const CODEX_SKILLS_DIR = path.join('.agents', 'skills');
+export const CODEX_AGENTS_DIR = path.join('.codex', 'agents');
 export const AGENTS_MAX_BYTES = 24 * 1024;
 export const CODEX_PROJECT_DOC_MAX_BYTES = 64 * 1024;
 
@@ -30,6 +33,17 @@ const CONFIG_BLOCK_RE = /[ \t]*# TOH-FRAMEWORK-START\r?\n[\s\S]*?[ \t]*# TOH-FRA
 const SKILL_GENERATOR = 'toh-framework';
 const MANIFEST_PATH = path.join('.codex', 'toh-framework.json');
 const SKILL_NAME_RE = /^[a-z0-9-]{1,64}$/;
+const AGENT_MODEL_INTENTS = new Set(['lightweight', 'implementation', 'planning', 'review']);
+const READ_ONLY_SOURCE_TOOLS = new Set(['Read', 'Grep', 'Glob', 'Bash']);
+
+// Codex model names change independently from Toh's abstract role names. Keep
+// that translation in one table so a model refresh does not touch agent source.
+export const CODEX_MODEL_ROUTING = Object.freeze({
+  lightweight: Object.freeze({ model: 'gpt-5.6-luna', model_reasoning_effort: 'low' }),
+  implementation: Object.freeze({ model: 'gpt-5.6', model_reasoning_effort: 'medium' }),
+  planning: Object.freeze({ model: 'gpt-5.6', model_reasoning_effort: 'high' }),
+  review: Object.freeze({ model: 'gpt-5.6-terra', model_reasoning_effort: 'high' })
+});
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -76,13 +90,125 @@ async function fileMatchesHash(filePath, expectedHash) {
 }
 
 function parseFrontmatter(raw, label) {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  return parseFrontmatterDocument(raw, label).frontmatter;
+}
+
+function parseFrontmatterDocument(raw, label) {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) throw new Error(`${label} must start with YAML frontmatter.`);
   try {
-    return yaml.load(match[1]) || {};
+    return { frontmatter: yaml.load(match[1]) || {}, body: match[2] };
   } catch (error) {
     throw new Error(`Invalid YAML frontmatter in ${label}: ${error.message}`);
   }
+}
+
+function normalizeModelIntent(value) {
+  const intent = String(value || '').trim().toLowerCase().replaceAll('_', '-');
+  const aliases = {
+    exploration: 'lightweight',
+    explore: 'lightweight',
+    scaffold: 'lightweight',
+    deep: 'planning',
+    'deep-reasoning': 'planning',
+    security: 'review'
+  };
+  return aliases[intent] || intent;
+}
+
+export function resolveCodexModelIntent(agent) {
+  const explicit = normalizeModelIntent(agent.modelIntent || agent.model_intent || agent.codex?.modelIntent);
+  if (AGENT_MODEL_INTENTS.has(explicit)) return explicit;
+
+  // Backward-compatible fallback for older source definitions. New definitions
+  // should use modelIntent so the source expresses intent, not a vendor tier.
+  const legacyTier = String(agent.model || '').trim().toLowerCase();
+  if (legacyTier === 'haiku') return 'lightweight';
+  if (legacyTier === 'opus') return 'planning';
+  return 'implementation';
+}
+
+export async function readAgentCatalog(targetDir) {
+  const agentsDir = path.join(targetDir, '.toh', 'agents');
+  if (!(await fs.pathExists(agentsDir))) return [];
+
+  const files = (await fs.readdir(agentsDir, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'README.md')
+    .map((entry) => entry.name)
+    .sort();
+  const catalog = [];
+
+  for (const file of files) {
+    const sourcePath = path.join(agentsDir, file);
+    const { frontmatter, body } = parseFrontmatterDocument(await fs.readFile(sourcePath, 'utf8'), sourcePath);
+    const name = String(frontmatter.name || file.replace(/\.md$/, '')).trim();
+    if (!SKILL_NAME_RE.test(name)) continue;
+
+    const tools = Array.isArray(frontmatter.tools) ? frontmatter.tools.map(String) : [];
+    const skills = Array.isArray(frontmatter.skills) ? frontmatter.skills.map(String) : [];
+    const triggers = Array.isArray(frontmatter.triggers) ? frontmatter.triggers.map(String) : [];
+    catalog.push({
+      name,
+      description: String(frontmatter.description || `${name} Toh Framework agent`).trim().slice(0, 1024),
+      body,
+      tools,
+      skills,
+      triggers,
+      modelIntent: resolveCodexModelIntent(frontmatter),
+      maxTurns: frontmatter.maxTurns
+    });
+  }
+
+  return catalog;
+}
+
+function isReadOnlyAgent(agent) {
+  return agent.tools.length > 0 && agent.tools.every((tool) => READ_ONLY_SOURCE_TOOLS.has(tool));
+}
+
+export function translateAgentToCodex(agent) {
+  const model = CODEX_MODEL_ROUTING[agent.modelIntent] || CODEX_MODEL_ROUTING.implementation;
+  const skillRefs = agent.skills.length
+    ? `\nAssociated Toh skills (read these files before acting):\n${agent.skills
+        .map((skill) => `- .toh/skills/${skill}/SKILL.md`)
+        .join('\n')}`
+    : '';
+  const toolBoundary = agent.tools.length
+    ? `\nSource tool boundary: ${agent.tools.join(', ')}. Codex maps this boundary to its sandbox; do not widen it.`
+    : '';
+  const triggerHints = agent.triggers.length
+    ? `\nRouting hints from the canonical definition: ${agent.triggers.join('; ')}`
+    : '';
+  const turnHint = agent.maxTurns !== undefined
+    ? `\nSource turn budget hint: ${agent.maxTurns}. Stay focused and return to the parent when the assigned work is complete.`
+    : '';
+  const orchestrationContract = `
+
+## Codex runtime contract
+- Own only the task and files assigned by the parent orchestrator.
+- Return a concise result with Status, Result, Evidence, Files, and Blockers.
+- Run the task checkpoint when one is provided. A parent agent re-runs checkpoints before updating .toh/plan.md.
+- Never parallelize dependent edits; parallel work is only for genuinely independent files.
+${skillRefs}${toolBoundary}${triggerHints}${turnHint}`;
+  const instructions = `${agent.body.trim()}${orchestrationContract}`.trim();
+  const sandboxMode = isReadOnlyAgent(agent) ? 'read-only' : 'workspace-write';
+  const content = [
+    `# Toh model intent: ${agent.modelIntent}`,
+    `name = ${JSON.stringify(agent.name)}`,
+    `description = ${JSON.stringify(agent.description)}`,
+    `model = ${JSON.stringify(model.model)}`,
+    `model_reasoning_effort = ${JSON.stringify(model.model_reasoning_effort)}`,
+    `sandbox_mode = ${JSON.stringify(sandboxMode)}`,
+    `developer_instructions = ${JSON.stringify(instructions)}`,
+    ''
+  ].join('\n');
+
+  try {
+    parseToml(content);
+  } catch (error) {
+    throw new Error(`Invalid generated Codex agent TOML for ${agent.name}: ${error.message}`);
+  }
+  return content;
 }
 
 export async function readCommandCatalog(srcDir) {
@@ -167,24 +293,20 @@ export async function readSupportingSkillCatalog(srcDir) {
 }
 
 async function readWrapperCatalog(srcDir) {
-  const [commands, skills] = await Promise.all([
-    readCommandCatalog(srcDir),
-    readSupportingSkillCatalog(srcDir)
-  ]);
-  const wrappers = [
-    ...skills,
-    ...commands.map((entry) => ({
+  const commands = await readCommandCatalog(srcDir);
+  const wrappers = commands
+    .map((entry) => ({
       ...entry,
       sourcePath: `.toh/commands/${entry.file}`
     }))
-  ].sort((a, b) => a.skillName.localeCompare(b.skillName));
+    .sort((a, b) => a.skillName.localeCompare(b.skillName));
 
   const names = new Set();
   for (const wrapper of wrappers) {
     if (names.has(wrapper.skillName)) throw new Error(`Duplicate Codex skill name: ${wrapper.skillName}`);
     names.add(wrapper.skillName);
   }
-  return { commands, skills, wrappers };
+  return { commands, wrappers };
 }
 
 function wrapperFrontmatter(entry) {
@@ -208,7 +330,7 @@ function renderCommandWrapper(entry) {
         .join('\n')}\n3. Execute the workflow in this session, in order.`
     : '2. Execute the workflow in this session, in order.';
 
-  return `---\n${wrapperFrontmatter(entry)}\n---\n\n# ${entry.command} — ${entry.description}\n\n> Thin Codex wrapper for the TOH Framework workflow ${entry.command}.\n> Read the runtime workflow from \`${entry.sourcePath}\`; do not duplicate it here.\n\n## When to use\n\n${entry.description}. Triggers: ${triggers}, or any plain-language request that matches.\n\n## Workflow\n\n1. Read the full workflow definition: \`${entry.sourcePath}\`\n${supporting}\n\n## Codex constraints\n\n- **No subagents or teams** — execute delegated work inline, one task at a time.\n- **No Stop hook** — do not end while \`.toh/plan.md\` has unchecked, unblocked tasks.\n- **No model routing** — ignore model tiers in TOH docs.\n- **State** — persist work under \`.toh/\` and resume from the first unchecked task.\n`;
+  return `---\n${wrapperFrontmatter(entry)}\n---\n\n# ${entry.command} — ${entry.description}\n\n> Native Codex skill wrapper for the TOH Framework workflow ${entry.command}.\n> Read the runtime workflow from \`${entry.sourcePath}\`; do not duplicate it here.\n\n## When to use\n\n${entry.description}. Triggers: ${triggers}, or any plain-language request that matches.\n\n## Workflow\n\n1. Read the full workflow definition: \`${entry.sourcePath}\`\n${supporting}\n\n## Codex execution\n\n- Delegate independent plan tasks to the matching \`.codex/agents/<name>.toml\`; keep dependent edits sequential.\n- The parent agent owns checkpoint verification and updates \`.toh/plan.md\` only after quoting passing output.\n- Codex has no Toh Stop hook; resume from the first unchecked task when a session ends.\n- Agent TOML files own model and reasoning routing; do not reinterpret Claude model names.\n`;
 }
 
 function renderSupportingSkillWrapper(entry) {
@@ -216,9 +338,7 @@ function renderSupportingSkillWrapper(entry) {
 }
 
 function renderWrapper(entry) {
-  return entry.kind === 'command'
-    ? renderCommandWrapper(entry)
-    : renderSupportingSkillWrapper(entry);
+  return renderCommandWrapper(entry);
 }
 
 export async function installCodexSkills(targetDir, srcDir) {
@@ -268,6 +388,64 @@ export async function installCodexSkills(targetDir, srcDir) {
   return installed;
 }
 
+function agentFileRelativePath(name) {
+  return relativePath(CODEX_AGENTS_DIR, `${name}.toml`);
+}
+
+export async function installCodexAgents(targetDir) {
+  const agentsDir = path.join(targetDir, '.toh', 'agents');
+  if (!(await fs.pathExists(agentsDir))) return [];
+
+  const agents = await readAgentCatalog(targetDir);
+  const agentsRoot = path.join(targetDir, CODEX_AGENTS_DIR);
+  await fs.ensureDir(agentsRoot);
+  const previous = await readManifest(targetDir);
+  const previousAgents = previous.agents || {};
+  const nextAgents = {};
+  const wanted = new Set(agents.map((agent) => agentFileRelativePath(agent.name)));
+
+  for (const [relative, record] of Object.entries(previousAgents)) {
+    if (!relative.startsWith(`${CODEX_AGENTS_DIR}/`) || wanted.has(relative)) continue;
+    const filePath = path.join(targetDir, relative);
+    if (await fileMatchesHash(filePath, record.sha256)) {
+      await fs.remove(filePath);
+      const parent = path.dirname(filePath);
+      if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);
+    }
+  }
+
+  const installed = [];
+  for (const agent of agents) {
+    const relative = agentFileRelativePath(agent.name);
+    const filePath = path.join(targetDir, relative);
+    const content = translateAgentToCodex(agent);
+    const existingRecord = previousAgents[relative];
+    const canReplace = !(await fs.pathExists(filePath)) ||
+      await fileMatchesHash(filePath, existingRecord?.sha256);
+
+    if (!canReplace) {
+      if (existingRecord) nextAgents[relative] = existingRecord;
+      continue;
+    }
+    await fs.ensureDir(path.dirname(filePath));
+    await fs.writeFile(filePath, content);
+    nextAgents[relative] = {
+      sha256: sha256(content),
+      source: `.toh/agents/${agent.name}.md`,
+      modelIntent: agent.modelIntent
+    };
+    installed.push(agent.name);
+  }
+
+  await writeManifest(targetDir, {
+    ...previous,
+    generator: SKILL_GENERATOR,
+    version: VERSION,
+    agents: nextAgents
+  });
+  return installed;
+}
+
 function renderSkillTable(wrappers) {
   const rows = wrappers
     .map((entry) => `| \`$${entry.skillName}\` | ${entry.description} |`)
@@ -279,23 +457,26 @@ function generateAgentsBlock(wrappers, language) {
   const capabilities = renderCapabilitiesSection('codex');
   const thai = language === 'th';
   const title = thai
-    ? 'คุณคือ **Toh Framework Agent** ที่รันอยู่บน **Codex CLI** — ช่วย Solo Developer สร้าง SaaS คนเดียวจนจบ'
-    : 'You are the **Toh Framework Agent** running in **Codex CLI**, helping solo developers build SaaS systems by themselves.';
+    ? 'คุณคือ **Toh Framework Agent** ที่รันอยู่บน Codex — ช่วย Solo Developer สร้าง SaaS คนเดียวจนจบ'
+    : 'You are the **Toh Framework Agent** running in Codex, helping solo developers build SaaS systems by themselves.';
   const intro = thai
-    ? 'เวิร์กโฟลว์และกฎของ TOH ถูกติดตั้งเป็น native skills ไว้ที่ `.agents/skills/`:'
-    : 'TOH workflows and supporting rules are installed as native skills under `.agents/skills/`:';
+    ? 'TOH มี workflow skills แบบ native และ custom agents แบบ native:'
+    : 'TOH provides native workflow skills and native custom agents:';
   const runtime = thai
     ? '- `.toh/plan.md` + `.toh/progress.md` — แผนคือไฟล์และใช้ resume จาก task แรกที่ยังไม่ติ๊ก\n- `.toh/memory/` — memory 7 ไฟล์'
     : '- `.toh/plan.md` + `.toh/progress.md` — the plan is a file; resume from the first unchecked task\n- `.toh/memory/` — 7-file memory';
-  const constraints = thai
-    ? '- **ไม่มี subagents/teams** — รัน THE TOH LOOP แบบ sequential ใน session นี้\n- **ไม่มี Stop hook** — ห้ามจบ session ถ้าแผนยังมี task ที่ไม่ได้ติ๊กและไม่ blocked\n- **ไม่มี model routing** — ข้าม tier haiku/sonnet/opus ในเอกสาร TOH'
-    : '- **No subagents or teams** — run THE TOH LOOP sequentially in this session\n- **No Stop hook** — never end while `.toh/plan.md` has unchecked, unblocked tasks\n- **No model routing** — ignore haiku/sonnet/opus tiers in TOH docs';
   const compatibility = thai
-    ? '- เรียกตรงๆ ด้วย `$<skill>` หรือพิมพ์ `/skills` เพื่อดูทั้งหมด\n- แต่ละ wrapper อ่านเนื้อหาจริงจาก `.toh/commands/` หรือ `.toh/skills/`\n- ถ้าพิมพ์ `/toh-*` ให้ตีความเป็นคำขอใช้ skill ที่ตรงกัน ไม่ใช่ custom slash command'
-    : '- Invoke explicitly with `$<skill>` or browse with `/skills`, or describe the task for implicit matching.\n- Each wrapper reads the full source from `.toh/commands/` or `.toh/skills/`.\n- If the user types `/toh-*`, interpret it as a request for the matching skill, not a custom slash command.';
+    ? '- `$<skill>` หรือ `/skills` เพื่อดู workflow\n- แต่ละ workflow อ่านคำสั่งจริงจาก `.toh/commands/` และ skill ภายในจาก `.toh/skills/`\n- ถ้าพิมพ์ `/toh-*` ให้ตีความเป็น backward-compatible plain-text request ไม่ใช่ native slash command'
+    : '- Invoke a workflow with `$<skill>` or browse with `/skills`.\n- Each workflow reads its command and internal skills from `.toh/`.\n- If the user types `/toh-*`, interpret it as a backward-compatible plain-text request, not a native slash command.';
+  const agents = thai
+    ? '- `.codex/agents/*.toml` — custom agents ที่สร้างจาก `.toh/agents/*.md`\n- ใช้ agent ตามชื่อใน task ของ plan; native agent เป็นผู้กำหนด model, reasoning และ sandbox'
+    : '- `.codex/agents/*.toml` — custom agents generated from `.toh/agents/*.md`\n- Use the agent named by each plan task; native agent files define model, reasoning, and sandbox.';
+  const execution = thai
+    ? '- เริ่มจาก task แรกที่ยังไม่ติ๊กใน `.toh/plan.md`\n- delegate เฉพาะงานที่อิสระจริงและไฟล์ไม่ทับกัน; งานที่พึ่งกันทำตามลำดับ\n- parent ต้องรัน checkpoint เองก่อนติ๊ก task\n- ผลจาก agent ต้องมี Status, Result, Evidence, Files, Blockers; ถ้าล้มเหลวส่งกลับ parent เพื่อแก้หรือ mark blocked ตาม protocol'
+    : '- Start with the first unchecked task in `.toh/plan.md`.\n- Delegate only genuinely independent work on disjoint files; keep dependent work sequential.\n- The parent re-runs each checkpoint before ticking a task.\n- Agent results must include Status, Result, Evidence, Files, and Blockers; failures return to the parent for repair or blocking per the protocol.';
 
   return `${AGENTS_BLOCK_START}
-# 🎯 Toh Framework
+# Toh Framework
 
 > **"Type Once, Have it all!"** — AI-Orchestration Driven Development${thai ? '\n> "สั่งครั้งเดียว จบครบโดยไม่ต้องถาม"' : ''}
 
@@ -318,9 +499,17 @@ ${compatibility}
 ${runtime}
 - \`.toh/skills/\` · \`.toh/commands/\` · \`.toh/capabilities.json\`
 
-## ${thai ? 'ข้อจำกัดของ Codex' : 'Codex constraints'}
+${agents}
 
-${constraints}
+## TOH execution contract
+
+${execution}
+
+## ${thai ? 'ขอบเขตของ Codex' : 'Codex boundary'}
+
+- Codex native agents and multi-agent tools are Codex CLI capabilities.
+- Installation does not disable multi-agent support when the \`codex\` CLI is absent; an unknown probe result remains eligible for native behavior.
+- Codex has no Toh Stop hook. Completion requires the workflow's own quoted checkpoint evidence.
 
 ${AGENTS_BLOCK_END}`;
 }
@@ -349,22 +538,50 @@ export async function updateAgentsMd(targetDir, wrappers, language = 'en') {
   return agentsPath;
 }
 
-function codexConfigBlock() {
-  return `${CONFIG_BLOCK_START}\n# Keep Codex project instructions below its discovery ceiling.\nproject_doc_max_bytes = ${CODEX_PROJECT_DOC_MAX_BYTES}\n${CONFIG_BLOCK_END}`;
+function codexConfigBlock(enableMultiAgent = true, enableProjectDocQuota = true) {
+  const lines = [
+    CONFIG_BLOCK_START,
+    '# Enable Codex native delegation and keep project instructions below its discovery ceiling.'
+  ];
+  if (enableProjectDocQuota) lines.push(`project_doc_max_bytes = ${CODEX_PROJECT_DOC_MAX_BYTES}`);
+  if (enableMultiAgent) lines.push('[features]', 'multi_agent = true');
+  lines.push(CONFIG_BLOCK_END);
+  return `${lines.join('\n')}\n`;
+}
+
+function insertCodexConfigBlock(content, block, needsRootKey) {
+  if (!content) return `${block}\n`;
+  if (!needsRootKey) return `${content}\n\n${block}\n`;
+
+  const firstTable = content.search(/^\s*\[/m);
+  if (firstTable === -1) return `${content}\n\n${block}\n`;
+  return `${content.slice(0, firstTable).trimEnd()}\n\n${block}\n${content.slice(firstTable)}`;
 }
 
 export async function setupCodexConfig(targetDir) {
   const configPath = path.join(targetDir, '.codex', 'config.toml');
   const existing = await fs.pathExists(configPath) ? await fs.readFile(configPath, 'utf8') : '';
   const withoutToh = existing.replace(CONFIG_BLOCK_RE, '').trimEnd();
-  const hasUserQuota = /^\s*project_doc_max_bytes\s*=/m.test(withoutToh);
-  if (hasUserQuota) {
+  let hasUserQuota = false;
+  let hasUserFeatures = false;
+  if (withoutToh) {
+    try {
+      const parsed = parseToml(withoutToh);
+      hasUserQuota = Object.hasOwn(parsed, 'project_doc_max_bytes');
+      hasUserFeatures = Boolean(parsed.features && typeof parsed.features === 'object');
+    } catch {
+      const rootSection = withoutToh.split(/^\s*\[/m, 1)[0];
+      hasUserQuota = /^\s*project_doc_max_bytes\s*=\s*/m.test(rootSection);
+      hasUserFeatures = /^\s*\[features\]\s*$/m.test(withoutToh);
+    }
+  }
+  if (hasUserQuota && hasUserFeatures) {
     await updateManifest(targetDir, { configSha256: null });
     return configPath;
   }
 
-  const block = codexConfigBlock();
-  const next = withoutToh ? `${withoutToh}\n\n${block}\n` : `${block}\n`;
+  const block = codexConfigBlock(!hasUserFeatures, !hasUserQuota);
+  const next = insertCodexConfigBlock(withoutToh, block, !hasUserQuota);
   await fs.ensureDir(path.dirname(configPath));
   await fs.writeFile(configPath, next);
   await updateManifest(targetDir, { configSha256: sha256(next) });
@@ -408,8 +625,9 @@ export async function setupCodex(targetDir, srcDir, language = 'en') {
   const { wrappers } = await readWrapperCatalog(srcDir);
   await setupCodexConfig(targetDir);
   const installed = await installCodexSkills(targetDir, srcDir);
+  const installedAgents = await installCodexAgents(targetDir);
   await updateAgentsMd(targetDir, wrappers, language);
-  return `${CODEX_SKILLS_DIR}/ (${installed.length}/${wrappers.length} wrappers) + AGENTS.md + .codex/config.toml`;
+  return `${CODEX_SKILLS_DIR}/ (${installed.length}/${wrappers.length} workflows) + ${CODEX_AGENTS_DIR}/ (${installedAgents.length} agents) + AGENTS.md + .codex/config.toml`;
 }
 
 async function makeBackup(targetDir, files) {
@@ -429,6 +647,7 @@ export async function uninstallCodex(targetDir, options = {}) {
   const { dryRun = false, backup = true } = options;
   const manifest = await readManifest(targetDir);
   const skillRemovals = [];
+  const agentRemovals = [];
   const backupFiles = [];
 
   for (const [relative, record] of Object.entries(manifest.files || {})) {
@@ -436,6 +655,14 @@ export async function uninstallCodex(targetDir, options = {}) {
     const filePath = path.join(targetDir, relative);
     if (!(await fileMatchesHash(filePath, record.sha256))) continue;
     skillRemovals.push({ relative, filePath, name: path.basename(path.dirname(filePath)) });
+    backupFiles.push(relative);
+  }
+
+  for (const [relative, record] of Object.entries(manifest.agents || {})) {
+    if (!relative.startsWith(`${CODEX_AGENTS_DIR}/`) || !relative.endsWith('.toml')) continue;
+    const filePath = path.join(targetDir, relative);
+    if (!(await fileMatchesHash(filePath, record.sha256))) continue;
+    agentRemovals.push({ relative, filePath, name: path.basename(filePath, '.toml') });
     backupFiles.push(relative);
   }
 
@@ -461,6 +688,7 @@ export async function uninstallCodex(targetDir, options = {}) {
 
   const result = {
     removedSkills: skillRemovals.map((item) => item.name).sort(),
+    removedAgents: agentRemovals.map((item) => item.name).sort(),
     agentsMd: agentsAction,
     config: configAction,
     dryRun,
@@ -471,6 +699,12 @@ export async function uninstallCodex(targetDir, options = {}) {
   if (backup) result.backupPath = await makeBackup(targetDir, [...new Set(backupFiles)]);
 
   for (const item of skillRemovals) {
+    await fs.remove(item.filePath);
+    const parent = path.dirname(item.filePath);
+    if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);
+  }
+
+  for (const item of agentRemovals) {
     await fs.remove(item.filePath);
     const parent = path.dirname(item.filePath);
     if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);

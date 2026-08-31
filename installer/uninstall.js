@@ -4,15 +4,15 @@
  * Removes TOH-managed files from a target project.
  *
  * Scoping rules:
- *   --ide codex  -> only Codex-owned TOH files (.agents/skills managed
- *                   skills + the AGENTS.md TOH block). `.toh/` is shared
+ *   --ide codex  -> only Codex-owned TOH files (.agents/skills and
+ *                   .codex/agents managed files + the AGENTS.md TOH block). `.toh/` is shared
  *                   runtime state and stays — other IDEs may still use it.
  *   (no --ide)   -> full removal: every IDE surface the installer owns,
  *                   plus `.toh/`.
  *
  * User content is never deleted: user skills under .agents/skills, user text
- * in AGENTS.md outside the TOH markers, and files we cannot classify are
- * all left untouched.
+ * in AGENTS.md outside the TOH markers, ZCode files, and files we cannot
+ * classify are all left untouched.
  */
 
 import chalk from 'chalk';
@@ -48,9 +48,10 @@ export async function uninstall(options) {
   // ---- Codex teardown (per-IDE and full uninstall both do this) ----
   const spinner = ora('Removing Codex integration...').start();
   try {
-    const { removedSkills, agentsMd, config, backupPath } = await uninstallCodex(targetDir, { dryRun, backup });
+    const { removedSkills, removedAgents, agentsMd, config, backupPath } = await uninstallCodex(targetDir, { dryRun, backup });
     const parts = [];
     parts.push(removedSkills.length ? `${removedSkills.length} skill(s) ${dryRun ? 'would be removed' : 'removed'}` : 'no TOH skills found');
+    if (removedAgents.length) parts.push(`${removedAgents.length} agent(s) ${dryRun ? 'would be removed' : 'removed'}`);
     if (agentsMd === 'updated') parts.push(`AGENTS.md block ${dryRun ? 'would be removed' : 'removed'}`);
     if (agentsMd === 'removed') parts.push(`AGENTS.md ${dryRun ? 'would be removed' : 'removed (was TOH-only)'}`);
     if (config === 'updated' || config === 'removed') parts.push(`Codex config ${dryRun ? 'would be updated' : 'updated'}`);

@@ -12,7 +12,7 @@ import { dirname, join } from 'path';
 import { setupClaudeCode } from './ide-handlers/claude-code.js';
 import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
-import { setupCodex, uninstallCodex } from './ide-handlers/codex.js';
+import { CODEX_AGENTS_DIR, CODEX_SKILLS_DIR, setupCodex, uninstallCodex } from './ide-handlers/codex.js';
 import { transformCommand, writeCapabilitiesJson } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -273,7 +273,7 @@ function getIDEConfigFile(ideName) {
     'Claude Code': 'created CLAUDE.md',
     'Cursor': '.cursor/rules/*.mdc',
     'Gemini CLI': '.gemini/GEMINI.md',
-    'Codex CLI': '.agents/skills/ + AGENTS.md + .codex/config.toml'
+    'Codex CLI': `${CODEX_SKILLS_DIR}/ + ${CODEX_AGENTS_DIR}/ + AGENTS.md + .codex/config.toml`
   };
   return configs[ideName] || 'configured';
 }
@@ -674,7 +674,8 @@ function printNextSteps(config) {
     // 13 green + 47 gray = 60 ; 11 green + 49 gray = 60 ; 18 green + 42 gray = 60
     console.log(row(chalk.green('    $toh-vibe') + chalk.gray(' - Native skill: new project'.padEnd(47))));
     console.log(row(chalk.green('    /skills') + chalk.gray(' - Browse all TOH skills'.padEnd(49))));
-    console.log(row(chalk.green('    .agents/skills/') + chalk.gray(' - 37 native wrappers installed'.padEnd(42))));
+    console.log(row(chalk.green(`    ${CODEX_SKILLS_DIR}/`) + chalk.gray(' - 14 workflow skills installed'.padEnd(42))));
+    console.log(row(chalk.green(`    ${CODEX_AGENTS_DIR}/`) + chalk.gray(' - 8 native agents installed'.padEnd(42))));
     console.log(empty);
   }
 

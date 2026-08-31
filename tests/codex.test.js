@@ -26,18 +26,25 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
+import { parse as parseToml } from 'smol-toml';
 
 import { install } from '../installer/install.js';
 import {
   AGENTS_MAX_BYTES,
+  CODEX_AGENTS_DIR,
+  CODEX_MODEL_ROUTING,
   CODEX_SKILLS_DIR,
   assertAgentsMdSize,
   setupCodex,
   uninstallCodex,
   installCodexSkills,
+  readAgentCatalog,
   readCommandCatalog,
-  readSupportingSkillCatalog
+  readSupportingSkillCatalog,
+  setupCodexConfig,
+  translateAgentToCodex
 } from '../installer/ide-handlers/codex.js';
+import { CAPABILITY_PROFILES, renderCapabilitiesSection } from '../installer/ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.join(path.dirname(__filename), '..');
@@ -58,6 +65,17 @@ const EXPECTED_COMMANDS = [
   'toh-test',
   'toh-ui',
   'toh-vibe'
+];
+
+const EXPECTED_AGENTS = [
+  'backend-connector',
+  'design-reviewer',
+  'dev-builder',
+  'plan-orchestrator',
+  'platform-adapter',
+  'root-cause-debugger',
+  'test-runner',
+  'ui-builder'
 ];
 
 // ---------------------------------------------------------------- helpers
@@ -104,18 +122,127 @@ test('fresh install creates .toh/, .agents/skills/, config.toml and AGENTS.md', 
     assert.ok(await fs.pathExists(path.join(dir, '.toh', 'skills', 'orchestration-protocol', 'SKILL.md')), '.toh skills installed');
     assert.ok(await fs.pathExists(path.join(dir, 'AGENTS.md')), 'AGENTS.md exists');
     assert.ok(await fs.pathExists(path.join(dir, '.codex', 'config.toml')), 'Codex config exists');
-    assert.match(await fs.readFile(path.join(dir, '.codex', 'config.toml'), 'utf8'), /project_doc_max_bytes\s*=\s*65536/);
+    const config = await fs.readFile(path.join(dir, '.codex', 'config.toml'), 'utf8');
+    const parsedConfig = parseToml(config);
+    assert.equal(parsedConfig.project_doc_max_bytes, 65536, 'project doc quota is a root-level setting');
+    assert.equal(parsedConfig.features.multi_agent, true, 'native delegation is enabled');
     assert.ok(!(await fs.pathExists(path.join(dir, '.codex', 'skills'))), 'legacy .codex/skills is not used');
+
+    const generatedAgents = (await fs.readdir(path.join(dir, CODEX_AGENTS_DIR))).sort();
+    assert.deepEqual(generatedAgents, EXPECTED_AGENTS.map((name) => `${name}.toml`), 'all eight native agents generated');
+    const manifest = await fs.readJson(path.join(dir, '.codex', 'toh-framework.json'));
+    assert.equal(Object.keys(manifest.agents).length, 8, 'native agents are ownership-tracked');
+    const rootCause = parseToml(await fs.readFile(path.join(dir, CODEX_AGENTS_DIR, 'root-cause-debugger.toml'), 'utf8'));
+    assert.equal(rootCause.sandbox_mode, 'read-only', 'read-only source agent maps to Codex read-only sandbox');
+    assert.equal(rootCause.model, CODEX_MODEL_ROUTING.review.model);
+    assert.equal(rootCause.model_reasoning_effort, CODEX_MODEL_ROUTING.review.model_reasoning_effort);
+    assert.ok(rootCause.developer_instructions.includes('Status, Result, Evidence, Files, and Blockers'));
+    assert.ok((await fs.readFile(path.join(dir, 'AGENTS.md'), 'utf8')).includes('.codex/agents/*.toml'));
 
     const supporting = await readSupportingSkillCatalog(SRC_DIR);
     assert.equal(supporting.length, 23, 'all 23 supporting skills are catalogued');
-    assert.equal((await fs.readdir(path.join(dir, CODEX_SKILLS_DIR))).length, 37, '14 commands + 23 skills are wrapped');
-    for (const skill of [...supporting.map((entry) => entry.skillName), ...EXPECTED_COMMANDS]) {
+    assert.equal((await fs.readdir(path.join(dir, CODEX_SKILLS_DIR))).length, 14, '14 workflow commands are wrapped');
+    for (const skill of EXPECTED_COMMANDS) {
       assert.ok(
         await fs.pathExists(path.join(dir, CODEX_SKILLS_DIR, skill, 'SKILL.md')),
         `native skill installed: ${skill}`
       );
     }
+  } finally {
+    await fs.remove(dir);
+  }
+});
+
+test('native agent translation preserves source intents and valid TOML', async () => {
+  const dir = await makeTmpProject();
+  try {
+    await quickInstallCodex(dir);
+    const catalog = await readAgentCatalog(dir);
+    assert.deepEqual(catalog.map((agent) => agent.name), EXPECTED_AGENTS);
+    for (const agent of catalog) {
+      const parsed = parseToml(translateAgentToCodex(agent));
+      assert.equal(parsed.name, agent.name);
+      assert.equal(parsed.model, CODEX_MODEL_ROUTING[agent.modelIntent].model);
+      assert.equal(parsed.model_reasoning_effort, CODEX_MODEL_ROUTING[agent.modelIntent].model_reasoning_effort);
+      assert.equal(typeof parsed.developer_instructions, 'string');
+    }
+  } finally {
+    await fs.remove(dir);
+  }
+});
+
+test('Codex CLI capabilities are native without a CLI binary probe', () => {
+  const profile = CAPABILITY_PROFILES.codex;
+  assert.equal(profile.client, 'codex-cli');
+  assert.equal(profile.detection, 'declared-at-install');
+  assert.equal(profile.subagents, 'native');
+  assert.equal(profile.parallel, true);
+  assert.equal(profile.modelRouting, true);
+  const section = renderCapabilitiesSection('codex');
+  assert.match(section, /\.codex\/agents/);
+  assert.match(section, /Codex model and reasoning/);
+  assert.doesNotMatch(section, /single-session only/);
+});
+
+test('existing Codex feature and quota settings are not duplicated', async () => {
+  const dir = await makeTmpProject();
+  try {
+    const configPath = path.join(dir, '.codex', 'config.toml');
+    const userConfig = 'project_doc_max_bytes = 12345\n[features]\nmulti_agent = false\n';
+    await fs.ensureDir(path.dirname(configPath));
+    await fs.writeFile(configPath, userConfig);
+
+    await setupCodexConfig(dir);
+    assert.equal(await fs.readFile(configPath, 'utf8'), userConfig, 'user-owned Codex settings stay unchanged');
+  } finally {
+    await fs.remove(dir);
+  }
+});
+
+test('existing Codex features keep their value while root quota is added', async () => {
+  const dir = await makeTmpProject();
+  try {
+    const configPath = path.join(dir, '.codex', 'config.toml');
+    const userConfig = '[features]\nmulti_agent = false\n';
+    await fs.ensureDir(path.dirname(configPath));
+    await fs.writeFile(configPath, userConfig);
+
+    await setupCodexConfig(dir);
+    const parsed = parseToml(await fs.readFile(configPath, 'utf8'));
+    assert.equal(parsed.project_doc_max_bytes, 65536);
+    assert.equal(parsed.features.multi_agent, false, 'user feature value stays unchanged');
+  } finally {
+    await fs.remove(dir);
+  }
+});
+
+test('root quota is inserted before unrelated Codex tables', async () => {
+  const dir = await makeTmpProject();
+  try {
+    const configPath = path.join(dir, '.codex', 'config.toml');
+    const userConfig = '[profiles.default]\nmodel = "user-model"\n';
+    await fs.ensureDir(path.dirname(configPath));
+    await fs.writeFile(configPath, userConfig);
+
+    await setupCodexConfig(dir);
+    const parsed = parseToml(await fs.readFile(configPath, 'utf8'));
+    assert.equal(parsed.project_doc_max_bytes, 65536, 'quota remains at the TOML root');
+    assert.equal(parsed.features.multi_agent, true);
+    assert.equal(parsed.profiles.default.model, 'user-model', 'unrelated table is preserved');
+  } finally {
+    await fs.remove(dir);
+  }
+});
+
+test('Claude agent output keeps native fields and drops Codex-only modelIntent', async () => {
+  const dir = await makeTmpProject();
+  try {
+    await install({ target: dir, ide: 'claude-code', quick: true });
+    const raw = await fs.readFile(path.join(dir, '.claude', 'agents', 'ui-builder.md'), 'utf8');
+    const { fm } = parseSkillFrontmatter(raw);
+    assert.equal(fm.name, 'ui-builder');
+    assert.equal(fm.model, 'sonnet');
+    assert.equal(fm.modelIntent, undefined);
   } finally {
     await fs.remove(dir);
   }
@@ -168,6 +295,37 @@ test('reinstall is idempotent and deterministic', async () => {
   }
 });
 
+test('native agents preserve user and ZCode files and modified generated agents', async () => {
+  const dir = await makeTmpProject();
+  try {
+    const userAgentPath = path.join(dir, CODEX_AGENTS_DIR, 'user-agent.toml');
+    const zcodePath = path.join(dir, '.zcode', 'agents', 'user.toml');
+    const userAgent = 'name = "user-agent"\ndescription = "User-owned"\n';
+    await fs.ensureDir(path.dirname(userAgentPath));
+    await fs.ensureDir(path.dirname(zcodePath));
+    await fs.writeFile(userAgentPath, userAgent);
+    await fs.writeFile(zcodePath, 'user zcode configuration\n');
+
+    await quickInstallCodex(dir);
+    const generatedPath = path.join(dir, CODEX_AGENTS_DIR, 'ui-builder.toml');
+    const modified = `${await fs.readFile(generatedPath, 'utf8')}\nUser customization.\n`;
+    await fs.writeFile(generatedPath, modified);
+
+    await quickInstallCodex(dir);
+    assert.equal(await fs.readFile(generatedPath, 'utf8'), modified, 'modified generated agent is preserved');
+    assert.equal(await fs.readFile(userAgentPath, 'utf8'), userAgent, 'user Codex agent is preserved');
+    assert.equal(await fs.readFile(zcodePath, 'utf8'), 'user zcode configuration\n', 'ZCode files are untouched');
+
+    const result = await uninstallCodex(dir, { backup: false });
+    assert.equal(result.removedAgents.length, 7, 'only unmodified generated agents are removed');
+    assert.ok(await fs.pathExists(generatedPath), 'modified generated agent remains');
+    assert.ok(await fs.pathExists(userAgentPath), 'user Codex agent remains');
+    assert.ok(await fs.pathExists(zcodePath), 'ZCode file remains');
+  } finally {
+    await fs.remove(dir);
+  }
+});
+
 test('unrelated user Codex skills are never touched', async () => {
   const dir = await makeTmpProject();
   try {
@@ -209,6 +367,9 @@ test('stale TOH-managed skills are removed on reinstall', async () => {
       path.join(staleDir, 'SKILL.md'),
       staleContent
     );
+    const staleAgentPath = path.join(dir, CODEX_AGENTS_DIR, 'toh-legacy-agent.toml');
+    const staleAgentContent = 'name = "toh-legacy-agent"\ndescription = "old"\ndeveloper_instructions = "old"\n';
+    await fs.writeFile(staleAgentPath, staleAgentContent);
     const manifestPath = path.join(dir, '.codex', 'toh-framework.json');
     const manifest = await fs.readJson(manifestPath);
     manifest.files['.agents/skills/toh-legacy/SKILL.md'] = {
@@ -216,11 +377,17 @@ test('stale TOH-managed skills are removed on reinstall', async () => {
       kind: 'command',
       source: '.toh/commands/toh-legacy.md'
     };
+    manifest.agents['.codex/agents/toh-legacy-agent.toml'] = {
+      sha256: createHash('sha256').update(staleAgentContent).digest('hex'),
+      source: '.toh/agents/toh-legacy-agent.md',
+      modelIntent: 'implementation'
+    };
     await fs.writeJson(manifestPath, manifest, { spaces: 2 });
 
     await setupCodex(dir, SRC_DIR, 'en');
 
     assert.ok(!(await fs.pathExists(staleDir)), 'stale TOH-managed skill removed');
+    assert.ok(!(await fs.pathExists(staleAgentPath)), 'stale TOH-managed agent removed');
     assert.ok(await fs.pathExists(path.join(dir, CODEX_SKILLS_DIR, 'toh-plan', 'SKILL.md')), 'current skills intact');
   } finally {
     await fs.remove(dir);
@@ -241,14 +408,16 @@ test('uninstall removes TOH Codex files and keeps user files + .toh state', asyn
     // Pretend the loop ran: live state that must survive a codex uninstall.
     await fs.writeFile(path.join(dir, '.toh', 'plan.md'), '# Plan: real work\n\n- [ ] T001 [P] ui-builder — thing in app/page.tsx\n');
 
-    const { removedSkills, agentsMd, config, backupPath } = await uninstallCodex(dir);
+    const { removedSkills, removedAgents, agentsMd, config, backupPath } = await uninstallCodex(dir);
 
-    assert.equal(removedSkills.length, 37, 'all TOH wrappers removed');
+    assert.equal(removedSkills.length, 14, 'all TOH workflow wrappers removed');
+    assert.equal(removedAgents.length, 8, 'all unmodified native agents removed');
     for (const skill of EXPECTED_COMMANDS) {
       assert.ok(!(await fs.pathExists(path.join(dir, CODEX_SKILLS_DIR, skill))), `removed ${skill}`);
     }
     assert.ok(await fs.pathExists(path.join(userSkillDir, 'SKILL.md')), 'user skill remains');
     assert.ok(await fs.pathExists(path.join(dir, CODEX_SKILLS_DIR)), '.agents/skills dir kept');
+    assert.ok(!(await fs.pathExists(path.join(dir, CODEX_AGENTS_DIR))), 'empty native agent directory removed');
     assert.equal(config, 'removed');
     assert.ok(backupPath && await fs.pathExists(backupPath), 'uninstall creates a backup');
 
@@ -285,7 +454,7 @@ test('every generated SKILL.md is valid and its references resolve', async () =>
 
     const skillsRoot = path.join(dir, CODEX_SKILLS_DIR);
     const entries = (await fs.readdir(skillsRoot, { withFileTypes: true })).filter((e) => e.isDirectory());
-    assert.equal(entries.length, 37, 'exactly 37 TOH wrappers exist');
+    assert.equal(entries.length, 14, 'exactly 14 TOH workflow wrappers exist');
 
     const NAME_RE = /^[a-z0-9-]{1,64}$/;
     for (const entry of entries) {
@@ -387,7 +556,8 @@ test('uninstall dry-run reports owned files without changing the project', async
     const result = await uninstallCodex(dir, { dryRun: true });
 
     assert.equal(result.dryRun, true);
-    assert.equal(result.removedSkills.length, 37);
+    assert.equal(result.removedSkills.length, 14);
+    assert.equal(result.removedAgents.length, 8);
     assert.equal(result.agentsMd, 'removed');
     assert.equal(result.config, 'removed');
     assert.deepEqual([...before.keys()].sort(), [...(await snapshotTree(dir)).keys()].sort(), 'dry-run keeps file set');

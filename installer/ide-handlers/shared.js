@@ -23,7 +23,7 @@ const VERSION = pkg.version;
 // ============================================================
 // 1. Capability profiles (per IDE)
 // ============================================================
-// subagents: 'native' | 'none'
+// subagents: 'native' | 'none' | 'unknown'
 // teams:     'env-gated' | false   (env CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
 // goal:      'version-gated' | false (Claude Code >= 2.1.139)
 // workflows: 'version-gated' | false (Claude Code >= 2.1.154, can be plan-disabled)
@@ -52,14 +52,17 @@ export const CAPABILITY_PROFILES = {
   },
   codex: {
     ide: 'codex',
-    subagents: 'none',
+    client: 'codex-cli',
+    detection: 'declared-at-install',
+    subagents: 'native',
     teams: false,
     goal: false,
     loop: false,
     hooks: false,
-    workflows: false,
-    parallel: false,
-    modelRouting: false
+    workflows: 'native',
+    parallel: true,
+    modelRouting: true,
+    nativeAgents: true
   },
   'gemini-cli': {
     ide: 'gemini-cli',
@@ -228,9 +231,10 @@ export function renderCapabilitiesSection(ide) {
   const profile = CAPABILITY_PROFILES[key];
   const display = IDE_DISPLAY[key] || { name: key || 'unknown runtime', contextFile: 'this context file' };
 
-  // Unknown IDE -> conservative sequential profile
+  // Unknown IDE -> conservative profile. Unknown is not a reason to disable a
+  // capability supplied by a client that the installer cannot probe.
   const p = profile || {
-    ide: key, subagents: 'none', teams: false, goal: false,
+    ide: key, subagents: 'unknown', teams: false, goal: false,
     loop: false, hooks: false, workflows: false, parallel: false, modelRouting: false
   };
 
@@ -239,8 +243,12 @@ export function renderCapabilitiesSection(ide) {
     'Never guess your runtime; it is stated here.';
 
   const lines = [];
-  if (p.subagents === 'native') {
+  if (p.subagents === 'native' && key === 'codex') {
+    lines.push('- Native subagents: YES — delegate via `.codex/agents/*.toml` (parallel only for independent tasks on disjoint files, max 4 concurrent)');
+  } else if (p.subagents === 'native') {
     lines.push('- Native subagents: YES — delegate via the Task tool (parallel only for independent tasks on disjoint files, max 4 concurrent)');
+  } else if (p.subagents === 'unknown') {
+    lines.push('- Native subagents: UNKNOWN — keep native delegation eligible; do not disable it from an unavailable probe');
   } else {
     lines.push('- Native subagents: NO — single-session only');
   }
@@ -258,10 +266,17 @@ export function renderCapabilitiesSection(ide) {
     : '- Hooks: NO');
   lines.push(p.workflows === 'version-gated'
     ? '- Workflows: version-gated (Claude Code >= 2.1.154)'
+    : p.workflows === 'native'
+      ? '- Workflows: YES — invoke installed native skills with `$toh-*`'
     : '- Workflows: NO');
   lines.push(p.modelRouting
-    ? '- Model routing: YES — haiku = scaffold/tests · sonnet = builders · opus = planning/QC'
+    ? key === 'codex'
+      ? '- Model routing: YES — native agent TOML sets Codex model and reasoning per Toh role'
+      : '- Model routing: YES — haiku = scaffold/tests · sonnet = builders · opus = planning/QC'
     : '- Model routing: NO — ignore model tiers and proceed');
+  if (p.nativeAgents) {
+    lines.push('- Native agent files: `.codex/agents/*.toml` — generated from `.toh/agents/*.md` with ownership-safe updates');
+  }
   if (!p.parallel) {
     lines.push('- Execution mode: run THE TOH LOOP **sequentially in this session** (orchestration-protocol skill); recovery = checkbox-resume from `.toh/plan.md`');
   }

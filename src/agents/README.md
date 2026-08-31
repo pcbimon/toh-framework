@@ -16,7 +16,7 @@ src/agents/*.md              ← single source (superset frontmatter + canonical
         ├── Claude Code  → copy as-is → .claude/agents/*.md
         │                  (uses native name / description / tools / model)
         ├── Cursor       → strip frontmatter → bundle into a .mdc rules file
-        ├── Codex        → generate thin wrappers in .agents/skills/; keep runtime body in .toh/
+        ├── Codex        → generate native agents in .codex/agents/ + command skills in .agents/skills/
         └── Gemini / Antigravity → convert frontmatter to each IDE's format
 ```
 
@@ -36,6 +36,7 @@ tools:            # Claude Code: native tool allowlist
   - Edit
   - Bash
 model: sonnet     # Claude Code: model tier per agent
+modelIntent: implementation # Codex: lightweight | implementation | planning | review
 skills:           # Toh skill bindings (all IDEs)
   - ui-first-builder
   - design-craft
@@ -78,7 +79,7 @@ The same source produces IDE-appropriate output at install time:
 |-----|----------------|------------------------|
 | Claude Code | `.claude/agents/*.md` | Copied as-is (native `name`/`description`/`tools`/`model`) |
 | Cursor | `.cursor/rules/…` | Frontmatter stripped → bundled as rules |
-| Codex CLI | `.agents/skills/*.md` + `AGENTS.md` | 23 supporting-skill + 14 command wrappers; runtime body stays in `.toh/` |
+| Codex CLI | `.codex/agents/*.toml` + `.agents/skills/*/SKILL.md` + `AGENTS.md` | 8 native agents + 14 workflow skills; 23 supporting skills stay in `.toh/` |
 | Gemini / Antigravity | `.toh/agents/*.md` | Frontmatter converted per IDE |
 
 ```
@@ -94,6 +95,8 @@ The same source produces IDE-appropriate output at install time:
 ```
 
 There is no `subagents/` folder anymore — the installer is the transform layer.
+Codex model names and reasoning are selected centrally from each agent's
+`modelIntent`; Claude's `model` tier remains for Claude Code compatibility.
 
 ---
 

@@ -10,24 +10,24 @@ The Codex integration no longer simulates `/toh-*` slash commands through a gian
 
 #### Changed
 
-- **Codex handler rewritten** (`installer/ide-handlers/codex.js`) - now installs one thin native skill per TOH command (14 skills), each a wrapper that points at the real workflow in `.toh/commands/*.md` and the supporting skills in `.toh/skills/` — no duplicated workflow content. Codex constraints (no subagents, no Stop hook, no model routing) are stated explicitly with sequential fallbacks.
-- **`AGENTS.md` block slimmed** - the managed `<!-- TOH-FRAMEWORK-START/END -->` block now carries only project-level rules: identity, capabilities, the native-skills table, legacy `/toh-*` compatibility note, `.toh` runtime map, and the tiered memory protocol. The ~800-line embedded copy of every agent body is gone (Codex has no subagents to run them).
+- **Codex handler rewritten** (`installer/ide-handlers/codex.js`) - installs 14 thin native workflow skills that point at `.toh/commands/*.md`, plus eight native custom agents under `.codex/agents/*.toml`. Native agents carry Codex model, reasoning, developer instructions, and read-only sandbox boundaries translated from the canonical source.
+- **`AGENTS.md` block slimmed** - the managed `<!-- TOH-FRAMEWORK-START/END -->` block now carries only project-level rules: identity, capabilities, the workflow-skills table, native-agent pointer, legacy `/toh-*` compatibility note, `.toh` runtime map, and the parent-owned checkpoint contract.
 - **Codex install output** - the success box now points at `$toh-vibe` / `/skills` and `.agents/skills/` instead of implying `/toh-*` is registered.
 - **Reinstall safety** - `.toh/memory/*.md` are now seeded only if absent (previously every reinstall overwrote them, contradicting the README's "without deleting your existing memory" promise); `plan.md` / `progress.md` were already protected.
 - **`--quick` reinstalls are non-interactive** - an existing install under `--quick` now defaults to Quick Update instead of prompting (interactive behavior unchanged).
 
 #### Added
 
-- **Native Codex skills** - 23 supporting-skill wrappers + 14 command wrappers under `.agents/skills/`, generated from `src/skills/` and `src/commands/*.md` with a `metadata.generator: toh-framework` marker.
+- **Native Codex skills and agents** - 14 command wrappers under `.agents/skills/`, generated from `src/commands/*.md` with a `metadata.generator: toh-framework` marker; 23 supporting skills remain internal under `.toh/skills/`; eight custom agents are generated from `src/agents/*.md`.
 - **Stale-skill cleanup** - reinstall removes previously TOH-generated skills that no longer exist, identified by the generator marker; user skills (even user skills named `toh-*`) are never touched.
-- **`toh uninstall`** - new CLI command. `--ide codex` removes only TOH-managed Codex files (skills + AGENTS.md block, user content preserved); without `--ide` it also removes `.toh` and the other TOH-owned IDE resource dirs. The installer's Fresh Install cleanup uses the same Codex teardown.
+- **`toh uninstall`** - new CLI command. `--ide codex` removes only TOH-managed Codex files (workflow skills + native agents + AGENTS.md block, user content preserved); without `--ide` it also removes `.toh` and the other TOH-owned IDE resource dirs. The installer's Fresh Install cleanup uses the same Codex teardown.
 - **`toh status`** - now reports `.agents/skills/`, `.codex/config.toml`, and `AGENTS.md`.
-- **Test suite** - `tests/codex.test.js` (node:test, in-band runner via `tests/run.js`) covers fresh install, AGENTS.md preservation, idempotency/determinism, user-skill preservation, stale-skill removal, uninstall scoping, and SKILL.md validity with resolving references. Runs in CI (`npm test`) on Node 18 + 22.
+- **Test suite** - `tests/codex.test.js` (node:test, in-band runner via `tests/run.js`) covers fresh install, native TOML agents, model/reasoning routing, read-only sandboxing, AGENTS.md preservation, idempotency/determinism, user/ZCode-file preservation, stale-skill removal, uninstall scoping, and SKILL.md validity. Runs in CI (`npm test`) on Node 18 + 22.
 
 #### Technical
 
-- Agent count (**8**), skill count (**23**), command count (**14**) unchanged — Codex skills are generated wrappers, not new content.
-- Synced IDE surfaces: Codex (`.agents/skills/` + `.codex/config.toml` + `AGENTS.md` block), README.md, docs/README-TH.md, installer output, `toh status`.
+- Agent count (**8**), skill count (**23**), command count (**14**) unchanged — Codex agents and workflow skills are generated native surfaces, not new source content.
+- Synced IDE surfaces: Codex CLI (`.codex/agents/` + `.agents/skills/` + `.codex/config.toml` + `AGENTS.md` block), README.md, docs/README-TH.md, installer output, `toh status`.
 - Version bumped from **2.0.0** to **2.1.0**.
 
 ---

@@ -23,7 +23,7 @@
 | 📝 **Cursor** | ✅ Full Support | @ file references |
 | 🌌 **Google Antigravity** | ✅ Full Support | Gemini integration |
 | 💎 **Gemini CLI** | ✅ Full Support | Context files auto-loaded |
-| 🤖 **Codex CLI** | ✅ Supported | OpenAI agents |
+| 🤖 **Codex CLI** | ✅ Supported | Native skills and project agents |
 
 ## 💡 Why Toh?
 
@@ -181,15 +181,16 @@ gemini
 
 ### Codex CLI
 
-Codex has no custom slash commands, so TOH installs **native Codex skills**
-under `.agents/skills/` — 23 supporting-skill wrappers plus 14 workflow
-wrappers (`toh-vibe`, `toh-plan`, `toh-ui`, `toh-dev`, `toh-design`,
-`toh-test`, `toh-connect`, `toh-line`, `toh-mobile`, `toh-fix`, `toh-ship`,
-`toh-protect`, `toh-help`, `toh`). Codex project-doc quota is configured in
-`.codex/config.toml`.
+Codex has no custom slash commands, so TOH installs **native Codex workflow
+skills** under `.agents/skills/` — 14 top-level `$toh-*` workflows. The 23
+supporting skills stay in `.toh/skills/` so the global skill list remains focused.
+TOH also generates eight project-scoped native agents under `.codex/agents/*.toml`.
+Codex CLI uses native project files, including native model and reasoning
+routing for each agent. `.codex/config.toml` enables multi-agent
+execution when the project does not already define its own `[features]` table.
 
 ```bash
-# Open the project root in Codex
+# Open the project root in Codex CLI
 codex
 
 # Invoke a TOH skill explicitly ($ + skill name), or browse with /skills
@@ -201,13 +202,15 @@ $toh-plan build a booking app with payments
 ```
 
 TOH stores framework state under `.toh/` (`plan.md`, `progress.md`,
-`memory/`) and project-level rules in the managed block of `AGENTS.md`.
-For compatibility, typing `/toh-vibe ...` as plain text is interpreted (via
-`AGENTS.md`) as a request for the matching skill — but it is **not** a native
-Codex slash command.
+`memory/`), native workflow discovery under `.agents/skills/`, and native agent
+definitions under `.codex/agents/`. Project-level rules live in the managed block
+of `AGENTS.md`. For compatibility, typing `/toh-vibe ...` as plain text is
+interpreted (via `AGENTS.md`) as a request for the matching skill — but it is
+**not** a native Codex slash command. TOH does not read or modify ZCode files or
+global Codex configuration.
 
 Uninstall (removes only TOH-managed Codex files; your own skills and
-`AGENTS.md` text are kept):
+agents, ZCode files, and `AGENTS.md` text are kept):
 
 ```bash
 npx toh-framework uninstall --ide codex

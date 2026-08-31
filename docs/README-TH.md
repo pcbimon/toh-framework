@@ -22,7 +22,7 @@
 | 📝 **Cursor** | ✅ รองรับเต็ม | @ file references |
 | 🌌 **Google Antigravity** | ✅ รองรับเต็ม | Gemini integration |
 | 💎 **Gemini CLI** | ✅ รองรับเต็ม | Context files auto-loaded |
-| 🤖 **Codex CLI** | ✅ รองรับ | OpenAI agents |
+| 🤖 **Codex CLI** | ✅ รองรับ | Native skills และ project agents |
 
 ## 💡 ทำไมต้อง Toh?
 
@@ -165,15 +165,15 @@ gemini
 ### Codex CLI
 
 Codex ไม่มี slash command แบบกำหนดเอง ดังนั้น TOH จะติดตั้ง **native Codex
-skills** ไว้ที่ `.agents/skills/` — wrapper ของ supporting skill 23 ตัวและ
-workflow 14 ตัว
-(`toh-vibe`, `toh-plan`, `toh-ui`, `toh-dev`, `toh-design`, `toh-test`,
-`toh-connect`, `toh-line`, `toh-mobile`, `toh-fix`, `toh-ship`,
-`toh-protect`, `toh-help`, `toh`) โดย quota ของเอกสารโปรเจคอยู่ใน
-`.codex/config.toml`
+workflow skills** ไว้ที่ `.agents/skills/` — workflow ระดับบน 14 ตัวในรูปแบบ
+`$toh-*` ส่วน supporting skills 23 ตัวจะอยู่ใน `.toh/skills/` เพื่อให้รายการ
+skill หลักกระชับ นอกจากนี้ TOH สร้าง native agents แบบ project-scoped 8 ตัวไว้ที่
+`.codex/agents/*.toml` โดย Codex CLI ใช้ไฟล์โปรเจคชุดเดียวกัน รวมถึงการกำหนด
+model และ reasoning ของแต่ละ agent โดย `.codex/config.toml` จะเปิด
+multi-agent ให้เมื่อโปรเจคยังไม่มี `[features]` ของตัวเอง
 
 ```bash
-# เปิดโฟลเดอร์โปรเจคใน Codex
+# เปิดโฟลเดอร์โปรเจคใน Codex CLI
 codex
 
 # เรียก skill ตรงๆ ด้วย $ + ชื่อ skill (หรือพิมพ์ /skills เพื่อดูทั้งหมด)
@@ -185,13 +185,15 @@ $toh-plan สร้างแอปจองห้องพร้อมชำร�
 ```
 
 TOH เก็บ state ของ framework ไว้ที่ `.toh/` (`plan.md`, `progress.md`,
-`memory/`) และกฎระดับโปรเจคไว้ใน block ที่ TOH จัดการของ `AGENTS.md`
-เพื่อความเข้ากันได้แบบเดิม ถ้าพิมพ์ `/toh-vibe ...` เป็นข้อความธรรมดา
-ระบบจะตีความ (ผ่าน `AGENTS.md`) ว่าเป็นการเรียก skill ที่ตรงกัน —
-แต่มัน **ไม่ใช่** native slash command ของ Codex
+`memory/`), workflow discovery ไว้ที่ `.agents/skills/` และ native agent
+definitions ไว้ที่ `.codex/agents/` กฎระดับโปรเจคอยู่ใน block ที่ TOH จัดการของ
+`AGENTS.md` เพื่อความเข้ากันได้แบบเดิม ถ้าพิมพ์ `/toh-vibe ...` เป็นข้อความธรรมดา
+ระบบจะตีความ (ผ่าน `AGENTS.md`) ว่าเป็นการเรียก skill ที่ตรงกัน — แต่มัน
+**ไม่ใช่** native slash command ของ Codex TOH จะไม่อ่านหรือแก้ไขไฟล์ ZCode หรือ
+global Codex configuration
 
 ถอนการติดตั้ง (ลบเฉพาะไฟล์ Codex ที่ TOH สร้าง — skill ของคุณเองและข้อความ
-ใน `AGENTS.md` จะถูกเก็บไว้):
+agent ของคุณ ไฟล์ ZCode และข้อความใน `AGENTS.md` จะถูกเก็บไว้):
 
 ```bash
 npx toh-framework uninstall --ide codex

@@ -10,8 +10,8 @@ A LINE MINI App runs inside LINE using the **LIFF SDK (`@line/liff`)** - keep th
 app you already have and layer the LINE integration on top of it.
 
 ## CRITICAL: Read Skills First
-- `.gemini/skills/platform-specialist/SKILL.md`
-- `.gemini/skills/integrations/SKILL.md`
+- `.agents/skills/platform-specialist/SKILL.md`
+- `.agents/skills/integrations/SKILL.md`
 
 ## Doc-Driven Rule (MANDATORY)
 Do NOT hardcode SDK versions or paste frozen snippets. Pull the current SDK/API from

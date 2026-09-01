@@ -1,3 +1,13 @@
+---
+name: debug-protocol
+description: >
+  Evidence-first debugging in 5 stages — REPRODUCE, EVIDENCE, DIAGNOSE, FIX,
+  PROVE. Never touch code before the root cause is stated with evidence; fix
+  the source, not the symptom; hand dead-end investigations to the
+  root-cause-debugger agent. Use for any bug, error, crash, regression,
+  unexpected behavior, or /toh-fix work.
+user-invocable: false  # internal — model-invoked via toh-* commands, not a user /command
+---
 # 🔧 Debug Protocol Skill
 
 > **Purpose:** Evidence-first debugging — หา root cause ด้วยหลักฐาน ไม่เดา ไม่กดอาการ

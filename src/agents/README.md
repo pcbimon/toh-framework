@@ -15,9 +15,11 @@ src/agents/*.md              ← single source (superset frontmatter + canonical
    installer transforms at install time (installer/ide-handlers/):
         ├── Claude Code  → copy as-is → .claude/agents/*.md
         │                  (uses native name / description / tools / model)
-        ├── Cursor       → strip frontmatter → bundle into a .mdc rules file
-        ├── Codex        → generate native agents in .codex/agents/ + command skills in .agents/skills/
-        └── Gemini / Antigravity → convert frontmatter to each IDE's format
+        ├── Cursor       → native subagents → .cursor/agents/*.md
+        ├── Antigravity  → .agents/agents/*.md (subagent: true)
+        ├── Codex CLI    → native agents in .codex/agents/ + command skills in .agents/skills/
+        ├── ZCode        → compact roster in AGENTS.md, bodies read from .toh/
+        └── Gemini (legacy) → convert frontmatter to the Gemini format
 ```
 
 ### Superset Frontmatter
@@ -78,9 +80,11 @@ The same source produces IDE-appropriate output at install time:
 | IDE | Agent Location | How the source is used |
 |-----|----------------|------------------------|
 | Claude Code | `.claude/agents/*.md` | Copied as-is (native `name`/`description`/`tools`/`model`) |
-| Cursor | `.cursor/rules/…` | Frontmatter stripped → bundled as rules |
+| Cursor (2.4+) | `.cursor/agents/*.md` | Native subagents (`readonly` derived from the tools allowlist) |
+| Antigravity (+ CLI) | `.agents/agents/*.md` | Frontmatter converted, `subagent: true` |
 | Codex CLI | `.codex/agents/*.toml` + `.agents/skills/*/SKILL.md` + `AGENTS.md` | 8 native agents + 14 workflow skills; 23 supporting skills stay in `.toh/` |
-| Gemini / Antigravity | `.toh/agents/*.md` | Frontmatter converted per IDE |
+| ZCode | `AGENTS.md` roster + `.toh/agents/*.md` | Compact roster table; bodies read at runtime |
+| Gemini CLI (legacy) | `.toh/agents/*.md` | Frontmatter converted per IDE |
 
 ```
 .claude/agents/                  ← Claude Code (native, from src/agents/ directly)

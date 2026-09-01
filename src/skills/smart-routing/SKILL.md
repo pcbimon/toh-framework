@@ -130,7 +130,7 @@ const MEDIUM_CONFIDENCE = 50;  // Route to Plan Agent
 
 ### Step 1 — Identity (declared)
 
-Your runtime identity is **declared by the platform context file that loaded you** (`CLAUDE.md` = Claude Code · `.cursor/rules/*.mdc` = Cursor · `AGENTS.md` = Codex · `GEMINI.md` = Gemini CLI / Antigravity). Confirm capabilities from `.toh/capabilities.json` (written by the installer). No detection heuristics — the identity is stated, not inferred.
+Your runtime identity is **declared by the platform context file that loaded you** (`CLAUDE.md` = Claude Code · `.cursor/rules/*.mdc` = Cursor · `AGENTS.md` = Codex **or** ZCode, whichever the `**Runtime:**` line inside it names · `.agents/rules/toh-framework.md` = Antigravity · `GEMINI.md` = Gemini CLI, legacy). Confirm capabilities from `.toh/capabilities.json` (written by the installer). No detection heuristics — the identity is stated, not inferred.
 
 ### Step 2 — Runtime probe (only what install time cannot know)
 
@@ -141,9 +141,10 @@ Probe exactly: the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env flag, plus the Cla
 Choose from the **execution ladder in `orchestration-protocol` (Section B)** — the full decision table lives there, once. Summary only:
 
 - **Claude Code** → ladder: teams > subagents > sequential
-- **Cursor** → sequential TOH LOOP in-session
+- **Cursor (2.4+)** → native subagents in `.cursor/agents/`, one task at a time
+- **Antigravity** → file-based subagents via `invoke_subagent`, one task at a time
 - **Codex CLI** → native agents for independent tasks; sequential TOH LOOP for dependent work
-- **Gemini / Antigravity** → sequential prose loop
+- **ZCode / Gemini (legacy)** → sequential TOH LOOP in-session
 
 ---
 

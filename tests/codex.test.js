@@ -141,7 +141,7 @@ test('fresh install creates .toh/, .agents/skills/, config.toml and AGENTS.md', 
 
     const supporting = await readSupportingSkillCatalog(SRC_DIR);
     assert.equal(supporting.length, 23, 'all 23 supporting skills are catalogued');
-    assert.equal((await fs.readdir(path.join(dir, CODEX_SKILLS_DIR))).length, 14, '14 workflow commands are wrapped');
+    assert.equal((await fs.readdir(path.join(dir, CODEX_SKILLS_DIR))).length, 37, '23 supporting skills and 14 workflow commands are wrapped');
     for (const skill of EXPECTED_COMMANDS) {
       assert.ok(
         await fs.pathExists(path.join(dir, CODEX_SKILLS_DIR, skill, 'SKILL.md')),
@@ -454,7 +454,7 @@ test('every generated SKILL.md is valid and its references resolve', async () =>
 
     const skillsRoot = path.join(dir, CODEX_SKILLS_DIR);
     const entries = (await fs.readdir(skillsRoot, { withFileTypes: true })).filter((e) => e.isDirectory());
-    assert.equal(entries.length, 14, 'exactly 14 TOH workflow wrappers exist');
+    assert.equal(entries.length, 37, 'exactly 23 supporting and 14 TOH workflow wrappers exist');
 
     const NAME_RE = /^[a-z0-9-]{1,64}$/;
     for (const entry of entries) {
@@ -465,8 +465,10 @@ test('every generated SKILL.md is valid and its references resolve', async () =>
       assert.equal(fm.name, entry.name, 'frontmatter name matches directory');
       assert.ok(typeof fm.description === 'string' && fm.description.length > 0, 'description present');
       assert.ok(fm.description.length <= 1024, 'description within Codex limit');
-      assert.equal(fm.metadata?.generator, 'toh-framework', 'generator marker present');
-      assert.ok(['command', 'skill'].includes(fm.metadata?.kind), 'wrapper kind present');
+      if (EXPECTED_COMMANDS.includes(entry.name)) {
+        assert.equal(fm.metadata?.generator, 'toh-framework', 'command generator marker present');
+        assert.equal(fm.metadata?.kind, 'command', 'command wrapper kind present');
+      }
       assert.ok(body.trim().length > 0, 'non-empty instructions');
 
       // Every `.toh/...` reference in the body must resolve to a real file.

@@ -33,9 +33,9 @@ Result first, details after. Translate technical terms into plain language. Say 
 
 ## Skills to Read First
 
-- `.gemini/skills/memory-system/SKILL.md`
-- `.gemini/skills/orchestration-protocol/SKILL.md`
-- `.gemini/skills/engineer-harness/SKILL.md`
+- `.agents/skills/memory-system/SKILL.md`
+- `.agents/skills/orchestration-protocol/SKILL.md`
+- `.agents/skills/engineer-harness/SKILL.md`
 
 ## Memory (short)
 

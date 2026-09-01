@@ -126,8 +126,8 @@ Never guess. Must read before working.
 │ PHASE 1: INVESTIGATE (Read before doing)                        │
 ├─────────────────────────────────────────────────────────────────┤
 │ 1. Read Skills (parallel)                                       │
-│    ├── src/skills/ui-first-builder/SKILL.md                     │
-│    └── src/skills/design-craft/SKILL.md (IMPORTANT!)            │
+│    ├── .toh/skills/ui-first-builder/SKILL.md                    │
+│    └── .toh/skills/design-craft/SKILL.md (IMPORTANT!)           │
 │                                                                 │
 │ 2. Read Project Context (parallel)                              │
 │    ├── components/ → What exists, what's reusable               │

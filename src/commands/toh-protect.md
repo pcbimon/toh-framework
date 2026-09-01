@@ -1,8 +1,8 @@
 ---
 command: /toh-protect
-aliases: ["/toh-p", "/toh-security", "/toh-audit"]
+aliases: ["/toh-pt", "/toh-security", "/toh-audit"]
 description: Full security audit for AI-generated code - scan for vulnerabilities before deploy
-trigger: /toh-protect or /toh-p
+trigger: /toh-protect or /toh-pt
 skills:
   - engineer-harness
 ---
@@ -17,7 +17,7 @@ Comprehensive security audit for AI-generated code. Scans for vulnerabilities, h
 
 ```
 /toh-protect [scope]
-/toh-p [scope]
+/toh-pt [scope]
 /toh-security [scope]
 /toh-audit [scope]
 ```
@@ -83,7 +83,7 @@ User: /toh-protect
 
 # Audit specific scope
 /toh-protect src/api/
-/toh-p auth system
+/toh-pt auth system
 /toh-security checkout flow
 
 # Pre-deploy check

@@ -11,12 +11,12 @@ Philosophy: **Type Once, Have it all!** One line of intent in, a multi-page app 
 Same axis as `/toh`: **Intent → Route → Verify → Report** - and the plan is always a FILE (`.toh/plan.md`), never chat state.
 
 ## CRITICAL: Read Skills First
-- `.gemini/skills/vibe-orchestrator/SKILL.md`
-- `.gemini/skills/orchestration-protocol/SKILL.md`
-- `.gemini/skills/premium-experience/SKILL.md`
-- `.gemini/skills/design-craft/SKILL.md`
-- `.gemini/skills/ui-first-builder/SKILL.md`
-- `.gemini/skills/engineer-harness/SKILL.md`
+- `.agents/skills/vibe-orchestrator/SKILL.md`
+- `.agents/skills/orchestration-protocol/SKILL.md`
+- `.agents/skills/premium-experience/SKILL.md`
+- `.agents/skills/design-craft/SKILL.md`
+- `.agents/skills/ui-first-builder/SKILL.md`
+- `.agents/skills/engineer-harness/SKILL.md`
 
 ## Memory Protocol (MANDATORY)
 

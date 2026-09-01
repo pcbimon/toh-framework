@@ -8,7 +8,7 @@ import fs from 'fs-extra';
 import yaml from 'js-yaml';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { transformCommand, renderCapabilitiesSection } from './shared.js';
+import { transformCommand, renderCapabilitiesSection, seedFileIfAbsent } from './shared.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -44,7 +44,8 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
     // understands the NATIVE keys, so transform every top-level agent file:
     //   1. read the file and split off the YAML frontmatter
     //   2. parse it with js-yaml
-    //   3. keep ONLY name/description/tools/model (DROP type/skills/triggers)
+    //   3. keep ONLY name/description/tools/model + the native 'skills' preload
+    //      list, filtered to skills installed in .claude/skills/ (DROP type/triggers)
     //   4. re-serialize with js-yaml (multi-line description stays a block scalar)
     //   5. write .claude/agents/<name>.md with the native frontmatter + body
     // NOTE: never inject a default tool list — that would widen restricted agents
@@ -82,6 +83,26 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
           if (parsed.tools !== undefined) nativeFm.tools = parsed.tools; // omit if absent (never widen)
           nativeFm.model = parsed.model || 'sonnet';                     // default sonnet if missing
 
+          // v2.1 (W6): 'skills' is a NATIVE subagent frontmatter key that
+          // preloads the FULL content of each listed skill at subagent startup —
+          // guaranteed loading instead of prose the subagent can skip. Pass it
+          // through, filtered to skills actually installed at
+          // .claude/skills/<name>/SKILL.md (a missing name must never ship) and
+          // excluding skills marked disable-model-invocation: true (those are
+          // user-command-only surfaces). Context cost is accepted per owner
+          // decision D4 and bounded by this existence filter.
+          // 'triggers' stays dropped — not a native key.
+          if (Array.isArray(parsed.skills)) {
+            const preload = [];
+            for (const skillName of parsed.skills) {
+              if (typeof skillName !== 'string') continue;
+              if (await isPreloadableSkill(join(claudeDir, 'skills'), skillName)) {
+                preload.push(skillName);
+              }
+            }
+            if (preload.length > 0) nativeFm.skills = preload;
+          }
+
           // v2.0.0: autonomy keys — PASS THROUGH when present in the superset
           // frontmatter (memory: project, maxTurns bounds, isolation: worktree,
           // background). Never inject defaults — absent stays absent.
@@ -117,8 +138,13 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
       const pkgCommandsDir = srcDir
         ? join(srcDir, 'commands')
         : join(__dirname, '..', '..', 'src', 'commands');
+      // v2.1 (W8): alias command files are generated from whichever source dir
+      // the transform above actually used, so aliases always match the
+      // commands that were just installed.
+      let aliasSourceDir = null;
       if (fs.existsSync(pkgCommandsDir)) {
         await copyCommandsTransformed(pkgCommandsDir, join(claudeDir, 'commands'));
+        aliasSourceDir = pkgCommandsDir;
       } else {
         // Fallback: transform is idempotent, so re-running on already-universal
         // content can't double-strip — the real risk is MISSING Claude content.
@@ -137,7 +163,13 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
             'Commands component selected to restore it.'
           ));
         }
+        aliasSourceDir = join(tohDir, 'commands');
       }
+      // v2.1 (W8): the 'aliases' frontmatter key is NOT native to Claude Code
+      // (supported command frontmatter ignores it), so a literally-typed
+      // /toh-v or /toh-pt hits "Unknown command". Register the shortcuts as
+      // REAL slash commands via thin alias files.
+      await generateAliasCommands(aliasSourceDir, join(claudeDir, 'commands'));
     }
     if (fs.existsSync(join(tohDir, 'templates'))) {
       await fs.copy(join(tohDir, 'templates'), join(claudeDir, 'templates'), { overwrite: true });
@@ -149,15 +181,20 @@ export async function setupClaudeCode(targetDir, srcDir, language = 'en') {
 
     // v2.0.0: THE TOH LOOP enforcement machinery (Claude Code only)
     // - Stop hook in .claude/settings.json blocks stopping mid-plan (deep-merged,
-    //   additive, idempotent via the <TFW-STOP-HOOK> marker)
+    //   additive, idempotent via the <TFW-STOP-HOOK> marker; reinstalls upgrade
+    //   our prompt string in place when it changed)
     // - .claude/loop.md heartbeat lets bare /loop keep finishing stories
     await mergeSettingsStopHook(claudeDir);
     await writeLoopHeartbeat(claudeDir);
 
     // Create CLAUDE.md with Toh Framework rules (references .claude/*)
+    // v2.1: the block is delimited by TOH-FRAMEWORK-START/END markers (the same
+    // pair Codex uses in AGENTS.md) so `toh uninstall` can lift out exactly our
+    // part of a file the user also writes in — without markers there is no way
+    // to tell where our text ends, and the file could never be cleaned up.
     const claudeMdPath = join(targetDir, 'CLAUDE.md');
-    const claudeMdContent = generateClaudeMd(language);
-    
+    const claudeMdContent = generateClaudeMdBlock(language);
+
     // Check if CLAUDE.md exists
     if (fs.existsSync(claudeMdPath)) {
       // Append to existing CLAUDE.md
@@ -216,6 +253,112 @@ async function copyCommandsTransformed(srcDir, destDir, preserveExistingWhenNoMa
   return sawMarkers;
 }
 
+/**
+ * v2.1 (W6): a skill may be preloaded into a subagent's native 'skills' list
+ * only when it is actually installed at .claude/skills/<name>/SKILL.md AND its
+ * frontmatter does not set disable-model-invocation: true (such skills are
+ * explicit user-command surfaces, never model-preloaded).
+ *
+ * A SKILL.md with no (or unparseable) frontmatter counts as preloadable: bare
+ * skills are valid — existence is already verified, and without parseable YAML
+ * the file cannot carry the disable flag.
+ */
+async function isPreloadableSkill(skillsDir, name) {
+  // Names come from agent frontmatter — restrict to plain directory names so a
+  // malformed entry can never resolve outside .claude/skills/.
+  if (!/^[a-z0-9][a-z0-9_-]*$/i.test(name)) return false;
+  const skillPath = join(skillsDir, name, 'SKILL.md');
+  if (!fs.existsSync(skillPath)) return false;
+  const raw = await fs.readFile(skillPath, 'utf8');
+  const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/);
+  if (!fmMatch) return true; // bare skill — no frontmatter, no flags to honor
+  try {
+    const fm = yaml.load(fmMatch[1]);
+    return !(fm && typeof fm === 'object' && fm['disable-model-invocation'] === true);
+  } catch {
+    return true; // unparseable frontmatter cannot carry the disable flag
+  }
+}
+
+/**
+ * v2.1 (W8): generate thin alias command files (.claude/commands/toh-v.md,
+ * toh-pt.md, ...) from each source command's 'aliases' frontmatter list, so the
+ * documented shortcuts register as real slash commands instead of relying on
+ * CLAUDE.md prose pattern-matching (which cannot save a literally-typed
+ * "/toh-v" from "Unknown command").
+ *
+ * Rules (deterministic, additive):
+ * - only aliases shaped like a legal command filename become files
+ *   ("/toh-v" -> toh-v.md); prose shortcuts ("toh v") and names like "/toh-?"
+ *   are skipped — they stay prose-only
+ * - an alias never shadows a real command file, and the first command
+ *   (alphabetical source order) to claim an alias wins; a collision is
+ *   reported, never silently double-written
+ * - alias bodies point at the real command file and forward $ARGUMENTS
+ */
+async function generateAliasCommands(srcDir, destDir) {
+  if (!srcDir || !fs.existsSync(srcDir)) return;
+  await fs.ensureDir(destDir);
+  const files = (await fs.readdir(srcDir))
+    .filter((f) => f.endsWith('.md') && f !== 'README.md')
+    .sort(); // deterministic claim order
+  const realNames = new Set(files.map((f) => f.replace(/\.md$/, '')));
+  const claimed = new Map(); // alias name -> command that claimed it
+
+  for (const file of files) {
+    const srcPath = join(srcDir, file);
+    if (!(await fs.stat(srcPath)).isFile()) continue;
+    const raw = await fs.readFile(srcPath, 'utf8');
+    const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+    if (!fmMatch) continue; // no frontmatter -> no aliases key
+    let parsed;
+    try {
+      parsed = yaml.load(fmMatch[1]) || {};
+    } catch {
+      // The command file itself was already installed by the transform above;
+      // only its alias generation is skipped. Say so instead of hiding it.
+      console.log(chalk.yellow(
+        `\n  ⚠️  ${file}: frontmatter did not parse — no alias commands generated from it.`
+      ));
+      continue;
+    }
+    if (!Array.isArray(parsed.aliases)) continue;
+
+    const cmdName = file.replace(/\.md$/, '');
+    for (const alias of parsed.aliases) {
+      if (typeof alias !== 'string') continue;
+      const aliasName = alias.replace(/^\//, '');
+      if (!/^[a-z0-9][a-z0-9-]*$/.test(aliasName)) continue; // prose-only shortcut
+      if (realNames.has(aliasName)) {
+        console.log(chalk.yellow(
+          `\n  ⚠️  alias /${aliasName} (from ${cmdName}) shadows a real command — skipped.`
+        ));
+        continue;
+      }
+      if (claimed.has(aliasName)) {
+        console.log(chalk.yellow(
+          `\n  ⚠️  alias /${aliasName} claimed by both ${claimed.get(aliasName)} and ${cmdName} — kept ${claimed.get(aliasName)}.`
+        ));
+        continue;
+      }
+      claimed.set(aliasName, cmdName);
+
+      const desc = typeof parsed.description === 'string'
+        ? parsed.description.trim().split('\n')[0]
+        : '';
+      const aliasFm = yaml.dump(
+        { description: `Alias for /${cmdName}${desc ? ` — ${desc}` : ''}` },
+        { lineWidth: -1, noRefs: true }
+      ).trimEnd();
+      const body =
+        `---\n${aliasFm}\n---\n\n` +
+        `This is a thin alias for \`/${cmdName}\`.\n\n` +
+        `Read \`.claude/commands/${cmdName}.md\` now and execute it exactly as if the user had typed \`/${cmdName}\`, with this as the request: $ARGUMENTS\n`;
+      await fs.writeFile(join(destDir, `${aliasName}.md`), body);
+    }
+  }
+}
+
 // Idempotence marker for the TFW Stop hook — a reinstall appends the hook only
 // if no existing hook prompt already contains this token.
 const TFW_STOP_HOOK_MARKER = '<TFW-STOP-HOOK>';
@@ -226,8 +369,33 @@ const TFW_STOP_HOOK_PROMPT =
   '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
   'If stop_hook_active is true and no progress was made since the last block, ' +
   'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done/' +
-  'Status: draft, return {"ok": true}. These ok:true conditions take precedence ' +
+  'Status: draft/Status: blocked/Status: paused, return {"ok": true}. These ok:true ' +
+  'conditions take precedence ' +
   'even if the last QC run in the transcript failed.';
+
+// Every prompt string a released installer has EVER shipped for this hook.
+// Upgrade-in-place may rewrite an entry ONLY when its prompt exactly equals
+// one of these — merely containing the marker is not proof we wrote it (a
+// user's own hook may quote the marker, or the user may have customized our
+// entry), and user hook entries are never rewritten (reinstall contract).
+// Append the outgoing TFW_STOP_HOOK_PROMPT here whenever it changes.
+const TFW_STOP_HOOK_PROMPT_HISTORY = [
+  // v2.0.0 (pre-review, commit 9e2d706)
+  '<TFW-STOP-HOOK> Read .toh/plan.md. If it has unchecked, unblocked stories ' +
+  "('- [ ]' without '[!]') or the last QC run in the transcript failed, return " +
+  '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
+  'If stop_hook_active is true and no progress was made since the last block, ' +
+  'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done, ' +
+  'return {"ok": true}.',
+  // v2.0.0 final .. v2.1.0 (commits 2531416..78e96b7)
+  '<TFW-STOP-HOOK> Read .toh/plan.md. If it has unchecked, unblocked stories ' +
+  "('- [ ]' without '[!]') or the last QC run in the transcript failed, return " +
+  '{"ok": false, "reason": "<first unchecked story + its checkpoint command>"}. ' +
+  'If stop_hook_active is true and no progress was made since the last block, ' +
+  'or every remaining story is [!] BLOCKED, or .toh/plan.md is absent/Status: done/' +
+  'Status: draft, return {"ok": true}. These ok:true conditions take precedence ' +
+  'even if the last QC run in the transcript failed.'
+];
 
 /**
  * v2.0.0: Deep-merge the TFW Stop hook into .claude/settings.json.
@@ -235,7 +403,12 @@ const TFW_STOP_HOOK_PROMPT =
  * Rules (additive + idempotent):
  * - settings.json absent      -> create it with just the Stop hook
  * - settings.json unparseable -> DO NOT touch it; warn and skip
- * - hook already present      -> no-op (detected via the <TFW-STOP-HOOK> marker)
+ * - hook already present      -> upgrade-in-place (detected via the <TFW-STOP-HOOK>
+ *   marker): if OUR entry's prompt exactly equals a historical shipped prompt
+ *   (TFW_STOP_HOOK_PROMPT_HISTORY), replace ONLY that prompt string so existing
+ *   users receive prompt fixes on reinstall; identical prompt -> pure no-op;
+ *   any other marker-carrying prompt is user-owned and kept byte-identical.
+ *   Never duplicates the entry either way.
  * - user entries              -> never removed, never reordered — we only append
  * - unexpected shapes (hooks/Stop not object/array) -> warn and skip, never corrupt
  */
@@ -262,8 +435,49 @@ async function mergeSettingsStopHook(claudeDir) {
     }
   }
 
-  // Idempotence: skip if any existing hook already carries the TFW marker.
+  // Idempotence + upgrade-in-place: if any existing hook already carries the
+  // TFW marker, never append a duplicate — but DO refresh our own prompt
+  // string when the shipped TFW_STOP_HOOK_PROMPT has changed since the user
+  // installed (otherwise existing users would never receive prompt fixes).
+  // "Our own" is proved by an EXACT match against a historical shipped prompt
+  // (TFW_STOP_HOOK_PROMPT_HISTORY) — a prompt that merely CONTAINS the marker
+  // (a user's own hook quoting it, or our entry customized by the user) is
+  // user-owned and stays byte-identical; user entries are never rewritten.
   if (settings.hooks !== undefined && JSON.stringify(settings.hooks).includes(TFW_STOP_HOOK_MARKER)) {
+    let upgraded = false;
+    let foundOurPrompt = false;
+    if (Array.isArray(settings.hooks.Stop)) {
+      for (const entry of settings.hooks.Stop) {
+        if (entry === null || typeof entry !== 'object' || !Array.isArray(entry.hooks)) continue;
+        for (const h of entry.hooks) {
+          if (
+            h !== null && typeof h === 'object' && h.type === 'prompt' &&
+            typeof h.prompt === 'string' && h.prompt.includes(TFW_STOP_HOOK_MARKER)
+          ) {
+            if (h.prompt === TFW_STOP_HOOK_PROMPT) {
+              foundOurPrompt = true; // current version — pure no-op
+            } else if (TFW_STOP_HOOK_PROMPT_HISTORY.includes(h.prompt)) {
+              foundOurPrompt = true;
+              h.prompt = TFW_STOP_HOOK_PROMPT; // upgrade ONLY our own, unmodified entry
+              upgraded = true;
+            }
+            // Any other marker-carrying prompt is user-authored or user-
+            // customized: left byte-identical, never replaced.
+          }
+        }
+      }
+    }
+    if (upgraded) {
+      await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    } else if (!foundOurPrompt) {
+      // Marker exists, but no entry exactly matches a prompt we ever shipped
+      // (user restructured or customized it) — same contract as every other
+      // unexpected shape: warn, never mutate.
+      console.log(chalk.yellow(
+        '\n  ⚠️  .claude/settings.json carries the TFW Stop hook marker only in customized or ' +
+        'user-authored entries — left untouched (Stop hook prompt not upgraded).'
+      ));
+    }
     return; // already installed — never duplicate
   }
 
@@ -301,7 +515,7 @@ async function mergeSettingsStopHook(claudeDir) {
 const TFW_LOOP_MARKER = '<!-- generated by toh-framework -->';
 
 const TFW_LOOP_HEARTBEAT = `${TFW_LOOP_MARKER}
-Read .toh/plan.md + .toh/progress.md. If unchecked stories remain, continue the first one per the TOH LOOP (orchestration-protocol skill): implement, run its checkpoint, quote output, fix if red (max 5), tick if green, update .toh/memory/active.md. If all green and no stories remain, say COMPLETE in one line and stop.
+Read .toh/plan.md + .toh/progress.md. If plan.md is absent or its header says Status: done, draft, blocked, or paused, report that in one line and stop — never auto-resume a parked plan (same exemptions as the Stop hook). Otherwise, if unchecked stories remain, continue the first one per the TOH LOOP (orchestration-protocol skill): implement, run its checkpoint, quote output, fix if red (max 5), tick if green, update .toh/memory/active.md. If all green and no stories remain, say COMPLETE in one line and stop.
 `;
 
 /**
@@ -355,7 +569,7 @@ async function createMemoryFiles(memoryDir) {
 ## Project Overview
 - Name: [Project Name]
 - Type: [Type]
-- Tech Stack: Next.js 14, Tailwind, shadcn/ui, Zustand, Supabase
+- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase
 
 ## Completed Features
 - (none)
@@ -594,14 +808,30 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
 *Auto-updated by agents during execution*
 `;
 
-  // Write all 7 memory files (v1.8.0)
-  await fs.writeFile(join(memoryDir, 'active.md'), activeContent);
-  await fs.writeFile(join(memoryDir, 'summary.md'), summaryContent);
-  await fs.writeFile(join(memoryDir, 'decisions.md'), decisionsContent);
-  await fs.writeFile(join(memoryDir, 'architecture.md'), architectureContent);
-  await fs.writeFile(join(memoryDir, 'components.md'), componentsContent);
-  await fs.writeFile(join(memoryDir, 'changelog.md'), changelogContent);
-  await fs.writeFile(join(memoryDir, 'agents-log.md'), agentsLogContent);
+  // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall
+  // must never clobber live memory; even an empty file is the user's).
+  await seedFileIfAbsent(join(memoryDir, 'active.md'), activeContent);
+  await seedFileIfAbsent(join(memoryDir, 'summary.md'), summaryContent);
+  await seedFileIfAbsent(join(memoryDir, 'decisions.md'), decisionsContent);
+  await seedFileIfAbsent(join(memoryDir, 'architecture.md'), architectureContent);
+  await seedFileIfAbsent(join(memoryDir, 'components.md'), componentsContent);
+  await seedFileIfAbsent(join(memoryDir, 'changelog.md'), changelogContent);
+  await seedFileIfAbsent(join(memoryDir, 'agents-log.md'), agentsLogContent);
+}
+
+// Delimiters around the Toh Framework section of a project's CLAUDE.md.
+// Same pair as the Codex AGENTS.md block, on purpose: one marker vocabulary for
+// every co-owned file, so the uninstaller has one surgical strategy.
+export const TOH_BLOCK_START = '<!-- TOH-FRAMEWORK-START -->';
+export const TOH_BLOCK_END = '<!-- TOH-FRAMEWORK-END -->';
+
+/**
+ * The exact bytes the installer writes into a project's CLAUDE.md: the content
+ * wrapped in its markers. Exported so `toh uninstall` can recognise our own
+ * text byte-for-byte in projects installed before the markers existed.
+ */
+export function generateClaudeMdBlock(language = 'en') {
+  return `${TOH_BLOCK_START}\n${generateClaudeMd(language)}\n${TOH_BLOCK_END}\n`;
 }
 
 /**
@@ -609,7 +839,7 @@ User Action → Component → Zustand Store → API/Lib → Database (Supabase)
  * Base content is always English
  * Language parameter only affects communication style and mock data
  */
-function generateClaudeMd(language = 'en') {
+export function generateClaudeMd(language = 'en') {
   // Language-specific instructions
   const langInstructions = language === 'th' 
     ? `## 🌏 Language & Communication
@@ -692,7 +922,7 @@ ${renderCapabilitiesSection('claude-code')}
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
 | State | Zustand |
 | Forms | React Hook Form + Zod |
@@ -731,6 +961,7 @@ ${langInstructions}
 | \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | PWA / Capacitor |
 | \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs |
 | \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy to production |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | Security audit before deploy |
 
 ### ⚡ Execution Rules:
 
@@ -759,6 +990,7 @@ When user types ONLY the command (no description), respond with a friendly promp
 | \`/toh-line\` | "I'm the **LINE Agent** 💚 - I convert web apps into LINE MINI Apps using the LIFF SDK. What LINE feature do you need?" |
 | \`/toh-mobile\` | "I'm the **Mobile Agent** 📱 - I ship apps to mobile PWA-first, then wrap with Capacitor for native builds. What mobile feature should I build?" |
 | \`/toh-ship\` | "I'm the **Ship Agent** 🚀 - I deploy to production. Where should I deploy?" |
+| \`/toh-protect\` | "I'm the **Protect Agent** 🔒 - I run a full security audit to catch vulnerabilities before deploy. What should I scan?" |
 | \`/toh-help\` | (Always show help immediately - no description needed) |
 
 ### Examples:

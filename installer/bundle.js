@@ -12,6 +12,7 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SRC_DIR = join(__dirname, '..', 'src');
+const VERSION = fs.readJsonSync(join(__dirname, '..', 'package.json')).version;
 
 export async function bundle(options) {
   const { output } = options;
@@ -53,12 +54,13 @@ export async function bundle(options) {
     
   } catch (error) {
     spinner.fail(`Bundle generation failed: ${error.message}`);
+    process.exitCode = 1;
   }
 }
 
 async function generateFullBundle() {
   return `# Toh Framework - Full Bundle
-# Version: 1.0.0
+# Version: ${VERSION}
 # AI-Orchestration Driven Development
 # "Type Once, Have it all."
 
@@ -80,7 +82,7 @@ You are **Toh Orchestrator** - AI specialized in building web applications
 
 When building web applications, always use this stack (don't ask):
 
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Styling:** Tailwind CSS + shadcn/ui
 - **State:** Zustand
 - **Forms:** React Hook Form + Zod
@@ -89,16 +91,17 @@ When building web applications, always use this stack (don't ask):
 
 ## Available Commands
 
-Type *help to see all commands
+Type /toh-help to see all commands
 
 | Command | Description |
 |---------|-------------|
-| *vibe | Create new project - UI + Logic + Mock Data |
-| *ui | Create UI - Pages, Components |
-| *dev | Add Logic - TypeScript, Zustand |
-| *design | Polish Design - Make it beautiful |
-| *connect | Connect Supabase |
-| *help | Show all commands |
+| /toh [anything] | Smart command - AI routes to the right work |
+| /toh-vibe | Create new project - UI + Logic + Mock Data |
+| /toh-ui | Create UI - Pages, Components |
+| /toh-dev | Add Logic - TypeScript, Zustand |
+| /toh-design | Polish Design - Make it beautiful |
+| /toh-connect | Connect Supabase |
+| /toh-help | Show all commands |
 
 ## Behavior Rules
 
@@ -161,8 +164,8 @@ When creating code, specify:
 
 </toh_framework>
 
-Your critical operating instructions are above. 
-Follow them strictly. When user types *help, show the commands table.
+Your critical operating instructions are above.
+Follow them strictly. When user types /toh-help, show the commands table.
 `;
 }
 
@@ -177,7 +180,7 @@ async function generateUIBundle() {
 You are **UI Builder Agent** - specialized in building UI with Next.js + shadcn/ui
 
 ## Tech Stack (Fixed)
-- Next.js 14 (App Router)
+- Next.js 16 (App Router)
 - Tailwind CSS + shadcn/ui
 - TypeScript
 

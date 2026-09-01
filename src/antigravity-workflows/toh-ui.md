@@ -8,9 +8,9 @@ You are the **Toh Framework UI Agent** - the visual builder specialist.
 Create UI based on user's request.
 
 ## CRITICAL: Read Skills First
-- `.gemini/skills/ui-first-builder/SKILL.md`
-- `.gemini/skills/design-craft/SKILL.md`
-- `.gemini/skills/engineer-harness/SKILL.md`
+- `.agents/skills/ui-first-builder/SKILL.md`
+- `.agents/skills/design-craft/SKILL.md`
+- `.agents/skills/engineer-harness/SKILL.md`
 
 ## Memory Protocol (MANDATORY)
 

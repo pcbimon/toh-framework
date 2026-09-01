@@ -35,10 +35,11 @@ Your runtime identity is declared by the platform context file that loaded you:
 |------------------------------|---------|
 | `CLAUDE.md` | Claude Code |
 | `.cursor/rules/*.mdc` | Cursor |
-| `AGENTS.md` | Codex |
-| `GEMINI.md` | Gemini CLI / Antigravity |
+| `AGENTS.md` | Codex **or** ZCode — the `**Runtime:**` line inside the file names which |
+| `.agents/rules/toh-framework.md` | Antigravity (+ Antigravity CLI) |
+| `GEMINI.md` | Gemini CLI (legacy) |
 
-Confirm capabilities from `.toh/capabilities.json` (written by the installer). If it is missing, infer conservatively: Claude Code has Task subagents, teams, hooks, `/goal`, and `/loop`; Codex has native custom agents and native skill workflows when its client supports them; Cursor, Gemini, and Antigravity are single-session sequential. An unknown capability probe never disables a client-native feature.
+Confirm capabilities from `.toh/capabilities.json` (written by the installer). If it is missing, infer conservatively: Claude Code has subagents, teams, hooks, `/goal`, `/loop`; Cursor (2.4+) and Antigravity have native/file-based subagents but no teams; Codex CLI has native custom agents and workflow skills; ZCode and legacy Gemini are single-session sequential. An unknown capability probe never disables a client-native feature.
 
 ### Step 2 — Runtime probe (ONLY for what install time cannot know)
 
@@ -59,7 +60,7 @@ Do NOT invent other detection heuristics. Identity comes from Step 1; the probe 
 Three rungs, best first. **Each rung: if unavailable, fall back one rung.** Sequential is the floor and is always available.
 
 1. **AGENT TEAMS** — Claude Code with the teams env flag set, AND the plan has >= 3 independent modules plus a QC role. Recipe in Section F. If unavailable, fall back one rung.
-2. **NATIVE SUBAGENTS** — Claude's Task/Agent tool or Codex's `.codex/agents/*.toml` is available. Delegate tasks to TFW agents; parallel only under the rules below. If unavailable, fall back one rung.
+2. **NATIVE SUBAGENTS** — the Agent tool (Task) or Codex CLI's `.codex/agents/*.toml` is available. Delegate tasks to TFW agents; parallel only under the rules below. If unavailable, fall back one rung.
 3. **SEQUENTIAL SELF** — execute every task yourself, in order, in this session. This is the default mode and the correct choice more often than not.
 
 ### When to use which
@@ -69,8 +70,9 @@ Three rungs, best first. **Each rung: if unavailable, fall back one rung.** Sequ
 | <= 3 tasks total | SEQUENTIAL |
 | Same-file or dependent edits | SEQUENTIAL |
 | Debugging / fixing | SEQUENTIAL |
-| Runtime without subagents (Cursor / Gemini / Antigravity) | SEQUENTIAL |
-| Codex with native agents | NATIVE SUBAGENTS |
+| Cursor / Antigravity with native subagents | NATIVE SUBAGENTS when the task is independent; otherwise SEQUENTIAL |
+| Codex CLI with native agents | NATIVE SUBAGENTS |
+| Runtime without subagents (ZCode / Gemini) | SEQUENTIAL |
 | >= 2 independent tasks on disjoint files, each substantial (~5+ min) | PARALLEL subagents |
 | MVP-scale: >= 3 independent modules + a QC role, teams flag set | TEAMS |
 
@@ -156,6 +158,7 @@ Created: <date> by /toh-plan
 - **Blocked marker:** flip `- [ ]` to `- [!]` and append `BLOCKED: <one-line diagnosis>`.
 - **NO Progress Log in plan.md** — state history lives in `.toh/progress.md`. Keep plan.md a compact snapshot: checkboxes ARE the state.
 - **Status lifecycle:** `draft` (written, awaiting one approval) → `approved` (user said Go, or /toh-vibe auto-approves its own mini-plan) → `building` (loop running) → `done` (all Done When verified).
+- **Terminal statuses — auto-resume exemption:** a plan whose Status is `done`, `draft`, `blocked`, or `paused` (any case) is TERMINAL for auto-resume: report the status, do not resume its checkboxes. `blocked`/`paused` are manual header overrides for parking a plan; flip Status back to `approved`/`building` (or say "continue the plan") to make it resumable again.
 - **Archive:** when a new plan is needed and Status is `done` (or the user says "fresh start"), move the old file to `.toh/memory/archive/plan-<date>.md` first. One active plan at a time.
 - **Memory pointer:** `.toh/memory/active.md` holds only a POINTER — plan status + next unchecked task — never a plan dump.
 
@@ -195,7 +198,7 @@ The universal execution protocol. Runs identically on every runtime; Claude Code
 
 - **Never ask "continue?" between tasks or phases.** Interrupt only for genuine blockers: missing credentials, destructive/irreversible choices, or a contradiction in the plan itself.
 - **Foundation deadlock:** if a blocked task makes everything downstream dependent (nothing independent remains), stop and deliver one clear blocker report — do not thrash on dependent tasks.
-- **Checkbox-resume:** any fresh session (any IDE, any day) reads plan.md and continues at the first unchecked task. This is the crash/context-loss recovery mechanism — keep the file states accurate at all times.
+- **Checkbox-resume:** any fresh session (any IDE, any day) reads plan.md and continues at the first unchecked task — unless the plan header carries a terminal status (`Status: done/draft/blocked/paused`): then report the status and stop, do not resume. This is the crash/context-loss recovery mechanism — keep the file states accurate at all times.
 - **Completion is a contract:** `<promise>COMPLETE</promise>` may only follow quoted, passing Done When runs. Never emit it on feel.
 
 ---
@@ -220,12 +223,13 @@ Section E is the floor on every runtime. On Claude Code the installer ships mach
 
 | Mechanism | What it does |
 |-----------|--------------|
-| **Stop hook** (prompt-type, in `.claude/settings.json`) | Blocks ending the session while plan.md has unchecked, unblocked tasks — returns `{"ok": false, "reason": "<first unchecked task>"}`. Guarded: if `stop_hook_active` and no progress since the last block, or every remaining task is `[!]` blocked, it returns ok — respecting the 8-consecutive-block cap. |
-| **`.claude/loop.md`** (<= 25KB) | Heartbeat prompt for bare `/loop`: continue the first unchecked task per the TOH Loop, fix from quoted failure output, say COMPLETE in one line when green. |
+| **Stop hook** (prompt-type, in `.claude/settings.json`) | Blocks ending the session while plan.md has unchecked, unblocked tasks — returns `{"ok": false, "reason": "<first unchecked task>"}`. Guarded: if `stop_hook_active` and no progress since the last block, or every remaining task is `[!]` blocked, or plan.md is absent or its header says `Status: done/draft/blocked/paused`, it returns ok — respecting the 8-consecutive-block cap. |
+| **`.claude/loop.md`** (<= 25KB) | Heartbeat prompt for bare `/loop`: if plan.md is absent or its header carries a terminal status (`Status: done/draft/blocked/paused`), report that in one line and stop — never auto-resume a parked plan (same exemptions as the Stop hook); otherwise continue the first unchecked task per the TOH Loop, fix from quoted failure output, say COMPLETE in one line when green. Note: on Bedrock/Vertex/Foundry, bare `/loop` prints usage instead of reading this file — run `/loop <prompt>` explicitly there. |
 | **`/goal` recipe** (>= 2.1.139) | Set the finish line before coding: `/goal every task in .toh/plan.md is checked and the build command exits 0 — or stop after 40 turns`. A Haiku evaluator judges the condition FROM THE TRANSCRIPT — one more reason the QC gate quotes actual output: unquoted results are invisible to the evaluator. |
 | **Workflows** (>= 2.1.154, optional) | `/toh-sweep` (not shipped — optional pattern you can save to `.claude/workflows/`) can fan out fixers per failing task until checks pass. |
 
-**Every other runtime** (Cursor / Gemini / Antigravity) runs the SAME loop as prose in one session — no hooks, no `/goal`. Codex also runs the same loop, but may delegate independent tasks to generated native agents; its parent still owns checkpoint verification and checkbox updates. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
+**Antigravity** runs the same loop and also gets a deterministic Stop hook (`.agents/hooks.json`) that blocks ending a session while `.toh/plan.md` has unchecked tasks (both hooks exempt a terminal-status plan). **Every other runtime** (Cursor / Codex / ZCode / Gemini) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task — unless the plan header carries a terminal status (done/draft/blocked/paused), which is reported instead of resumed. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
+**Codex CLI** runs the same loop and may delegate independent tasks to generated native agents; its parent still owns checkpoint verification and checkbox updates. **Every other runtime** (Cursor / ZCode / Gemini) runs the SAME loop as prose in one session — no hooks, no `/goal`. The recovery mechanism there is checkbox-resume: a fresh session picks up at the first unchecked task — unless the plan header carries a terminal status (done/draft/blocked/paused), which is reported instead of resumed. If context runs low mid-plan, flush state (plan checkboxes + progress.md + active.md pointer), then tell the user to re-run the command — it resumes exactly where it stopped.
 
 ---
 

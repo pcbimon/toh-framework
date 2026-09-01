@@ -7,13 +7,17 @@ import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
 import fs from 'fs-extra';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { setupClaudeCode } from './ide-handlers/claude-code.js';
 import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
 import { CODEX_AGENTS_DIR, CODEX_SKILLS_DIR, setupCodex, uninstallCodex } from './ide-handlers/codex.js';
-import { transformCommand, writeCapabilitiesJson } from './ide-handlers/shared.js';
+import { setupAntigravityCLI } from './ide-handlers/antigravity-cli.js';
+import { writeAgentsMd } from './ide-handlers/codex.js';
+import { setupZcode } from './ide-handlers/zcode.js';
+import { transformCommand, writeCapabilitiesJson, writeAgentsSkills, seedFileIfAbsent } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,11 +34,120 @@ const PKG_PATH = join(__dirname, '..', 'package.json');
 const pkg = await fs.readJson(PKG_PATH);
 const VERSION = pkg.version;
 
+// v2.1 fix: two spinner hazards on unusual terminals.
+// (1) discardStdin conflicts with inquirer's readline on the same TTY — disable it.
+// (2) a pty with NO window size (columns = 0 — common when automation/AI agents
+//     drive the interactive installer through a bare pty) makes ora's clear-line
+//     math divide by zero and loop forever inside stop()/succeed(). On a
+//     zero-width TTY fall back to plain non-animated output (isEnabled: false).
+const spin = (text) => {
+  const options = { text, discardStdin: false };
+  if (process.stderr.isTTY && !(process.stderr.columns > 0)) {
+    options.isEnabled = false; // zero-width pty: plain output, no animation
+  }
+  return ora(options);
+};
+
+// ============================================================
+// v2.1: install inventory (manifestSchema 2) — powers `toh uninstall`
+// ============================================================
+// The uninstaller must be able to answer three questions for every file:
+// "is this ours?", "did the user edit it since install?", and "did it exist
+// before we ran?". Nothing on disk answered them before, so the installer
+// takes a content snapshot of the surfaces it writes to BEFORE and AFTER the
+// run and records the difference. No IDE handler had to change: a file is
+// ours exactly when this run created or rewrote it.
+//
+// Scope is deliberately narrow (the surfaces the installer touches) so the
+// snapshot never walks a real project tree (node_modules, .git, src, ...).
+const INVENTORY_DIRS = ['.toh', '.claude', '.cursor', '.agents', '.agent', '.codex', '.gemini'];
+const INVENTORY_FILES = ['CLAUDE.md', 'AGENTS.md', '.cursorrules'];
+const INVENTORY_FILE_CAP = 20000; // pathological trees degrade, never hang
+
+function sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+/**
+ * Content snapshot of the installer's own surfaces.
+ * Symlinked files/dirs are never followed or recorded — a symlink out of the
+ * project must never end up on the uninstaller's delete list.
+ * Returns { files: Map<relPosixPath, {sha256, bytes, mtimeMs}>, dirs: Set<relPosixPath>, truncated }.
+ *
+ * mtimeMs matters as much as the hash: the installer rewrites almost every file
+ * deterministically, so on a reinstall the bytes are identical and only the
+ * modification time proves that THIS run wrote the file. Without it, a reinstall
+ * recorded almost nothing and `toh uninstall` refused to remove its own files.
+ */
+async function snapshotSurfaces(targetDir) {
+  const files = new Map();
+  const dirs = new Set();
+  let truncated = false;
+
+  const addFile = async (abs, rel) => {
+    if (files.size >= INVENTORY_FILE_CAP) { truncated = true; return; }
+    try {
+      const buf = await fs.readFile(abs);
+      let mtimeMs = 0;
+      try { mtimeMs = (await fs.lstat(abs)).mtimeMs; } catch { /* keep 0 */ }
+      files.set(rel, { sha256: sha256(buf), bytes: buf.length, mtimeMs });
+    } catch {
+      // Unreadable -> not recorded -> the uninstaller will not claim it.
+    }
+  };
+
+  const walk = async (absDir, relDir) => {
+    let entries;
+    try {
+      entries = await fs.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const abs = join(absDir, entry.name);
+      const rel = `${relDir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        dirs.add(rel);
+        await walk(abs, rel);
+      } else if (entry.isFile()) {
+        await addFile(abs, rel);
+      }
+    }
+  };
+
+  for (const name of INVENTORY_DIRS) {
+    const abs = join(targetDir, name);
+    let st;
+    try { st = await fs.lstat(abs); } catch { continue; }
+    if (st.isSymbolicLink() || !st.isDirectory()) continue;
+    dirs.add(name);
+    await walk(abs, name);
+  }
+  for (const name of INVENTORY_FILES) {
+    const abs = join(targetDir, name);
+    let st;
+    try { st = await fs.lstat(abs); } catch { continue; }
+    if (st.isSymbolicLink() || !st.isFile()) continue;
+    await addFile(abs, name);
+  }
+
+  return { files, dirs, truncated };
+}
+
+async function readExistingManifest(targetDir) {
+  try {
+    return await fs.readJson(join(targetDir, '.toh', 'manifest.json'));
+  } catch {
+    return null;
+  }
+}
+
 export async function install(options) {
   const { target, ide, quick, lang } = options;
-  
+
   console.log(chalk.cyan('\n📦 Starting Toh Framework Installation...\n'));
-  
+
   let config = {
     targetDir: target,
     ides: ide.split(',').map(i => i.trim()),
@@ -42,7 +155,10 @@ export async function install(options) {
     installSkills: true,
     installAgents: true,
     installCommands: true,
-    installTemplates: true
+    installTemplates: true,
+    // v2.1 legacy flags (D1/D5): --legacy-gemini / --legacy-cursorrules
+    legacyGemini: !!options.legacyGemini,
+    legacyCursorrules: !!options.legacyCursorrules
   };
 
   // Interactive mode (if not quick)
@@ -50,9 +166,13 @@ export async function install(options) {
     config = await promptConfiguration(config);
   }
 
+  // v2.1 (W2/D1): Gemini CLI stopped serving consumer requests on 2026-06-18.
+  // The Google default is now Antigravity CLI (agy); Gemini CLI is available
+  // ONLY behind the explicit --legacy-gemini flag (Enterprise/GCP users).
+  config.ides = resolveGeminiLegacy(config);
+
   // Validate target directory
-  const spinner = startSpinner('Validating target directory...');
-  
+  const spinner = spin('Validating target directory...').start();
   if (!fs.existsSync(config.targetDir)) {
     // --quick is the non-interactive path: create the directory and proceed.
     let create = quick;
@@ -77,6 +197,11 @@ export async function install(options) {
     spinner.succeed('Target directory validated');
   }
 
+  // Read the previous manifest BEFORE any cleaning: on a reinstall it carries
+  // the ORIGINAL pre-existence facts (e.g. how many bytes of CLAUDE.md were
+  // the user's before we ever appended), which this run must not overwrite.
+  const previousManifest = await readExistingManifest(config.targetDir);
+
   // Check for existing installation
   const existingInstall = await checkExistingInstall(config.targetDir);
   if (existingInstall) {
@@ -93,6 +218,8 @@ export async function install(options) {
           { name: '❌ Cancel', value: 'cancel' }
         ]
       }]));
+    } else {
+      console.log(chalk.cyan('  ↻ Existing files found — updating in place (customizations preserved).'));
     }
 
     if (action === 'cancel') {
@@ -104,6 +231,10 @@ export async function install(options) {
       await cleanExistingInstall(config.targetDir);
     }
   }
+
+  // Snapshot the surfaces as they are BEFORE we write anything (after any
+  // "Fresh Install" clean, so cleaned-then-rewritten files count as ours).
+  const beforeSnapshot = await snapshotSurfaces(config.targetDir);
 
   // Install components
   console.log(chalk.cyan('\n📁 Installing components...\n'));
@@ -130,6 +261,28 @@ export async function install(options) {
   // Setup IDEs
   console.log(chalk.cyan('\n🛠️  Configuring IDEs...\n'));
   
+  // AGENTS.md is shared with Codex, so "is Codex in play?" must include Codex
+  // installs from EARLIER runs — capabilities.json is a union across installs.
+  // Without this, `install -i zcode` over an existing Codex project would
+  // rewrite AGENTS.md with the ZCode variant and tell Codex it has slash
+  // commands it does not have.
+  let declaredIdes = [];
+  try {
+    declaredIdes = (await fs.readJson(join(config.targetDir, '.toh', 'capabilities.json'))).ides || [];
+  } catch { /* first install, or unreadable — selection alone decides */ }
+  const codexSelected = [...config.ides, ...declaredIdes].some(
+    (name) => ['codex', 'codex-cli'].includes(String(name).toLowerCase())
+  );
+  // Same union rule for ZCode: the probed-subagents AGENTS.md sentence (issue
+  // #2 problem 2) is allowed ONLY when Codex is the file's sole reader —
+  // ZCode selected now OR declared by an earlier install both veto it.
+  const zcodeInPlay = [...config.ides, ...declaredIdes].some(
+    (name) => ['zcode', 'z-code', 'zai', 'z.ai'].includes(String(name).toLowerCase())
+  );
+  const codexInThisRun = config.ides.some(
+    (name) => ['codex', 'codex-cli'].includes(String(name).toLowerCase())
+  );
+
   for (const ideName of config.ides) {
     switch (ideName.toLowerCase()) {
       case 'claude':
@@ -137,20 +290,57 @@ export async function install(options) {
         await setupIDEWithSpinner('Claude Code', () => setupClaudeCode(config.targetDir, SRC_DIR, config.language));
         break;
       case 'cursor':
-        await setupIDEWithSpinner('Cursor', () => setupCursor(config.targetDir, config.language));
+        await setupIDEWithSpinner('Cursor', () =>
+          setupCursor(config.targetDir, config.language, { legacyCursorrules: config.legacyCursorrules }));
+        break;
+      case 'antigravity':
+      case 'agy':
+        await setupIDEWithSpinner('Antigravity CLI (agy)', () => setupAntigravityCLI(config.targetDir, SRC_DIR, config.language));
         break;
       case 'gemini':
       case 'gemini-cli':
-        await setupIDEWithSpinner('Gemini CLI', () => setupGeminiCLI(config.targetDir, SRC_DIR, config.language));
+        // Only reachable with --legacy-gemini (resolveGeminiLegacy filters otherwise)
+        await setupIDEWithSpinner('Gemini CLI (legacy)', () => setupGeminiCLI(config.targetDir, SRC_DIR, config.language));
         break;
       case 'codex':
       case 'codex-cli':
-        await setupIDEWithSpinner('Codex CLI', () => setupCodex(config.targetDir, SRC_DIR, config.language));
+        // allowProbedSubagents: the AGENTS.md Runtime Identity sentence may
+        // reflect probed codex subagents ONLY when ZCode is nowhere in play
+        // (AGENTS.md has two readers; never claim what only one has).
+        await setupIDEWithSpinner('Codex CLI', () =>
+          setupCodex(config.targetDir, SRC_DIR, config.language, { allowProbedSubagents: !zcodeInPlay }));
+        break;
+      case 'zcode':
+      case 'z-code':
+      case 'zai':
+      case 'z.ai':
+        // AGENTS.md is ONE physical file shared with Codex. When Codex is also
+        // selected its handler already wrote the conservative variant (no
+        // subagents, no slash commands) — true for ZCode as well — so ZCode
+        // only adds .agents/commands/ and never rewrites the file.
+        // Adding ZCode over a Codex install from an EARLIER run: that run may
+        // have written the probed-subagents Runtime Identity variant while
+        // Codex was still the sole reader. Now that ZCode shares the file,
+        // restore the conservative sentence first (idempotent marker rewrite;
+        // when Codex is in THIS run its handler already wrote conservatively
+        // because zcodeInPlay vetoed the probe variant).
+        if (codexSelected && !codexInThisRun) {
+          await writeAgentsMd(config.targetDir, SRC_DIR, config.language, 'codex');
+        }
+        await setupIDEWithSpinner('ZCode (Z.ai)', () =>
+          setupZcode(config.targetDir, SRC_DIR, config.language, { writeAgentsMd: !codexSelected }));
         break;
       default:
         console.log(chalk.yellow(`  ⚠️  Unknown IDE: ${ideName}`));
     }
   }
+
+  // v2.1 (W3): shared .agents/skills surface — Codex, Cursor 2.4, and
+  // Antigravity all natively discover Agent Skills from
+  // <project>/.agents/skills/<name>/SKILL.md. ONE writer (shared.js) emits
+  // 23 thin framework-skill wrappers pointing at .toh/skills/ plus the 14
+  // toh-* command skills converted from the TOML prompts.
+  await installAgentsSkills(config);
 
   // v2.0.0: transform the shared .toh/commands copy to the UNIVERSAL variant
   // (drop tfw:claude blocks, unwrap tfw:fallback). Runs AFTER the IDE loop.
@@ -159,9 +349,16 @@ export async function install(options) {
   // package source is unavailable. Idempotent: no markers left = no-op.
   await normalizeUniversalCommands(config.targetDir);
 
-  // Generate manifest + machine-readable capability declaration
-  await generateManifest(config);
+  // Generate manifest + machine-readable capability declaration.
+  // capabilities.json is written FIRST so the inventory snapshot below sees it
+  // (manifest.json itself is machine-owned and needs no recorded hash).
   await declareCapabilities(config);
+  const afterSnapshot = await snapshotSurfaces(config.targetDir);
+  await generateManifest(config, {
+    before: beforeSnapshot,
+    after: afterSnapshot,
+    previous: previousManifest
+  });
 
   // Success message
   console.log(chalk.green('\n✅ Toh Framework installed successfully!\n'));
@@ -191,10 +388,11 @@ async function promptConfiguration(defaults) {
       name: 'ides',
       message: 'Which IDEs/CLI tools do you want to configure?',
       choices: [
-        { name: '🤖 Claude Code (Anthropic)', value: 'claude', checked: true },
-        { name: '📝 Cursor', value: 'cursor', checked: true },
-        { name: '💎 Gemini CLI / Antigravity (Google)', value: 'gemini', checked: true },
-        { name: '🧠 Codex CLI (OpenAI)', value: 'codex', checked: false }
+        { name: 'Claude Code (Anthropic)', value: 'claude', checked: true },
+        { name: 'Cursor', value: 'cursor', checked: false },
+        { name: 'Antigravity CLI (agy) — Google', value: 'antigravity', checked: false },
+        { name: 'Codex CLI — OpenAI', value: 'codex', checked: false },
+        { name: 'ZCode (Z.ai)', value: 'zcode', checked: false }
       ],
       validate: (input) => input.length > 0 ? true : 'Please select at least one IDE'
     },
@@ -221,6 +419,57 @@ async function promptConfiguration(defaults) {
   };
 }
 
+/**
+ * v2.1 (W2/D1): normalize the Google targets in config.ides.
+ * - 'gemini'/'gemini-cli' WITHOUT --legacy-gemini → warn once and substitute
+ *   'antigravity' (the surface Gemini CLI users are being migrated to).
+ * - --legacy-gemini → ensure 'gemini' is in the list (the flag IS the opt-in;
+ *   Enterprise/GCP Gemini CLI users still exist).
+ * Deduplicates while preserving order.
+ */
+function resolveGeminiLegacy(config) {
+  const out = [];
+  let warned = false;
+  for (const name of config.ides) {
+    const key = name.toLowerCase();
+    if ((key === 'gemini' || key === 'gemini-cli') && !config.legacyGemini) {
+      if (!warned) {
+        console.log(chalk.yellow(
+          '  ⚠️  Consumer Gemini CLI is no longer served — installing "Antigravity CLI (agy)", Google\'s current target, instead.\n' +
+          '      Enterprise/GCP Gemini CLI users: re-run with --legacy-gemini to keep the .gemini/ setup.'
+        ));
+        warned = true;
+      }
+      if (!out.includes('antigravity')) out.push('antigravity');
+      continue;
+    }
+    if (!out.includes(key)) out.push(key);
+  }
+  if (config.legacyGemini && !out.some(k => k === 'gemini' || k === 'gemini-cli')) {
+    out.push('gemini');
+  }
+  return out;
+}
+
+/**
+ * v2.1 (W3): write the shared .agents/skills surface when any runtime that
+ * reads it (Codex, Cursor 2.4, Antigravity) is selected. Antigravity's own
+ * handler also calls the same shared writer — it is idempotent, never a
+ * second competing implementation.
+ */
+async function installAgentsSkills(config) {
+  const consumers = ['cursor', 'codex', 'codex-cli', 'antigravity', 'agy', 'zcode', 'z-code', 'zai', 'z.ai'];
+  if (!config.ides.some(name => consumers.includes(name.toLowerCase()))) return;
+
+  const spinner = spin('Writing shared .agents/skills (Codex + Cursor + Antigravity + ZCode)...').start();
+  try {
+    const result = await writeAgentsSkills(config.targetDir, SRC_DIR);
+    spinner.succeed(`Shared skills written (.agents/skills/ — ${result.skillWrappers} skill wrappers + ${result.commandSkills} toh-* command skills)`);
+  } catch (error) {
+    spinner.fail(`Failed to write .agents/skills: ${error.message}`);
+  }
+}
+
 async function checkExistingInstall(targetDir) {
   const markers = [
     join(targetDir, '.toh'),
@@ -229,18 +478,22 @@ async function checkExistingInstall(targetDir) {
     join(targetDir, '.claude', 'skills', 'vibe-orchestrator'),
     join(targetDir, '.cursor', 'rules', 'toh-framework.mdc')
   ];
-  
+
   return markers.some(marker => fs.existsSync(marker));
 }
 
 async function cleanExistingInstall(targetDir) {
-  const spinner = startSpinner('Cleaning existing installation...');
+  const spinner = spin('Cleaning existing installation...').start();
 
+  // Fresh Install is the explicitly destructive, user-confirmed path: removing
+  // .toh wipes .toh/memory + plan.md + progress.md, and .claude/memory goes too
+  // so a fresh install genuinely resets memory (issue #2).
   const pathsToClean = [
     join(targetDir, '.toh'),
     join(targetDir, '.claude', 'skills'),
     join(targetDir, '.claude', 'agents'),
-    join(targetDir, '.claude', 'commands')
+    join(targetDir, '.claude', 'commands'),
+    join(targetDir, '.claude', 'memory')
   ];
 
   for (const p of pathsToClean) {
@@ -257,7 +510,7 @@ async function cleanExistingInstall(targetDir) {
 }
 
 async function setupIDEWithSpinner(ideName, setupFn) {
-  const spinner = startSpinner(`Configuring ${ideName}...`);
+  const spinner = spin(`Configuring ${ideName}...`).start();
   try {
     const detail = await setupFn();
     const configFile = (typeof detail === 'string' && detail) ? detail : getIDEConfigFile(ideName);
@@ -272,14 +525,16 @@ function getIDEConfigFile(ideName) {
   const configs = {
     'Claude Code': 'created CLAUDE.md',
     'Cursor': '.cursor/rules/*.mdc',
-    'Gemini CLI': '.gemini/GEMINI.md',
-    'Codex CLI': `${CODEX_SKILLS_DIR}/ + ${CODEX_AGENTS_DIR}/ + AGENTS.md + .codex/config.toml`
+    'Antigravity CLI (agy)': '.agents/rules/toh-framework.md',
+    'Gemini CLI (legacy)': '.gemini/GEMINI.md',
+    'Codex CLI': `${CODEX_SKILLS_DIR}/ + ${CODEX_AGENTS_DIR}/ + AGENTS.md + .codex/config.toml`,
+    'ZCode (Z.ai)': 'AGENTS.md + .agents/'
   };
   return configs[ideName] || 'configured';
 }
 
 async function installComponent(componentName, targetDir) {
-  const spinner = startSpinner(`Installing ${componentName}...`);
+  const spinner = spin(`Installing ${componentName}...`).start();
   
   const srcPath = join(SRC_DIR, componentName);
   let destPath;
@@ -328,9 +583,8 @@ async function countFiles(dir) {
   return count;
 }
 
-async function generateManifest(config) {
-  const spinner = startSpinner('Generating manifest...');
-  
+async function generateManifest(config, inventory = null) {
+  const spinner = spin('Generating manifest...').start();
   const manifest = {
     version: VERSION,
     installedAt: new Date().toISOString(),
@@ -344,6 +598,73 @@ async function generateManifest(config) {
       memory: true
     }
   };
+
+  // v2.1: manifestSchema 2 — the record `toh uninstall` reads. Older manifests
+  // (no manifestSchema key) stay valid; the uninstaller falls back to detecting
+  // our files by name and by our own markers when these fields are absent.
+  if (inventory && inventory.after) {
+    const { before, after, previous } = inventory;
+    const prevByPath = new Map();
+    if (previous && Array.isArray(previous.files)) {
+      for (const f of previous.files) {
+        if (f && typeof f.path === 'string') prevByPath.set(f.path, f);
+      }
+    }
+
+    const files = [];
+    for (const [rel, info] of after.files) {
+      const beforeInfo = before ? before.files.get(rel) : undefined;
+      const prev = prevByPath.get(rel);
+
+      // Did THIS run write the file? Bytes alone cannot answer it: the installer
+      // is deterministic, so a reinstall rewrites identical content. A newer
+      // modification time is the proof that we wrote it just now.
+      const rewrittenNow =
+        !beforeInfo ||
+        beforeInfo.sha256 !== info.sha256 ||
+        (info.mtimeMs > 0 && beforeInfo.mtimeMs > 0 && info.mtimeMs > beforeInfo.mtimeMs);
+
+      // Untouched by this run: keep an older record if we had one (it is still
+      // our file — e.g. a component this run did not reinstall), otherwise it
+      // is the user's file and we must never claim it.
+      if (!rewrittenNow) {
+        if (prev) files.push(prev);
+        continue;
+      }
+
+      const entry = { path: rel, sha256: info.sha256 };
+      if (prev && prev.preexisted) {
+        // Carry the ORIGINAL pre-install facts through reinstalls.
+        entry.preexisted = true;
+        if (prev.preexistedSha256) entry.preexistedSha256 = prev.preexistedSha256;
+        if (typeof prev.preexistedBytes === 'number') entry.preexistedBytes = prev.preexistedBytes;
+      } else if (beforeInfo && !prev && beforeInfo.sha256 !== info.sha256) {
+        // The file existed before this install with DIFFERENT content and was
+        // not ours: record what it looked like so uninstall can restore the
+        // user's part byte-for-byte (CLAUDE.md/AGENTS.md appends) or at least
+        // warn honestly. Identical content before and after means we simply
+        // rewrote our own file — there is nothing of the user's to restore, and
+        // claiming otherwise would make uninstall "restore" the whole Toh file.
+        entry.preexisted = true;
+        entry.preexistedSha256 = beforeInfo.sha256;
+        entry.preexistedBytes = beforeInfo.bytes;
+      }
+      files.push(entry);
+    }
+    files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
+    manifest.manifestSchema = 2;
+    manifest.language = config.language || 'en';
+    manifest.flags = {
+      legacyGemini: !!config.legacyGemini,
+      legacyCursorrules: !!config.legacyCursorrules
+    };
+    manifest.files = files;
+    manifest.dirsCreated = [...after.dirs]
+      .filter((d) => !before || !before.dirs.has(d))
+      .sort();
+    if (after.truncated || (before && before.truncated)) manifest.inventoryTruncated = true;
+  }
 
   const manifestPath = join(config.targetDir, '.toh', 'manifest.json');
   await fs.ensureDir(join(config.targetDir, '.toh'));
@@ -361,7 +682,7 @@ async function normalizeUniversalCommands(targetDir) {
   const commandsDir = join(targetDir, '.toh', 'commands');
   if (!fs.existsSync(commandsDir)) return;
 
-  const spinner = startSpinner('Normalizing shared commands (universal variant)...');
+  const spinner = spin('Normalizing shared commands (universal variant)...').start();
   try {
     let changed = 0;
     const walk = async (dir) => {
@@ -392,7 +713,7 @@ async function normalizeUniversalCommands(targetDir) {
  * orchestration-protocol 2-step survey (identity lives in each context file).
  */
 async function declareCapabilities(config) {
-  const spinner = startSpinner('Declaring runtime capabilities...');
+  const spinner = spin('Declaring runtime capabilities...').start();
   try {
     await writeCapabilitiesJson(config.targetDir, config.ides);
     spinner.succeed('Capabilities declared (.toh/capabilities.json)');
@@ -402,7 +723,7 @@ async function declareCapabilities(config) {
 }
 
 async function setupMemoryFolder(targetDir) {
-  const spinner = startSpinner('Setting up Memory System (7 files)...');
+  const spinner = spin('Setting up Memory System (7 files)...').start();
 
   const memoryDir = join(targetDir, '.toh', 'memory');
   const archiveDir = join(memoryDir, 'archive');
@@ -557,23 +878,20 @@ async function setupMemoryFolder(targetDir) {
 *Last updated: ${today}*
 `;
 
-    // Write all 7 memory files — seed ONLY if absent (v2.1.0). These hold live
-    // project state; the README promises "reinstalling ... without deleting
-    // your existing memory", so a reinstall must never clobber them.
-    const memorySeeds = {
-      'active.md': activeTemplate,
-      'summary.md': summaryTemplate,
-      'decisions.md': decisionsTemplate,
-      'changelog.md': changelogTemplate,
-      'agents-log.md': agentsLogTemplate,
-      'architecture.md': architectureTemplate,
-      'components.md': componentsTemplate
-    };
-    for (const [file, content] of Object.entries(memorySeeds)) {
-      const p = join(memoryDir, file);
-      if (!fs.existsSync(p)) {
-        await fs.writeFile(p, content);
-      }
+    // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall must
+    // never clobber live memory; even an empty file is the user's).
+    const memorySeeds = [
+      ['active.md', activeTemplate],
+      ['summary.md', summaryTemplate],
+      ['decisions.md', decisionsTemplate],
+      ['changelog.md', changelogTemplate],
+      ['agents-log.md', agentsLogTemplate],
+      ['architecture.md', architectureTemplate],
+      ['components.md', componentsTemplate]
+    ];
+    let seededCount = 0;
+    for (const [fileName, template] of memorySeeds) {
+      if (await seedFileIfAbsent(join(memoryDir, fileName), template)) seededCount++;
     }
 
     // v2.0.0: seed THE TOH LOOP artifacts — ONLY if absent (they hold live
@@ -615,7 +933,10 @@ Empty backlog — no stories yet. Run \`/toh-plan\` to draft a plan here, or
       await fs.writeFile(progressPath, progressSeed);
     }
 
-    spinner.succeed('Memory System ready - 7 files (.toh/memory/) + plan/progress artifacts');
+    const kept = memorySeeds.length - seededCount;
+    spinner.succeed(kept === 0
+      ? 'Memory System ready - 7 files seeded (.toh/memory/) + plan/progress artifacts'
+      : `Memory System ready - seeded ${seededCount} missing file(s), preserved ${kept} existing (.toh/memory/) + plan/progress artifacts`);
   } catch (error) {
     spinner.fail(`Failed to setup Memory System: ${error.message}`);
   }
@@ -653,14 +974,8 @@ function printNextSteps(config) {
     console.log(empty);
   }
 
-  if (config.ides.includes('gemini') || config.ides.includes('gemini-cli')) {
-    console.log(row(chalk.white(pad('  Gemini CLI (Terminal):'))));
-    // 13 chars green + 47 chars gray = 60
-    console.log(row(chalk.green('    /toh:plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
-    console.log(row(chalk.green('    /toh:vibe') + chalk.gray(' - Create new project'.padEnd(47))));
-    console.log(row(chalk.green('    /toh:help') + chalk.gray(' - Show all commands'.padEnd(47))));
-    console.log(empty);
-    console.log(row(chalk.white(pad('  Google Antigravity (IDE):'))));
+  if (config.ides.includes('antigravity') || config.ides.includes('agy')) {
+    console.log(row(chalk.white(pad('  Antigravity CLI (agy) + Antigravity IDE:'))));
     // 13 chars green + 47 chars gray = 60
     console.log(row(chalk.green('    /toh-plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
     console.log(row(chalk.green('    /toh-vibe') + chalk.gray(' - Create new project'.padEnd(47))));
@@ -668,26 +983,49 @@ function printNextSteps(config) {
     console.log(empty);
   }
 
+  if (config.ides.includes('gemini') || config.ides.includes('gemini-cli')) {
+    console.log(row(chalk.white(pad('  Gemini CLI (legacy - Enterprise/GCP only):'))));
+    // 13 chars green + 47 chars gray = 60
+    console.log(row(chalk.green('    /toh:plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
+    console.log(row(chalk.green('    /toh:vibe') + chalk.gray(' - Create new project'.padEnd(47))));
+    console.log(row(chalk.green('    /toh:help') + chalk.gray(' - Show all commands'.padEnd(47))));
+    console.log(empty);
+  }
+
   if (config.ides.includes('codex') || config.ides.includes('codex-cli')) {
-    console.log(row(chalk.white(pad('  Codex CLI:'))));
-    // Native skills are the canonical integration; `/toh-*` is compat text.
-    // 13 green + 47 gray = 60 ; 11 green + 49 gray = 60 ; 18 green + 42 gray = 60
-    console.log(row(chalk.green('    $toh-vibe') + chalk.gray(' - Native skill: new project'.padEnd(47))));
-    console.log(row(chalk.green('    /skills') + chalk.gray(' - Browse all TOH skills'.padEnd(49))));
-    console.log(row(chalk.green(`    ${CODEX_SKILLS_DIR}/`) + chalk.gray(' - 14 workflow skills installed'.padEnd(42))));
-    console.log(row(chalk.green(`    ${CODEX_AGENTS_DIR}/`) + chalk.gray(' - 8 native agents installed'.padEnd(42))));
+  console.log(row(chalk.white(pad('  Codex CLI:'))));
+  console.log(row(chalk.green('    $toh-vibe') + chalk.gray(' - Native skill: new project'.padEnd(47))));
+  console.log(row(chalk.green('    /skills') + chalk.gray(' - Browse all TOH skills'.padEnd(49))));
+  console.log(row(chalk.green(`    ${CODEX_SKILLS_DIR}/`) + chalk.gray(' - 14 workflow skills installed'.padEnd(42))));
+  console.log(row(chalk.green(`    ${CODEX_AGENTS_DIR}/`) + chalk.gray(' - 8 native agents installed'.padEnd(42))));
+    console.log(empty);
+  }
+
+  if (config.ides.some((n) => ['zcode', 'z-code', 'zai', 'z.ai'].includes(String(n).toLowerCase()))) {
+    console.log(row(chalk.white(pad('  ZCode (Z.ai):'))));
+    // 13 chars green + 47 chars gray = 60
+    console.log(row(chalk.green('    /toh-plan') + chalk.gray(' - Plan and orchestrate tasks'.padEnd(47))));
+    console.log(row(chalk.green('    /toh-vibe') + chalk.gray(' - Create new project'.padEnd(47))));
+    console.log(row(chalk.green('    /toh-help') + chalk.gray(' - Show all commands'.padEnd(47))));
     console.log(empty);
   }
 
   console.log(row(chalk.white(pad('  Documentation:'))));
   console.log(row(chalk.blue(pad('    https://github.com/wasintoh/toh-framework'))));
   console.log(mid);
+  // Changed your mind? Say so here — the removal path must be as visible as
+  // the install path, not something you have to find in --help.
+  console.log(row(chalk.white(pad('  Changed your mind? Remove it any time:'))));
+  console.log(row(chalk.cyan(pad('    npx toh-framework uninstall'))));
+  console.log(row(chalk.gray(pad('    (shows a preview and asks first; keeps your plan+notes)'))));
+  console.log(mid);
   console.log(row(chalk.bold.yellow(pad(`  What's New in v${VERSION}:`))));
-  console.log(row(chalk.white(pad('  * One-Go Build: approve once, get a whole finished app'))));
-  console.log(row(chalk.white(pad('  * TOH LOOP: Type & Forget - builds, tests, fixes itself'))));
-  console.log(row(chalk.white(pad('  * Stop Hook: refuses to quit until verified DONE'))));
-  console.log(row(chalk.white(pad('  * Design Identity: no one can tell AI made it'))));
-  console.log(row(chalk.white(pad('  * Auto-Resume: quit anytime, it continues where it left'))));
+  console.log(row(chalk.white(pad('  * NEW uninstall command: previewed, asks first, reversible'))));
+  console.log(row(chalk.white(pad('  * Codex: compact AGENTS.md, never truncated (24KiB guard)'))));
+  console.log(row(chalk.white(pad('  * Antigravity (agy): .agents/ + deterministic Stop hook'))));
+  console.log(row(chalk.white(pad('  * Cursor 2.4 native subagents (.cursor/agents/)'))));
+  console.log(row(chalk.white(pad('  * .agents/ standard: 37 skills + 14 commands shared'))));
+  console.log(row(chalk.white(pad('  * Live-read catalog + real /toh-* aliases (incl. /toh-pt)'))));
   console.log(bot);
   console.log('');
 }

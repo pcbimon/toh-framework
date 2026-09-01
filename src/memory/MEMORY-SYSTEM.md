@@ -215,7 +215,9 @@ STEP 4: Confirm to user
 Memory system works identically across:
 - ✅ Claude Code
 - ✅ Cursor
-- ✅ Gemini CLI / Google Antigravity
+- ✅ Antigravity (+ Antigravity CLI)
+- ✅ ZCode (Z.ai)
+- ✅ Gemini CLI (legacy)
 - ✅ Codex CLI
 
 Same files, same format, same behavior!

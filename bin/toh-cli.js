@@ -49,11 +49,33 @@ program
   .command('install')
   .description('Install Toh Framework to your project')
   .option('-t, --target <path>', 'Target directory', process.cwd())
-  .option('-i, --ide <ides>', 'IDEs to configure (claude,cursor,gemini,codex)', 'claude,cursor,gemini')
+  .option('-i, --ide <ides>', 'IDEs to configure (claude,cursor,antigravity,codex,zcode)', 'claude')
   .option('-q, --quick', 'Quick install without prompts')
+  .option('--legacy-gemini', 'Also configure legacy Gemini CLI (.gemini/) — Enterprise/GCP users only; consumer Gemini CLI was shut down 2026-06-18')
+  .option('--legacy-cursorrules', 'Also write the legacy root .cursorrules file (very old Cursor versions)')
   .action(async (options) => {
     const { install } = await import('../installer/install.js');
     await install(options);
+  });
+
+// Uninstall command — the counterpart to install.
+// Safe by default: shows a plain-language preview and asks once before
+// deleting anything, keeps .toh/plan.md, .toh/progress.md and the memory
+// folders (your work) unless you explicitly pass --all.
+program
+  .command('uninstall')
+  .description('Remove Toh Framework from your project (shows a preview and asks first)')
+  .option('-t, --target <path>', 'Target directory', process.cwd())
+  .option('--dry-run', 'Only show what would be removed, change nothing')
+  .option('-y, --yes', 'Skip the confirmation question (for scripts)')
+  .option('--all', 'ALSO delete your own plan, work log and project notes (a backup copy is saved first)')
+  .option('--verbose', 'List every file in the preview instead of a per-tool summary')
+  .option('-i, --ide <ides>', 'IDE to remove (currently: codex). Omit for full uninstall')
+  .option('--no-backup', 'Do not create a backup before Codex-only removal')
+  .action(async (options) => {
+    const { uninstall } = await import('../installer/uninstall.js');
+    const code = await uninstall(options);
+    if (code) process.exitCode = code;
   });
 
 // List command
@@ -63,19 +85,6 @@ program
   .action(async () => {
     const { list } = await import('../installer/list.js');
     await list();
-  });
-
-// Uninstall command
-program
-  .command('uninstall')
-  .description('Remove Toh Framework from your project (keeps user files)')
-  .option('-t, --target <path>', 'Target directory', process.cwd())
-  .option('-i, --ide <ides>', 'IDE to remove (currently: codex). Omit for full uninstall')
-  .option('--dry-run', 'Preview owned files without removing them')
-  .option('--no-backup', 'Do not create a backup before removal')
-  .action(async (options) => {
-    const { uninstall } = await import('../installer/uninstall.js');
-    await uninstall(options);
   });
 
 // Status command

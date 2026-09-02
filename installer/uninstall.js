@@ -37,7 +37,7 @@ import yaml from 'js-yaml';
 import crypto from 'crypto';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { dirname, join, resolve, basename, parse as parsePath } from 'path';
+import { dirname, join, resolve, relative, basename, parse as parsePath } from 'path';
 import { generateClaudeMd } from './ide-handlers/claude-code.js';
 import { uninstallCodex } from './ide-handlers/codex.js';
 
@@ -212,8 +212,7 @@ async function buildCatalog(srcDir) {
     templateFiles: [],
     workflowFiles: [],
     geminiCommandFiles: [],
-    agentsSkillDirs: [],
-    agentsCommandFiles: []
+    agentsSkillDirs: []
   };
   if (!(await fs.pathExists(srcDir))) return cat;
 
@@ -282,7 +281,8 @@ function derivedPaths(cat) {
   }
   for (const d of cat.agentsSkillDirs) add(`.agents/skills/${d}/SKILL.md`);
   for (const f of cat.agentsCommandFiles) add(`.agents/commands/${f}`);
-  for (const n of cat.agentNames) add(`.codex/agents/${n.replace(/\.md$/, '.toml')}`);
+  // v2.2: native Codex agents + their ownership manifest
+  for (const n of cat.agentNames) add(`.codex/agents/${n.replace(/\.md$/, '')}.toml`);
   add('.codex/toh-framework.json');
   for (const f of cat.workflowFiles) {
     add(`.agents/workflows/${f}`);
@@ -481,7 +481,7 @@ async function buildPlan(ctx) {
   await planStopHook(ctx, plan, '.claude/settings.json', 'the Toh "keep going" reminder');
   await planStopHook(ctx, plan, '.agents/hooks.json', 'the Toh "keep going" reminder');
   await planStampedFile(ctx, plan, '.claude/loop.md', TFW_LOOP_MARKER, 'first line');
-  await planCodexConfig(ctx, plan);
+  await planStampedFile(ctx, plan, '.codex/config.toml', CODEX_CONFIG_STAMP, 'first line');
   await planHashOnlyFile(ctx, plan, '.cursorrules');
   await planHashOnlyFile(ctx, plan, '.gemini/settings.json');
   await planGeminiMd(ctx, plan);
@@ -905,41 +905,6 @@ async function planStampedFile(ctx, plan, rel, stamp, whereLabel) {
       why: `this file does not carry the Toh stamp on its ${whereLabel}, so it looks like yours — I left it`
     });
   }
-}
-
-/** .codex/config.toml — remove only the Toh marker block from shared config. */
-async function planCodexConfig(ctx, plan) {
-  const { targetDir } = ctx;
-  const rel = '.codex/config.toml';
-  if (!(await isRealFile(targetDir, rel))) return;
-  if (!(await pathIsSafe(targetDir, rel))) {
-    plan.warnings.push({ rel, why: 'this path is a shortcut (symlink) — I left it alone' });
-    return;
-  }
-
-  const text = await readText(targetDir, rel).catch(() => '');
-  const start = '# TOH-FRAMEWORK-START';
-  const end = '# TOH-FRAMEWORK-END';
-  const starts = text.split(start).length - 1;
-  const ends = text.split(end).length - 1;
-  if (starts === 1 && ends === 1) {
-    const block = new RegExp(`[ \\t]*${start}\\r?\\n[\\s\\S]*?[ \\t]*${end}[ \\t]*\\r?\\n?`);
-    const out = text.replace(block, '').trim();
-    const sha = await shaOfFile(targetDir, rel);
-    plan.edits.push({
-      rel,
-      group: 'codex',
-      kind: out ? 'write' : 'delete',
-      ...(out ? { content: `${out}\\n` } : {}),
-      expectedSha: sha,
-      summary: out ? 'take out only the Toh Codex settings block — your settings stay' : 'delete it — it contains only Toh Codex settings'
-    });
-    if (!out) markDirs(plan, rel);
-    return;
-  }
-
-  // Older main-generated configs use the historical first-line stamp.
-  await planStampedFile(ctx, plan, rel, CODEX_CONFIG_STAMP, 'first line');
 }
 
 /**
@@ -1397,28 +1362,56 @@ export async function uninstall(options = {}) {
     return 1;
   }
 
-  // Codex has a native ownership manifest separate from the general install
-  // inventory. Keep the feature branch's per-IDE command working while the
-  // default path below retains main's complete ownership planner.
+  // --- per-IDE removal (v2.2: Codex only) ------------------------------------
+  // `--ide codex` removes just the native agent files this installer wrote
+  // (hash-verified) plus their manifest. AGENTS.md and .codex/config.toml are
+  // shared surfaces (ZCode reads AGENTS.md too) and stay — run without --ide
+  // for the complete, previewed removal.
   if (requestedIdes) {
     const isCodex = (ide) => ide === 'codex' || ide === 'codex-cli';
     if (!requestedIdes.every(isCodex)) {
       const unsupported = requestedIdes.filter((ide) => !isCodex(ide));
       console.log(chalk.yellow(
-        `Per-IDE uninstall is currently implemented for Codex CLI only (got: ${unsupported.join(', ')}).\n` +
+        `Per-IDE removal currently supports Codex only (got: ${unsupported.join(', ')}).\n` +
         `Run without --ide for a full uninstall, or use --ide codex.\n`
       ));
       return 1;
     }
-    const result = await uninstallCodex(targetDir, {
-      dryRun,
-      backup: options.backup !== false
-    });
-    const removed = result.removedSkills.length + result.removedAgents.length;
+    // Same manners as the full path: preview first, then one question.
+    const preview = await uninstallCodex(targetDir, { dryRun: true });
+    const keptNote = preview.keptAgents.length
+      ? ` ${plural(preview.keptAgents.length, 'file', 'files')} you edited will stay: ${preview.keptAgents.join(', ')}.`
+      : '';
+    const staysNote = 'AGENTS.md, .codex/config.toml and .toh/ stay (shared surfaces — run without --ide to remove everything).';
+    if (preview.removedAgents.length === 0) {
+      console.log(chalk.yellow(`No Toh-written native agent files found in .codex/agents/ — nothing to remove.${keptNote}\n${staysNote}\n`));
+      return 0;
+    }
+    console.log(chalk.white(
+      `I will remove ${plural(preview.removedAgents.length, 'native agent file', 'native agent files')} from .codex/agents/ ` +
+      `(${preview.removedAgents.join(', ')}) plus .codex/toh-framework.json.${keptNote}\n${staysNote}\n`
+    ));
+    if (dryRun) {
+      console.log(chalk.gray('This was a preview (--dry-run). Nothing was deleted or changed.\n'));
+      return 0;
+    }
+    if (!assumeYes) {
+      let go = false;
+      try {
+        ({ go } = await inquirer.prompt([{ type: 'confirm', name: 'go', message: 'Go ahead?', default: false }]));
+      } catch {
+        console.log(chalk.yellow('\nI could not read your answer, so I stopped and changed nothing.\n'));
+        return 1;
+      }
+      if (!go) {
+        console.log(chalk.yellow('\nStopped. Nothing was changed.\n'));
+        return 0;
+      }
+    }
+    const result = await uninstallCodex(targetDir, { dryRun: false, backup: options.backup !== false });
     console.log(chalk.green(
-      dryRun
-        ? `Codex CLI preview: ${removed} native file(s) would be removed; .toh/ state stays untouched.\n`
-        : `Codex CLI removed: ${removed} native file(s); .toh/ state stays untouched.\n`
+      `Codex: removed ${plural(result.removedAgents.length, 'native agent file', 'native agent files')} from .codex/agents/.` +
+      (result.backupPath ? ` A copy was saved to ${relative(targetDir, result.backupPath)}/ first.` : '') + '\n'
     ));
     return 0;
   }

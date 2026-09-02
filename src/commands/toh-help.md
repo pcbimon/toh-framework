@@ -146,7 +146,7 @@ Every response from Toh includes:
 - 📚 **23 Skills** - Including Orchestration Protocol & Security Engineer
 - 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
-- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex CLI, ZCode, Gemini CLI (legacy)
+- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex (CLI + desktop app), ZCode, Gemini CLI (legacy)
 
 ---
 
@@ -168,7 +168,7 @@ Every response from Toh includes:
 | Claude Code | `CLAUDE.md` |
 | Cursor | `.cursor/rules/*.mdc` |
 | Antigravity CLI (agy) + IDE | `.agents/` — rules, skills, `.agents/workflows/` (legacy: `.agent/workflows/`) |
-| Codex CLI | `AGENTS.md` + `.agents/skills/` + `.codex/agents/` |
+| Codex (CLI + desktop app) | `AGENTS.md` |
 | ZCode (Z.ai) | `AGENTS.md` + `.agents/` — skills and `/toh-*` commands |
 | Gemini CLI (legacy, `--legacy-gemini`) | `.gemini/GEMINI.md` |
 

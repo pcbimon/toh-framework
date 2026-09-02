@@ -17,7 +17,7 @@ src/agents/*.md              ← single source (superset frontmatter + canonical
         │                  (uses native name / description / tools / model)
         ├── Cursor       → native subagents → .cursor/agents/*.md
         ├── Antigravity  → .agents/agents/*.md (subagent: true)
-        ├── Codex CLI    → native agents in .codex/agents/ + command skills in .agents/skills/
+        ├── Codex        → compact roster in AGENTS.md + native agents in .codex/agents/*.toml
         ├── ZCode        → compact roster in AGENTS.md, bodies read from .toh/
         └── Gemini (legacy) → convert frontmatter to the Gemini format
 ```
@@ -38,7 +38,7 @@ tools:            # Claude Code: native tool allowlist
   - Edit
   - Bash
 model: sonnet     # Claude Code: model tier per agent
-modelIntent: implementation # Codex: lightweight | implementation | planning | review
+modelIntent: implementation # Codex: lightweight | implementation | planning | review -> reasoning effort (model is inherited)
 skills:           # Toh skill bindings (all IDEs)
   - ui-first-builder
   - design-craft
@@ -82,7 +82,7 @@ The same source produces IDE-appropriate output at install time:
 | Claude Code | `.claude/agents/*.md` | Copied as-is (native `name`/`description`/`tools`/`model`) |
 | Cursor (2.4+) | `.cursor/agents/*.md` | Native subagents (`readonly` derived from the tools allowlist) |
 | Antigravity (+ CLI) | `.agents/agents/*.md` | Frontmatter converted, `subagent: true` |
-| Codex CLI | `.codex/agents/*.toml` + `.agents/skills/*/SKILL.md` + `AGENTS.md` | 8 native agents + 14 workflow skills; 23 supporting skills stay in `.toh/` |
+| Codex (CLI + desktop app) | `AGENTS.md` roster + `.codex/agents/*.toml` | Compact roster table + one native agent per Toh agent (no `model` key; effort from `modelIntent`) |
 | ZCode | `AGENTS.md` roster + `.toh/agents/*.md` | Compact roster table; bodies read at runtime |
 | Gemini CLI (legacy) | `.toh/agents/*.md` | Frontmatter converted per IDE |
 
@@ -99,8 +99,6 @@ The same source produces IDE-appropriate output at install time:
 ```
 
 There is no `subagents/` folder anymore — the installer is the transform layer.
-Codex model names and reasoning are selected centrally from each agent's
-`modelIntent`; Claude's `model` tier remains for Claude Code compatibility.
 
 ---
 

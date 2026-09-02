@@ -13,21 +13,14 @@ import { dirname, join } from 'path';
 import { setupClaudeCode } from './ide-handlers/claude-code.js';
 import { setupCursor } from './ide-handlers/cursor.js';
 import { setupGeminiCLI } from './ide-handlers/gemini-cli.js';
-import { CODEX_AGENTS_DIR, CODEX_SKILLS_DIR, setupCodex, uninstallCodex } from './ide-handlers/codex.js';
 import { setupAntigravityCLI } from './ide-handlers/antigravity-cli.js';
-import { writeAgentsMd } from './ide-handlers/codex.js';
+import { setupCodex, writeAgentsMd } from './ide-handlers/codex.js';
 import { setupZcode } from './ide-handlers/zcode.js';
 import { transformCommand, writeCapabilitiesJson, writeAgentsSkills, seedFileIfAbsent } from './ide-handlers/shared.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SRC_DIR = join(__dirname, '..', 'src');
-
-// ora corrupts the node:test child-process IPC channel (Node 24), so tests set
-// TOH_QUIET=1 to silence spinners. Default CLI behavior is unchanged.
-function startSpinner(text) {
-  return ora({ text, isSilent: process.env.TOH_QUIET === '1' }).start();
-}
 
 // Read version from package.json (Single Source of Truth)
 const PKG_PATH = join(__dirname, '..', 'package.json');
@@ -41,7 +34,9 @@ const VERSION = pkg.version;
 //     math divide by zero and loop forever inside stop()/succeed(). On a
 //     zero-width TTY fall back to plain non-animated output (isEnabled: false).
 const spin = (text) => {
-  const options = { text, discardStdin: false };
+  // TOH_QUIET=1: no spinner output at all (the in-band test runner sets it —
+  // ora's stream writes corrupt node:test's IPC channel on Node 24).
+  const options = { text, discardStdin: false, isSilent: process.env.TOH_QUIET === '1' };
   if (process.stderr.isTTY && !(process.stderr.columns > 0)) {
     options.isEnabled = false; // zero-width pty: plain output, no animation
   }
@@ -204,29 +199,29 @@ export async function install(options) {
 
   // Check for existing installation
   const existingInstall = await checkExistingInstall(config.targetDir);
-  if (existingInstall) {
-    // --quick must stay non-interactive: a reinstall defaults to Quick Update.
-    let action = 'update';
-    if (!quick) {
-      ({ action } = await inquirer.prompt([{
-        type: 'list',
-        name: 'action',
-        message: 'Existing Toh Framework installation detected. What would you like to do?',
-        choices: [
-          { name: '🔄 Quick Update (preserve customizations)', value: 'update' },
-          { name: '🗑️  Fresh Install (overwrite all)', value: 'fresh' },
-          { name: '❌ Cancel', value: 'cancel' }
-        ]
-      }]));
-    } else {
-      console.log(chalk.cyan('  ↻ Existing files found — updating in place (customizations preserved).'));
-    }
+  if (existingInstall && quick) {
+    // v2.1: --quick means "no questions". Reinstalling on top of leftovers is
+    // the documented path back after `toh uninstall` (which keeps plan.md,
+    // progress.md and the memory folders), so default to the safe branch —
+    // update in place, preserving whatever the user still has.
+    console.log(chalk.cyan('  ↻ Existing files found — updating in place (customizations preserved).'));
+  } else if (existingInstall) {
+    const { action } = await inquirer.prompt([{
+      type: 'list',
+      name: 'action',
+      message: 'Existing Toh Framework installation detected. What would you like to do?',
+      choices: [
+        { name: '🔄 Quick Update (preserve customizations)', value: 'update' },
+        { name: '🗑️  Fresh Install (overwrite all)', value: 'fresh' },
+        { name: '❌ Cancel', value: 'cancel' }
+      ]
+    }]);
 
     if (action === 'cancel') {
       console.log(chalk.yellow('\nInstallation cancelled.'));
       return;
     }
-
+    
     if (action === 'fresh') {
       await cleanExistingInstall(config.targetDir);
     }
@@ -307,7 +302,7 @@ export async function install(options) {
         // allowProbedSubagents: the AGENTS.md Runtime Identity sentence may
         // reflect probed codex subagents ONLY when ZCode is nowhere in play
         // (AGENTS.md has two readers; never claim what only one has).
-        await setupIDEWithSpinner('Codex CLI', () =>
+        await setupIDEWithSpinner('Codex (CLI + desktop app)', () =>
           setupCodex(config.targetDir, SRC_DIR, config.language, { allowProbedSubagents: !zcodeInPlay }));
         break;
       case 'zcode':
@@ -391,7 +386,7 @@ async function promptConfiguration(defaults) {
         { name: 'Claude Code (Anthropic)', value: 'claude', checked: true },
         { name: 'Cursor', value: 'cursor', checked: false },
         { name: 'Antigravity CLI (agy) — Google', value: 'antigravity', checked: false },
-        { name: 'Codex CLI — OpenAI', value: 'codex', checked: false },
+        { name: 'Codex (CLI + desktop app) — OpenAI', value: 'codex', checked: false },
         { name: 'ZCode (Z.ai)', value: 'zcode', checked: false }
       ],
       validate: (input) => input.length > 0 ? true : 'Please select at least one IDE'
@@ -473,18 +468,16 @@ async function installAgentsSkills(config) {
 async function checkExistingInstall(targetDir) {
   const markers = [
     join(targetDir, '.toh'),
-    join(targetDir, '.agents', 'skills'),
-    join(targetDir, '.codex', 'config.toml'),
     join(targetDir, '.claude', 'skills', 'vibe-orchestrator'),
     join(targetDir, '.cursor', 'rules', 'toh-framework.mdc')
   ];
-
+  
   return markers.some(marker => fs.existsSync(marker));
 }
 
 async function cleanExistingInstall(targetDir) {
   const spinner = spin('Cleaning existing installation...').start();
-
+  
   // Fresh Install is the explicitly destructive, user-confirmed path: removing
   // .toh wipes .toh/memory + plan.md + progress.md, and .claude/memory goes too
   // so a fresh install genuinely resets memory (issue #2).
@@ -501,11 +494,7 @@ async function cleanExistingInstall(targetDir) {
       await fs.remove(p);
     }
   }
-
-  // Codex: remove TOH-managed .agents/skills + the AGENTS.md TOH block,
-  // preserving any user skills and user AGENTS.md content.
-  await uninstallCodex(targetDir);
-
+  
   spinner.succeed('Cleaned existing installation');
 }
 
@@ -517,7 +506,19 @@ async function setupIDEWithSpinner(ideName, setupFn) {
     spinner.succeed(`${ideName} configured (${configFile})`);
   } catch (error) {
     spinner.fail(`Failed to configure ${ideName}: ${error.message}`);
-    throw error;
+    // Hard budget violations (error.fatal, e.g. the Codex 24 KiB AGENTS.md
+    // block or the Antigravity 12,000-char Always-On rule) mean the generated
+    // output would be silently broken — never report success past them.
+    if (error.fatal) {
+      console.error(chalk.red(
+        `\n✖ Installation aborted: ${ideName} failed a hard size-budget check (see above). ` +
+        `Fix the generator and re-run the installer.\n`
+      ));
+      // Thrown (not process.exit) so bin/toh-cli.js sets the exit code and the
+      // test suite can observe the abort. `reported` stops a second message.
+      error.reported = true;
+      throw error;
+    }
   }
 }
 
@@ -527,7 +528,7 @@ function getIDEConfigFile(ideName) {
     'Cursor': '.cursor/rules/*.mdc',
     'Antigravity CLI (agy)': '.agents/rules/toh-framework.md',
     'Gemini CLI (legacy)': '.gemini/GEMINI.md',
-    'Codex CLI': `${CODEX_SKILLS_DIR}/ + ${CODEX_AGENTS_DIR}/ + AGENTS.md + .codex/config.toml`,
+    'Codex (CLI + desktop app)': 'AGENTS.md',
     'ZCode (Z.ai)': 'AGENTS.md + .agents/'
   };
   return configs[ideName] || 'configured';
@@ -585,6 +586,7 @@ async function countFiles(dir) {
 
 async function generateManifest(config, inventory = null) {
   const spinner = spin('Generating manifest...').start();
+
   const manifest = {
     version: VERSION,
     installedAt: new Date().toISOString(),
@@ -993,11 +995,15 @@ function printNextSteps(config) {
   }
 
   if (config.ides.includes('codex') || config.ides.includes('codex-cli')) {
-  console.log(row(chalk.white(pad('  Codex CLI:'))));
-  console.log(row(chalk.green('    $toh-vibe') + chalk.gray(' - Native skill: new project'.padEnd(47))));
-  console.log(row(chalk.green('    /skills') + chalk.gray(' - Browse all TOH skills'.padEnd(49))));
-  console.log(row(chalk.green(`    ${CODEX_SKILLS_DIR}/`) + chalk.gray(' - 14 workflow skills installed'.padEnd(42))));
-  console.log(row(chalk.green(`    ${CODEX_AGENTS_DIR}/`) + chalk.gray(' - 8 native agents installed'.padEnd(42))));
+    console.log(row(chalk.white(pad('  Codex (CLI + desktop app):'))));
+    // 9 chars green + 51 chars gray = 60
+    console.log(row(chalk.green('    codex') + chalk.gray('     - Start Codex CLI in project'.padEnd(51))));
+    // 13 chars green + 47 chars gray = 60
+    console.log(row(chalk.green('    $toh-vibe') + chalk.gray(' - Create new project (native skill)'.padEnd(47))));
+    // 11 chars green + 49 chars gray = 60
+    console.log(row(chalk.green('    /skills') + chalk.gray('   - Browse all 14 /toh-* skills'.padEnd(49))));
+    // 18 chars green + 42 chars gray = 60
+    console.log(row(chalk.green('    .codex/agents/') + chalk.gray(' - 8 native Toh agents'.padEnd(42))));
     console.log(empty);
   }
 

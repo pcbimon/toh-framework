@@ -143,8 +143,7 @@ Choose from the **execution ladder in `orchestration-protocol` (Section B)** —
 - **Claude Code** → ladder: teams > subagents > sequential
 - **Cursor (2.4+)** → native subagents in `.cursor/agents/`, one task at a time
 - **Antigravity** → file-based subagents via `invoke_subagent`, one task at a time
-- **Codex CLI** → native agents for independent tasks; sequential TOH LOOP for dependent work
-- **ZCode / Gemini (legacy)** → sequential TOH LOOP in-session
+- **Codex / ZCode / Gemini (legacy)** → sequential TOH LOOP in-session
 
 ---
 

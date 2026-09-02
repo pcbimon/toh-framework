@@ -58,17 +58,14 @@ export const CAPABILITY_PROFILES = {
   },
   codex: {
     ide: 'codex',
-    client: 'codex-cli',
-    detection: 'declared-at-install',
-    subagents: 'native',
+    subagents: 'none',
     teams: false,
     goal: false,
     loop: false,
     hooks: false,
-    workflows: 'native',
-    parallel: true,
-    modelRouting: true,
-    nativeAgents: true
+    workflows: false,
+    parallel: false,
+    modelRouting: false
   },
   'gemini-cli': {
     ide: 'gemini-cli',
@@ -322,10 +319,9 @@ export function renderCapabilitiesSection(ide) {
   const profile = CAPABILITY_PROFILES[key];
   const display = IDE_DISPLAY[key] || { name: key || 'unknown runtime', contextFile: 'this context file' };
 
-  // Unknown IDE -> conservative profile. Unknown is not a reason to disable a
-  // capability supplied by a client that the installer cannot probe.
+  // Unknown IDE -> conservative sequential profile
   const p = profile || {
-    ide: key, subagents: 'unknown', teams: false, goal: false,
+    ide: key, subagents: 'none', teams: false, goal: false,
     loop: false, hooks: false, workflows: false, parallel: false, modelRouting: false
   };
 
@@ -334,14 +330,12 @@ export function renderCapabilitiesSection(ide) {
     'Never guess your runtime; it is stated here.';
 
   const lines = [];
-  if (p.subagents === 'native' && key === 'codex') {
-    lines.push('- Native subagents: YES — delegate via `.codex/agents/*.toml` (parallel only for independent tasks on disjoint files, max 4 concurrent)');
-  } else if (p.subagents === 'native') {
+  if (p.subagents === 'native') {
+    // Claude Code keeps its original wording (Task tool); Cursor's native
+    // subagents live in .cursor/agents/ and have no Task tool.
     lines.push(key === 'cursor'
       ? '- Native subagents: YES — delegate to the Toh specialists in `.cursor/agents/*.md` (fall back to sequential execution in this session when delegation is unavailable)'
       : '- Native subagents: YES — delegate via the Agent tool (Task) (parallel only for independent tasks on disjoint files, max 4 concurrent)');
-  } else if (p.subagents === 'unknown') {
-    lines.push('- Native subagents: UNKNOWN — keep native delegation eligible; do not disable it from an unavailable probe');
   } else if (p.subagents === 'file-based') {
     lines.push('- Native subagents: file-based — `.agents/agents/<name>.md` (`subagent: true`), delegate via `invoke_subagent`; fall back to sequential execution in this session when delegation is unavailable');
   } else {
@@ -375,23 +369,9 @@ export function renderCapabilitiesSection(ide) {
   if (p.commands) {
     lines.push('- Slash commands: YES — `/toh-*` load natively from `.agents/commands/` (the same 14 commands also exist as skills)');
   }
-  if (p.workflows === 'version-gated') {
-    lines.push('- Workflows: version-gated (Claude Code >= 2.1.154)');
-  } else if (p.workflows === 'native') {
-    lines.push('- Workflows: YES — invoke installed native skills with `$toh-*`');
-  } else if (p.workflows === true) {
-    lines.push('- Workflows: YES — `/toh-*` workflows in `.agents/workflows/` (legacy mirror: `.agent/workflows/`)');
-  } else {
-    lines.push('- Workflows: NO');
-  }
   lines.push(p.modelRouting
-    ? key === 'codex'
-      ? '- Model routing: YES — native agent TOML sets Codex model and reasoning per Toh role'
-      : '- Model routing: YES — haiku = scaffold/tests · sonnet = builders · opus = planning/QC'
+    ? '- Model routing: YES — haiku = scaffold/tests · sonnet = builders · opus = planning/QC'
     : '- Model routing: NO — ignore model tiers and proceed');
-  if (p.nativeAgents) {
-    lines.push('- Native agent files: `.codex/agents/*.toml` — generated from `.toh/agents/*.md` with ownership-safe updates');
-  }
   if (!p.parallel) {
     lines.push(p.subagents === 'none'
       ? '- Execution mode: run THE TOH LOOP **sequentially in this session** (orchestration-protocol skill); recovery = checkbox-resume from `.toh/plan.md`'
@@ -514,16 +494,6 @@ export async function writeAgentsSkills(targetDir, srcDir) {
 
   // ---- (b) toh-* command skills converted from the TOML prompts ------
   for (const { file, name } of await collectCommandTomls(srcDir)) {
-    // Codex's native handler owns command wrappers when it has already
-    // generated one. Keep that content and its Codex manifest hash intact;
-    // the shared writer still fills the same directory for other runtimes.
-    const existingCommandPath = join(outDir, name, 'SKILL.md');
-    if (await fs.pathExists(existingCommandPath)) {
-      const existing = await fs.readFile(existingCommandPath, 'utf8');
-      const { fm } = splitFrontmatter(existing);
-      if (fm?.metadata?.generator === 'toh-framework' && fm.metadata.kind === 'command') continue;
-    }
-
     const parsed = await renderCommandPrompt(file, 'writeAgentsSkills');
     const description = parsed.description;
     // A skill is invoked by name, not by a slash command with arguments, so

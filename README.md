@@ -55,7 +55,7 @@ Changed your mind? `npx toh-framework uninstall` shows you exactly what it will 
 | 🧠 **Claude Code** | ✅ Full Support | Native subagents + skills preload, Stop hook, slash commands & shortcuts |
 | 📝 **Cursor (2.4+)** | ✅ Full Support | Native subagents (`.cursor/agents/`), skills via `.agents/skills/`, always-on rules |
 | 🛰️ **Antigravity CLI (agy) + IDE** | ✅ Full Support | `.agents/` rules + skills + workflows + subagents + Stop hook |
-| 🤖 **Codex CLI** | ✅ Supported | Native workflow skills + project agents (`.codex/agents/`) |
+| 🤖 **Codex** — CLI + Codex desktop app (ChatGPT app) | ✅ Supported | Compact AGENTS.md + repo-level skills + native agents in `.codex/agents/` |
 | 💠 **ZCode (Z.ai)** | ✅ Supported | AGENTS.md + `.agents/skills/` + native `/toh-*` in `.agents/commands/` |
 | 💎 **Gemini CLI** | 🏢 Legacy | Enterprise/GCP only, behind `--legacy-gemini` |
 
@@ -231,42 +231,21 @@ agy
 /toh-vibe Inventory management system
 ```
 
-### Codex CLI
-
-Codex has no custom slash commands, so TOH installs **native Codex workflow
-skills** under `.agents/skills/` — 14 top-level `$toh-*` workflows. The 23
-supporting skills stay in `.toh/skills/` so the global skill list remains focused.
-TOH also generates eight project-scoped native agents under `.codex/agents/*.toml`.
-Codex CLI uses native project files, including native model and reasoning
-routing for each agent. `.codex/config.toml` enables multi-agent
-execution when the project does not already define its own `[features]` table.
+### Codex — CLI and Codex desktop app (ChatGPT app)
 
 ```bash
-# Open the project root in Codex CLI
 codex
 
-# Invoke a TOH skill explicitly ($ + skill name), or browse with /skills
-$toh-vibe coffee shop management system
-$toh-plan build a booking app with payments
+# Invoke a Toh workflow as a native Codex skill ($ + name), or browse with /skills
+$toh-vibe Inventory management system
 
-# Or just describe the task — Codex matches the skill by its description
-"Create an inventory management system"
+# Plain /toh-* text works too — AGENTS.md teaches Codex the full command set
+/toh-vibe Inventory management system
 ```
 
-TOH stores framework state under `.toh/` (`plan.md`, `progress.md`,
-`memory/`), native workflow discovery under `.agents/skills/`, and native agent
-definitions under `.codex/agents/`. Project-level rules live in the managed block
-of `AGENTS.md`. For compatibility, typing `/toh-vibe ...` as plain text is
-interpreted (via `AGENTS.md`) as a request for the matching skill — but it is
-**not** a native Codex slash command. TOH does not read or modify ZCode files or
-global Codex configuration.
-
-Uninstall (removes only TOH-managed Codex files; your own skills and
-agents, ZCode files, and `AGENTS.md` text are kept):
-
-```bash
-npx toh-framework uninstall --ide codex
-```
+The 8 Toh agents are also installed as native Codex agents in `.codex/agents/*.toml`
+(generated from `.toh/agents/`, ownership-tracked so your edits are never overwritten).
+They inherit the model of your session and carry only a reasoning-effort hint per role.
 
 ### ZCode (Z.ai)
 
@@ -402,7 +381,7 @@ claude -p "/toh-vibe coffee shop management system" --permission-mode acceptEdit
 - 📚 **23 Skills** - Comprehensive AI capabilities, shipped once to `.agents/skills/` for every IDE that reads the open standard `[NEW in 2.1]`
 - 🎨 **Design Identity** - Per-project DESIGN.md design identity + versioned AVOID-LIST
 - 📦 **15 Component Templates** - Ready-to-use premium components
-- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex CLI, ZCode, Gemini CLI (legacy)
+- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex (CLI + desktop app), ZCode, Gemini CLI (legacy)
 
 ---
 

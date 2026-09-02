@@ -63,7 +63,7 @@ AI จะเขียนแผนออกมาเป็นรายการ�
 | 🧠 **Claude Code** | ✅ รองรับเต็ม | Native subagents + skills preload, Stop hook, slash commands และทางลัด |
 | 📝 **Cursor (2.4+)** | ✅ รองรับเต็ม | Native subagents (`.cursor/agents/`), skills ผ่าน `.agents/skills/`, rule แบบ always-on |
 | 🛰️ **Antigravity CLI (agy) + IDE** | ✅ รองรับเต็ม | `.agents/` rules + skills + workflows + subagents + Stop hook |
-| 🤖 **Codex CLI** | ✅ รองรับ | Native workflow skills + project agents (`.codex/agents/`) |
+| 🤖 **Codex** (CLI + Codex desktop app / ChatGPT app) | ✅ รองรับ | AGENTS.md แบบกะทัดรัด + repo-level skills + native agents ใน `.codex/agents/` |
 | 💠 **ZCode (Z.ai)** | ✅ รองรับ | AGENTS.md + `.agents/skills/` + คำสั่ง `/toh-*` native ใน `.agents/commands/` |
 | 💎 **Gemini CLI** | 🏢 Legacy | เฉพาะ Enterprise/GCP ใช้ผ่าน `--legacy-gemini` |
 
@@ -238,42 +238,21 @@ agy
 /toh-vibe ระบบจัดการ inventory
 ```
 
-### Codex CLI
-
-Codex ไม่มี slash command แบบกำหนดเอง ดังนั้น TOH จะติดตั้ง **native Codex
-workflow skills** ไว้ที่ `.agents/skills/` — workflow ระดับบน 14 ตัวในรูปแบบ
-`$toh-*` ส่วน supporting skills 23 ตัวจะอยู่ใน `.toh/skills/` เพื่อให้รายการ
-skill หลักกระชับ นอกจากนี้ TOH สร้าง native agents แบบ project-scoped 8 ตัวไว้ที่
-`.codex/agents/*.toml` โดย Codex CLI ใช้ไฟล์โปรเจคชุดเดียวกัน รวมถึงการกำหนด
-model และ reasoning ของแต่ละ agent โดย `.codex/config.toml` จะเปิด
-multi-agent ให้เมื่อโปรเจคยังไม่มี `[features]` ของตัวเอง
+### Codex (CLI และ Codex desktop app / ChatGPT app)
 
 ```bash
-# เปิดโฟลเดอร์โปรเจคใน Codex CLI
 codex
 
-# เรียก skill ตรงๆ ด้วย $ + ชื่อ skill (หรือพิมพ์ /skills เพื่อดูทั้งหมด)
-$toh-vibe ระบบจัดการร้านกาแฟ
-$toh-plan สร้างแอปจองห้องพร้อมชำระเงิน
+# เรียก workflow ของ Toh เป็น skill ของ Codex ตรงๆ ด้วย $ ตามด้วยชื่อ หรือพิมพ์ /skills ดูทั้งหมด
+$toh-vibe ระบบจัดการ inventory
 
-# หรือแค่บรรยายงาน — Codex จะเลือก skill จาก description ให้เอง
-"สร้างระบบจัดการ inventory"
+# พิมพ์ /toh-* แบบเดิมก็ยังใช้ได้ AGENTS.md สอนชุดคำสั่งครบให้ Codex อยู่แล้ว
+/toh-vibe ระบบจัดการ inventory
 ```
 
-TOH เก็บ state ของ framework ไว้ที่ `.toh/` (`plan.md`, `progress.md`,
-`memory/`), workflow discovery ไว้ที่ `.agents/skills/` และ native agent
-definitions ไว้ที่ `.codex/agents/` กฎระดับโปรเจคอยู่ใน block ที่ TOH จัดการของ
-`AGENTS.md` เพื่อความเข้ากันได้แบบเดิม ถ้าพิมพ์ `/toh-vibe ...` เป็นข้อความธรรมดา
-ระบบจะตีความ (ผ่าน `AGENTS.md`) ว่าเป็นการเรียก skill ที่ตรงกัน — แต่มัน
-**ไม่ใช่** native slash command ของ Codex TOH จะไม่อ่านหรือแก้ไขไฟล์ ZCode หรือ
-global Codex configuration
-
-ถอนการติดตั้ง (ลบเฉพาะไฟล์ Codex ที่ TOH สร้าง — skill ของคุณเองและข้อความ
-agent ของคุณ ไฟล์ ZCode และข้อความใน `AGENTS.md` จะถูกเก็บไว้):
-
-```bash
-npx toh-framework uninstall --ide codex
-```
+agent ทั้ง 8 ตัวของ Toh ถูกติดตั้งเป็น native agent ของ Codex ด้วย อยู่ที่ `.codex/agents/*.toml`
+สร้างจาก `.toh/agents/` และจำไว้ว่าไฟล์ไหนเป็นของเรา ไฟล์ที่คุณแก้เองจะไม่ถูกเขียนทับ
+ทุกตัวใช้ model เดียวกับ session ของคุณ มีแค่ระดับ reasoning ที่ตั้งไว้ตามหน้าที่ของแต่ละตัว
 
 ### ZCode (Z.ai)
 
@@ -409,7 +388,7 @@ claude -p "/toh-vibe ระบบจัดการร้านกาแฟ" --p
 - 📚 **23 Skills** - ความสามารถของ AI ครบชุด ส่งครั้งเดียวลง `.agents/skills/` ให้ทุก IDE ที่อ่านมาตรฐานเปิดนี้ `[ใหม่ใน 2.1]`
 - 🎨 **Design Identity** - DESIGN.md ประจำโปรเจค คู่กับ AVOID-LIST ที่มีเวอร์ชัน
 - 📦 **15 Component Templates** - component ระดับพรีเมียม หยิบไปใช้ได้เลย
-- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex CLI, ZCode, Gemini CLI (legacy)
+- 🌐 **6 IDEs** - Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex (CLI + desktop app), ZCode, Gemini CLI (legacy)
 
 ---
 

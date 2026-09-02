@@ -218,6 +218,6 @@ Memory system works identically across:
 - ✅ Antigravity (+ Antigravity CLI)
 - ✅ ZCode (Z.ai)
 - ✅ Gemini CLI (legacy)
-- ✅ Codex CLI
+- ✅ Codex (CLI + desktop app)
 
 Same files, same format, same behavior!

@@ -342,7 +342,7 @@ Progress is saved in `.toh/progress.md`, so it syncs across:
 - Claude Code
 - Cursor
 - Antigravity (+ Antigravity CLI)
-- Codex CLI
+- Codex (CLI + desktop app)
 - ZCode (Z.ai)
 - Gemini CLI (legacy)
 

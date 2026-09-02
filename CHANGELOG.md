@@ -2,6 +2,14 @@
 
 All notable changes to Toh Framework will be documented in this file.
 
+## [Unreleased]
+
+#### Added
+
+- **Native Codex agents** — every Toh agent in `.toh/agents/` is now also installed as a project-scoped Codex custom agent in `.codex/agents/<name>.toml` (`name`, `description`, `model_reasoning_effort`, `sandbox_mode`, `developer_instructions`), so Codex can delegate to `ui-builder`, `plan-orchestrator` and friends natively. The files deliberately carry **no `model` key**: they inherit the parent session's model, so one config choice governs every agent and a future model rename never strands an install. Reasoning effort comes from a new `modelIntent` frontmatter key (`lightweight | implementation | planning | review`, falling back to the Claude tier), and agents whose tool allowlist has no write tool get Codex's `read-only` sandbox. Ownership is tracked by sha256 in `.codex/toh-framework.json`: a file you edited or created is never overwritten or removed. AGENTS.md now points Codex at `$toh-<cmd>` skill invocation and the native agents. Contributed by @pcbimon in [PR #3](https://github.com/wasintoh/toh-framework/pull/3); reshaped in review so `.agents/skills/` keeps a single writer (shared.js), an existing `.codex/config.toml` is still never modified, and the codex capability profile stays the probed v2.1.1 floor.
+- **`toh uninstall --ide codex`** — removes just the native agent files this installer wrote (hash-verified, backed up first) and their manifest; AGENTS.md, `.codex/config.toml` and `.toh/` stay. The full uninstall also knows the new paths.
+- **Test suite** — `npm test` runs `tests/codex.test.js` (node:test, in-band): install layout, TOML shape, single-writer invariant across IDE order, config.toml untouched, ownership by hash, AGENTS.md idempotency and budget, both uninstall paths. First automated tests in the repo; CI now runs them.
+
 ## [2.1.1] - 2026-08-26
 
 ### 🩹 Patch: Updates That Respect Your Work
@@ -13,7 +21,6 @@ v2.1.1 is a repair release — อัปเดตได้โดยไม่ท�
 - **Memory survives an update** — re-running the installer over an existing project no longer resets `.toh/memory/`. All 7 memory files are now seeded only if absent, the same contract `.toh/plan.md` and `.toh/progress.md` have had since v2.0.0 — an update never clobbers what the loop has learned. Applied at every one of the 6 inline template code sites (`install.js` + 5 IDE handlers; zcode deliberately has none).
 - **Stop hooks respect a parked plan** — a plan whose header says `Status: blocked` or `Status: paused` is now terminal for the Claude Code prompt Stop hook, exactly like `Status: done`/`Status: draft`: the loop no longer refuses to end a session over work the user deliberately put down. The deterministic Antigravity command-script hook gains the same exemptions plus `Status: done` (which its grep previously never checked). Existing installs are **upgraded in place**: the installer recognises its own `<TFW-STOP-HOOK>` entry and rewrites just that entry to the new text instead of treating "marker present" as "nothing to do" — user hook entries are still never removed or reordered.
 - **Codex capabilities probed, not assumed** — the Codex handler now runs a runtime capability probe and falls back conservatively when the probe cannot confirm a feature, instead of hardcoding what the currently-installed Codex is presumed to support. An unverifiable capability is declared absent — the generated text never promises what the runtime was not proven to do.
-- **Native Codex CLI workflows restored** — Codex CLI now receives 14 native workflow skill wrappers under `.agents/skills/` and 8 project-scoped agents under `.codex/agents/*.toml`, with model/reasoning routing and read-only sandbox boundaries translated from the canonical agent source. The managed `AGENTS.md` block remains compact and `.toh/` state is preserved on reinstall.
 - **Version-drift sweep completed** — re-audited every user-visible and generated surface (`src/`, `installer/`, `README.md`, `docs/README-TH.md`, plus a real install of all 5 IDE targets) for stale `Next.js 14` / `React 18` / `Tailwind 3` stack mentions left after 0795eec. Result: zero remaining — generated output states only Next.js 16 / React 19 / Tailwind 4, matching the `src/templates/nextjs-pro/package.json` pins. Historical CHANGELOG entries and archived planning docs keep their original wording on purpose.
 
 Fixes [GitHub issue #2](https://github.com/wasintoh/toh-framework/issues/2) — thank you @tumansdev for the detailed report.
@@ -83,7 +90,7 @@ v2.1 is a compatibility release — ตรวจจริง ซ่อมจร�
 - `.toh/capabilities.json` profiles updated: cursor `subagents: "native"`; antigravity `subagents: "file-based"`, `hooks: true`, `workflows: true`. Union semantics are additive — projects installed under v2.0 with gemini keep both `gemini-cli` and `antigravity` declared.
 - Removed `bin/toh-npx-wrapper.js`; `installer/list.js` rewritten to live-read `src/`. Package tarball: 142 files, ~1.1 MB unpacked (`npm pack --dry-run`).
 - New `installer/uninstall.js`, lazy-loaded by `bin/toh-cli.js` like every other command; `installer/install.js` gained a before/after content snapshot of its own surfaces (`.toh`, `.claude`, `.cursor`, `.agents`, `.agent`, `.codex`, `.gemini`, `CLAUDE.md`, `AGENTS.md`, `.cursorrules`) to build the schema-2 inventory. The snapshot never follows symlinks and never walks the project tree. `generateClaudeMd` / `generateClaudeMdBlock` are now exported from `installer/ide-handlers/claude-code.js` so the uninstaller can recognise our own generated text in pre-2.1 projects. New npm script `uninstall:local`.
-- package.json: version **2.0.0 → 2.1.0**; description and keywords now name Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex CLI, and ZCode — the dead `gemini` keyword dropped; `codex`, `openai-codex`, `antigravity-cli`, `agy`, `agent-skills`, `zcode`, `z-ai` added.
+- package.json: version **2.0.0 → 2.1.0**; description and keywords now name Claude Code, Cursor, Antigravity (+ Antigravity CLI), Codex (CLI + desktop app), and ZCode — the dead `gemini` keyword dropped; `codex`, `openai-codex`, `antigravity-cli`, `agy`, `agent-skills`, `zcode`, `z-ai` added.
 
 ---
 

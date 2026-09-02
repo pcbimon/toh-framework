@@ -1,72 +1,105 @@
 /**
- * Native Codex CLI installer surfaces.
- *
- * Shared Toh runtime files stay under .toh/. Codex receives workflow skills in
- * .agents/skills and project-scoped native agents in .codex/agents.
+ * Codex IDE Handler (CLI + desktop app)
+ * Creates AGENTS.md (project memory, auto-loaded by Codex) and, since v2.2,
+ * one native Codex agent per Toh agent in .codex/agents/*.toml.
+ * The 14 /toh-* command skills and 23 framework skills reach Codex through
+ * the shared .agents/skills/ writer in shared.js — this file never writes there.
  */
 
-import crypto from 'crypto';
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
-import { parse as parseToml } from 'smol-toml';
-import { renderCapabilitiesSection, seedFileIfAbsent, transformCommand } from './shared.js';
+import { transformCommand, renderCapabilitiesSection, seedFileIfAbsent } from './shared.js';
 import { probeCodexCapabilitiesCached } from './capability-probe.js';
+import crypto from 'crypto';
+import { parse as parseToml } from 'smol-toml';
 
+// Hard budget for the TOH marker block inside AGENTS.md. Codex silently
+// truncates project docs at 32 KiB COMBINED (project_doc_max_bytes default),
+// including any pre-existing user content above our marker — so our block must
+// stay well under that. Exceeding this is a build bug, never a warning.
+const MAX_TOH_BLOCK_BYTES = 24 * 1024;
+
+// AGENTS.md is a shared open surface: Codex reads it as project memory, and so
+// does ZCode (Z.ai) — same filename, same location, same marker block. Only
+// three sentences differ per runtime, so both handlers build from one generator.
+// Keys must match the canonical IDE keys in shared.js CAPABILITY_PROFILES.
+const AGENTS_MD_RUNTIMES = {
+  codex: {
+    memoryEN: 'This file serves as project memory for Codex (CLI and desktop app). It contains the Toh Framework configuration and agent definitions.',
+    memoryTH: 'This file is project memory for Codex (CLI and desktop app) containing Toh Framework configuration and agent definitions',
+    runtimeName: 'Codex',
+    commandHint: ' The 14 `/toh-*` workflows are also installed as Codex skills in `.agents/skills/` — invoke one explicitly with `$toh-<cmd>` (e.g. `$toh-vibe`) or browse them with `/skills`; typing `/toh-vibe ...` as plain text works too. The 8 Toh agents are installed as native Codex agents in `.codex/agents/*.toml` (full specs stay in `.toh/agents/`); when you delegate to one, hand it a self-contained brief — custom agents cannot receive a full-history fork.'
+  },
+  zcode: {
+    memoryEN: 'This file serves as project memory for ZCode (Z.ai). It contains the Toh Framework configuration and agent definitions.',
+    memoryTH: 'This file is project memory for ZCode (Z.ai) containing Toh Framework configuration and agent definitions',
+    runtimeName: 'ZCode',
+    commandHint: ' The 14 `/toh-*` commands are installed natively in `.agents/commands/` — invoke them directly; the same prompts are also discoverable as skills in `.agents/skills/`.'
+  }
+};
+
+/**
+ * The 'Runtime Identity' paragraph shared by the EN and TH generators.
+ *
+ * AGENTS.md is ONE file with TWO readers (Codex and ZCode) — it must never
+ * claim a capability only one reader has. `probedSubagents` is therefore true
+ * ONLY when codex is the sole writer of AGENTS.md for this run (no ZCode
+ * selected now or declared earlier) AND the install-time capability probe
+ * verified codex subagents as stable+enabled. In every other case the
+ * conservative sentence below is byte-identical to pre-probe releases.
+ */
+function runtimeIdentityLine(rt, probedSubagents = false) {
+  const capabilityClause = probedSubagents
+    ? 'Native subagents: available per probed codex features — delegate for independent tasks; otherwise run the TOH LOOP sequentially'
+    : 'Multi-agent features (subagents/teams) are unavailable here — execute the TOH LOOP sequentially';
+  return `Runtime Identity: you are running in ${rt.runtimeName}. ${capabilityClause} in this session: implement -> run the story's checkpoint -> quote the actual output -> fix if red (max 5 tries, 3 consecutive failures = mark [!] BLOCKED and move on) -> tick the checkbox -> next story WITHOUT asking. Interrupted runs resume at the first unchecked box in .toh/plan.md — unless its header carries a terminal status (Status: done/draft/blocked/paused): a terminal plan is reported, never auto-resumed. Close every stage with the engineer-harness announce contract (Status/Result/Evidence/exactly 3 next actions).${rt.commandHint}`;
+}
+
+// Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf-8'));
 const VERSION = pkg.version;
 
-export const CODEX_SKILLS_DIR = path.join('.agents', 'skills');
+// ---------------------------------------------------------------------------
+// Native Codex agents (v2.2 — contributed by @pcbimon in PR #3, reshaped in
+// review). Codex discovers project-scoped custom agents in .codex/agents/*.toml
+// (developers.openai.com/codex/subagents); each Toh agent in .toh/agents/<name>.md
+// becomes one TOML file. Two deliberate choices:
+//   1. NO `model` key. An agent file without `model` inherits the parent
+//      session's model (per the subagents doc), so the user's one config choice
+//      governs every agent and a future model rename never strands an install.
+//      Only `model_reasoning_effort` is set, from the agent's declared intent.
+//   2. Ownership by hash. .codex/toh-framework.json records the sha256 of every
+//      agent file we wrote. A file whose hash no longer matches was edited (or
+//      created) by the user and is never overwritten or removed.
+// ---------------------------------------------------------------------------
 export const CODEX_AGENTS_DIR = path.join('.codex', 'agents');
-export const AGENTS_MAX_BYTES = 24 * 1024;
-export const CODEX_PROJECT_DOC_MAX_BYTES = 64 * 1024;
-
-const AGENTS_BLOCK_START = '<!-- TOH-FRAMEWORK-START -->';
-const AGENTS_BLOCK_END = '<!-- TOH-FRAMEWORK-END -->';
-const AGENTS_BLOCK_RE = /[ \t]*<!-- TOH-FRAMEWORK-START -->[\s\S]*?<!-- TOH-FRAMEWORK-END -->[ \t]*\r?\n?/g;
-const CONFIG_BLOCK_START = '# TOH-FRAMEWORK-START';
-const CONFIG_BLOCK_END = '# TOH-FRAMEWORK-END';
-const CONFIG_BLOCK_RE = /[ \t]*# TOH-FRAMEWORK-START\r?\n[\s\S]*?[ \t]*# TOH-FRAMEWORK-END[ \t]*\r?\n?/g;
-const SKILL_GENERATOR = 'toh-framework';
-const MANIFEST_PATH = path.join('.codex', 'toh-framework.json');
-const SKILL_NAME_RE = /^[a-z0-9-]{1,64}$/;
+export const CODEX_MANIFEST_PATH = path.join('.codex', 'toh-framework.json');
+const MANIFEST_GENERATOR = 'toh-framework';
+const AGENT_NAME_RE = /^[a-z0-9-]{1,64}$/;
 const MODEL_INTENTS = new Set(['lightweight', 'implementation', 'planning', 'review']);
+// Same rule cursor.js uses for `readonly`: an allowlist with no write tool is
+// read-only by design (root-cause-debugger: Read/Grep/Glob/Bash).
 const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'Bash']);
 
-export const CODEX_MODEL_ROUTING = Object.freeze({
-  lightweight: Object.freeze({ model: 'gpt-5.6-luna', model_reasoning_effort: 'low' }),
-  implementation: Object.freeze({ model: 'gpt-5.6', model_reasoning_effort: 'medium' }),
-  planning: Object.freeze({ model: 'gpt-5.6', model_reasoning_effort: 'high' }),
-  review: Object.freeze({ model: 'gpt-5.6-terra', model_reasoning_effort: 'high' })
+/** Toh model intent → Codex reasoning effort. The model itself is inherited. */
+export const CODEX_REASONING_EFFORT = Object.freeze({
+  lightweight: 'low',
+  implementation: 'medium',
+  planning: 'high',
+  review: 'high'
 });
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-function relativePath(...parts) {
-  return path.posix.join(...parts.map((part) => String(part).replaceAll(path.sep, '/')));
-}
-
-function skillFileRelativePath(name) {
-  return relativePath(CODEX_SKILLS_DIR, name, 'SKILL.md');
-}
-
-function agentFileRelativePath(name) {
-  return relativePath(CODEX_AGENTS_DIR, `${name}.toml`);
-}
-
-function parseFrontmatterDocument(raw, label) {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!match) throw new Error(`${label} must start with YAML frontmatter.`);
-  try {
-    return { frontmatter: yaml.load(match[1]) || {}, body: match[2] };
-  } catch (error) {
-    throw new Error(`Invalid YAML frontmatter in ${label}: ${error.message}`);
-  }
+function agentRelPath(name) {
+  // Manifest keys are POSIX so the file is portable across platforms.
+  return `.codex/agents/${name}.toml`;
 }
 
 function normalizeModelIntent(value) {
@@ -82,51 +115,30 @@ function normalizeModelIntent(value) {
   return aliases[intent] || intent;
 }
 
-export function resolveCodexModelIntent(agent) {
-  const explicit = normalizeModelIntent(agent.modelIntent || agent.model_intent || agent.codex?.modelIntent);
+/**
+ * `modelIntent` frontmatter wins; otherwise derive from the Claude tier so
+ * agents that predate the key still get sensible reasoning effort.
+ */
+export function resolveCodexModelIntent(frontmatter = {}) {
+  const explicit = normalizeModelIntent(frontmatter.modelIntent || frontmatter.model_intent);
   if (MODEL_INTENTS.has(explicit)) return explicit;
-  const legacyModel = String(agent.model || '').trim().toLowerCase();
-  if (legacyModel === 'haiku') return 'lightweight';
-  if (legacyModel === 'opus') return 'planning';
+  const tier = String(frontmatter.model || '').trim().toLowerCase();
+  if (tier === 'haiku') return 'lightweight';
+  if (tier === 'opus') return 'planning';
   return 'implementation';
 }
 
-async function readManifest(targetDir) {
-  const manifestPath = path.join(targetDir, MANIFEST_PATH);
-  if (!(await fs.pathExists(manifestPath))) {
-    return { generator: SKILL_GENERATOR, version: VERSION, files: {}, agents: {} };
-  }
+function parseAgentFile(raw, label) {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) throw new Error(`[toh-framework] ${label} must start with YAML frontmatter.`);
   try {
-    const manifest = await fs.readJson(manifestPath);
-    if (manifest.generator !== SKILL_GENERATOR || typeof manifest.files !== 'object') {
-      return { generator: SKILL_GENERATOR, version: VERSION, files: {}, agents: {} };
-    }
-    return { agents: {}, ...manifest };
-  } catch {
-    return { generator: SKILL_GENERATOR, version: VERSION, files: {}, agents: {} };
+    return { frontmatter: yaml.load(match[1]) || {}, body: match[2] };
+  } catch (error) {
+    throw new Error(`[toh-framework] Invalid YAML frontmatter in ${label}: ${error.message}`);
   }
 }
 
-async function writeManifest(targetDir, manifest) {
-  const manifestPath = path.join(targetDir, MANIFEST_PATH);
-  await fs.ensureDir(path.dirname(manifestPath));
-  await fs.writeJson(manifestPath, manifest, { spaces: 2 });
-}
-
-async function updateManifest(targetDir, changes) {
-  const manifest = await readManifest(targetDir);
-  await writeManifest(targetDir, { ...manifest, ...changes });
-}
-
-async function fileMatchesHash(filePath, expectedHash) {
-  if (!expectedHash || !(await fs.pathExists(filePath))) return false;
-  try {
-    return sha256(await fs.readFile(filePath)) === expectedHash;
-  } catch {
-    return false;
-  }
-}
-
+/** Read the installed Toh agents from .toh/agents/ (the runtime source of truth). */
 export async function readAgentCatalog(targetDir) {
   const agentsDir = path.join(targetDir, '.toh', 'agents');
   if (!(await fs.pathExists(agentsDir))) return [];
@@ -137,12 +149,12 @@ export async function readAgentCatalog(targetDir) {
   const agents = [];
   for (const file of files) {
     const sourcePath = path.join(agentsDir, file);
-    const { frontmatter, body } = parseFrontmatterDocument(await fs.readFile(sourcePath, 'utf8'), sourcePath);
+    const { frontmatter, body } = parseAgentFile(await fs.readFile(sourcePath, 'utf-8'), sourcePath);
     const name = String(frontmatter.name || file.replace(/\.md$/, '')).trim();
-    if (!SKILL_NAME_RE.test(name)) continue;
+    if (!AGENT_NAME_RE.test(name)) continue;
     agents.push({
       name,
-      description: String(frontmatter.description || `${name} Toh Framework agent`).replace(/\s+/g, ' ').trim().slice(0, 1024),
+      description: String(frontmatter.description || `${name} (Toh Framework agent)`).replace(/\s+/g, ' ').trim().slice(0, 1024),
       body,
       tools: Array.isArray(frontmatter.tools) ? frontmatter.tools.map(String) : [],
       skills: Array.isArray(frontmatter.skills) ? frontmatter.skills.map(String) : [],
@@ -158,27 +170,32 @@ function isReadOnlyAgent(agent) {
   return agent.tools.length > 0 && agent.tools.every((tool) => READ_ONLY_TOOLS.has(tool));
 }
 
+/** One Toh agent → one Codex agent TOML document (validated before it is returned). */
 export function translateAgentToCodex(agent) {
-  const routing = CODEX_MODEL_ROUTING[agent.modelIntent] || CODEX_MODEL_ROUTING.implementation;
+  const effort = CODEX_REASONING_EFFORT[agent.modelIntent] || CODEX_REASONING_EFFORT.implementation;
   const skillRefs = agent.skills.length
-    ? `\nAssociated Toh skills:\n${agent.skills.map((skill) => `- .toh/skills/${skill}/SKILL.md`).join('\n')}`
+    ? `\nAssociated Toh skills (read before acting):\n${agent.skills.map((skill) => `- .toh/skills/${skill}/SKILL.md`).join('\n')}`
     : '';
   const toolBoundary = agent.tools.length
     ? `\nSource tool boundary: ${agent.tools.join(', ')}. Do not widen it.`
     : '';
-  const triggerHints = agent.triggers.length
-    ? `\nRouting hints: ${agent.triggers.join('; ')}`
-    : '';
-  const turnHint = agent.maxTurns === undefined
-    ? ''
-    : `\nSource turn budget hint: ${agent.maxTurns}.`;
-  const instructions = `${agent.body.trim()}\n\n## Codex runtime contract\n- Own only the task and files assigned by the parent.\n- Return Status, Result, Evidence, Files, and Blockers.\n- Run the supplied checkpoint; the parent re-runs it before changing .toh/plan.md.\n- Keep dependent work sequential and return to the parent when complete.${skillRefs}${toolBoundary}${triggerHints}${turnHint}`;
+  const triggerHints = agent.triggers.length ? `\nRouting hints: ${agent.triggers.join('; ')}` : '';
+  const turnHint = agent.maxTurns === undefined ? '' : `\nSource turn budget hint: ${agent.maxTurns}.`;
+  const instructions = `${agent.body.trim()}
+
+## Codex runtime contract
+- Own only the task and files assigned by the parent.
+- Return Status, Result, Evidence, Files, and Blockers.
+- Run the supplied checkpoint; the parent re-runs it before changing .toh/plan.md.
+- Keep dependent work sequential and return to the parent when complete.${skillRefs}${toolBoundary}${triggerHints}${turnHint}`;
+
   const content = [
-    `# Toh model intent: ${agent.modelIntent}`,
+    `# Generated by Toh Framework v${VERSION} from .toh/agents/${agent.name}.md`,
+    `# Toh model intent: ${agent.modelIntent}. No \`model\` key on purpose: the agent`,
+    `# inherits the parent session's model, so your one config choice governs it.`,
     `name = ${JSON.stringify(agent.name)}`,
     `description = ${JSON.stringify(agent.description)}`,
-    `model = ${JSON.stringify(routing.model)}`,
-    `model_reasoning_effort = ${JSON.stringify(routing.model_reasoning_effort)}`,
+    `model_reasoning_effort = ${JSON.stringify(effort)}`,
     `sandbox_mode = ${JSON.stringify(isReadOnlyAgent(agent) ? 'read-only' : 'workspace-write')}`,
     `developer_instructions = ${JSON.stringify(instructions.trim())}`,
     ''
@@ -186,489 +203,964 @@ export function translateAgentToCodex(agent) {
   try {
     parseToml(content);
   } catch (error) {
-    throw new Error(`Invalid generated Codex agent TOML for ${agent.name}: ${error.message}`);
+    throw new Error(`[toh-framework] Generated Codex agent TOML for ${agent.name} is invalid: ${error.message}`);
   }
   return content;
 }
 
-export async function readCommandCatalog(srcDir) {
-  const commandsDir = path.join(srcDir, 'commands');
-  if (!(await fs.pathExists(commandsDir))) {
-    throw new Error(`TOH command source not found: ${commandsDir} — is this a complete toh-framework package?`);
-  }
-  const files = (await fs.readdir(commandsDir))
-    .filter((file) => file.endsWith('.md') && file !== 'README.md')
-    .sort();
-  const commands = [];
-  for (const file of files) {
-    const sourcePath = path.join(commandsDir, file);
-    const raw = await fs.readFile(sourcePath, 'utf8');
-    const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-    if (!match) continue;
-    let frontmatter;
-    try {
-      frontmatter = yaml.load(match[1]) || {};
-    } catch (error) {
-      throw new Error(`Invalid YAML frontmatter in src/commands/${file}: ${error.message}`);
+async function readCodexManifest(targetDir) {
+  const manifestPath = path.join(targetDir, CODEX_MANIFEST_PATH);
+  const empty = { generator: MANIFEST_GENERATOR, version: VERSION, agents: {} };
+  if (!(await fs.pathExists(manifestPath))) return empty;
+  try {
+    const manifest = await fs.readJson(manifestPath);
+    if (manifest.generator !== MANIFEST_GENERATOR || typeof manifest.agents !== 'object' || manifest.agents === null) {
+      return empty;
     }
-    const command = String(frontmatter.command || '').trim();
-    const skillName = command.replace(/^\//, '');
-    if (!SKILL_NAME_RE.test(skillName)) continue;
-    commands.push({
-      kind: 'command',
-      skillName,
-      command,
-      aliases: Array.isArray(frontmatter.aliases) ? frontmatter.aliases.map(String) : [],
-      description: String(frontmatter.description || '').trim(),
-      skills: Array.isArray(frontmatter.skills) ? frontmatter.skills.map(String) : [],
-      file,
-      sourcePath: `.toh/commands/${file}`
-    });
+    return { ...empty, ...manifest };
+  } catch {
+    return empty;
   }
-  if (commands.length === 0) throw new Error(`No TOH commands found in ${commandsDir} — cannot generate Codex skills.`);
-  return commands;
 }
 
-export async function readSupportingSkillCatalog(srcDir) {
-  const skillsDir = path.join(srcDir, 'skills');
-  if (!(await fs.pathExists(skillsDir))) {
-    throw new Error(`TOH skill source not found: ${skillsDir} — is this a complete toh-framework package?`);
-  }
-  const entries = (await fs.readdir(skillsDir, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const skills = [];
-  for (const entry of entries) {
-    const file = path.join(skillsDir, entry.name, 'SKILL.md');
-    if (!(await fs.pathExists(file))) continue;
-    const raw = await fs.readFile(file, 'utf8');
-    const frontmatter = raw.startsWith('---') ? parseFrontmatterDocument(raw, file).frontmatter : {};
-    const name = String(frontmatter.name || entry.name).trim();
-    if (!SKILL_NAME_RE.test(name) || name !== entry.name) continue;
-    const heading = raw.match(/^#\s+(.+)$/m)?.[1]?.trim();
-    skills.push({
-      kind: 'skill',
-      skillName: name,
-      description: String(frontmatter.description || heading || `${name} supporting skill`).trim(),
-      file: relativePath('skills', entry.name, 'SKILL.md'),
-      sourcePath: `.toh/skills/${entry.name}/SKILL.md`
-    });
-  }
-  if (skills.length === 0) throw new Error(`No TOH supporting skills found in ${skillsDir} — cannot generate Codex skills.`);
-  return skills;
+async function writeCodexManifest(targetDir, manifest) {
+  const manifestPath = path.join(targetDir, CODEX_MANIFEST_PATH);
+  await fs.ensureDir(path.dirname(manifestPath));
+  await fs.writeJson(manifestPath, manifest, { spaces: 2 });
 }
 
-function wrapperFrontmatter(entry) {
-  return yaml.dump({
-    name: entry.skillName,
-    description: entry.description.slice(0, 1024),
-    metadata: {
-      generator: SKILL_GENERATOR,
-      version: VERSION,
-      kind: entry.kind,
-      source: entry.sourcePath
-    }
-  }, { lineWidth: -1, noRefs: true }).trimEnd();
-}
-
-function renderCommandWrapper(entry) {
-  const triggers = [entry.command, ...entry.aliases].map((command) => `\`${command}\``).join(', ');
-  const supporting = entry.skills.length
-    ? `2. Read every supporting skill first:\n${entry.skills.map((skill) => `   - .toh/skills/${skill}/SKILL.md`).join('\n')}\n3. Execute the workflow in this session, in order.`
-    : '2. Execute the workflow in this session, in order.';
-  return `---\n${wrapperFrontmatter(entry)}\n---\n\n# ${entry.command} - ${entry.description}\n\n> Native Codex CLI skill wrapper for the TOH Framework workflow ${entry.command}.\n> Read the runtime workflow from \`${entry.sourcePath}\`; do not duplicate it here.\n\n## When to use\n\n${entry.description}. Triggers: ${triggers}, or any plain-language request that matches.\n\n## Workflow\n\n1. Read the full workflow definition: \`${entry.sourcePath}\`\n${supporting}\n\n## Codex execution\n\n- Delegate independent plan tasks to the matching \`.codex/agents/<name>.toml\`; keep dependent edits sequential.\n- The parent owns checkpoint verification and updates \`.toh/plan.md\` only after quoting passing output.\n- Codex has no Toh Stop hook; resume from the first unchecked task when a session ends.\n- Agent TOML files own model and reasoning routing; do not reinterpret Claude model names.\n`;
-}
-
-async function readWrapperCatalog(srcDir) {
-  const commands = await readCommandCatalog(srcDir);
-  const names = new Set();
-  for (const command of commands) {
-    if (names.has(command.skillName)) throw new Error(`Duplicate Codex skill name: ${command.skillName}`);
-    names.add(command.skillName);
+async function fileMatchesHash(filePath, expectedHash) {
+  if (!expectedHash || !(await fs.pathExists(filePath))) return false;
+  try {
+    return sha256(await fs.readFile(filePath)) === expectedHash;
+  } catch {
+    return false;
   }
-  return commands;
 }
 
-export async function installCodexSkills(targetDir, srcDir) {
-  const entries = await readWrapperCatalog(srcDir);
-  const previous = await readManifest(targetDir);
-  const nextFiles = Object.fromEntries(
-    Object.entries(previous.files || {}).filter(([, record]) => record.kind && record.kind !== 'command')
-  );
-  const wanted = new Set(entries.map((entry) => skillFileRelativePath(entry.skillName)));
-  const root = path.join(targetDir, CODEX_SKILLS_DIR);
-  await fs.ensureDir(root);
-
-  for (const [relative, record] of Object.entries(previous.files || {})) {
-    if (!relative.startsWith(`${CODEX_SKILLS_DIR}/`) || wanted.has(relative) || (record.kind && record.kind !== 'command')) continue;
-    const filePath = path.join(targetDir, relative);
-    if (await fileMatchesHash(filePath, record.sha256)) {
-      await fs.remove(filePath);
-      const parent = path.dirname(filePath);
-      if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);
-    }
-  }
-
-  const installed = [];
-  for (const entry of entries) {
-    const relative = skillFileRelativePath(entry.skillName);
-    const filePath = path.join(targetDir, relative);
-    const content = renderCommandWrapper(entry);
-    const existingRecord = previous.files?.[relative];
-    const canReplace = !(await fs.pathExists(filePath)) || await fileMatchesHash(filePath, existingRecord?.sha256);
-    if (!canReplace) continue;
-    await fs.ensureDir(path.dirname(filePath));
-    await fs.writeFile(filePath, content);
-    nextFiles[relative] = { sha256: sha256(content), kind: entry.kind, source: entry.sourcePath };
-    installed.push(entry.skillName);
-  }
-  await writeManifest(targetDir, { ...previous, files: nextFiles, version: VERSION });
-  return installed;
-}
-
+/**
+ * Write .codex/agents/<name>.toml for every agent in .toh/agents/.
+ * Ownership-safe: a file we did not write (or that the user edited since) is
+ * kept as-is and reported; stale files we wrote for agents that no longer
+ * exist are removed only when still byte-identical to what we wrote.
+ */
 export async function installCodexAgents(targetDir) {
-  const agentsDir = path.join(targetDir, '.toh', 'agents');
-  if (!(await fs.pathExists(agentsDir))) return [];
   const agents = await readAgentCatalog(targetDir);
-  const previous = await readManifest(targetDir);
+  if (agents.length === 0) return { installed: [], kept: [], total: 0 };
+
+  const previous = await readCodexManifest(targetDir);
   const previousAgents = previous.agents || {};
   const nextAgents = {};
-  const wanted = new Set(agents.map((agent) => agentFileRelativePath(agent.name)));
-  const root = path.join(targetDir, CODEX_AGENTS_DIR);
-  await fs.ensureDir(root);
+  const wanted = new Set(agents.map((agent) => agentRelPath(agent.name)));
+  await fs.ensureDir(path.join(targetDir, CODEX_AGENTS_DIR));
 
-  for (const [relative, record] of Object.entries(previousAgents)) {
-    if (!relative.startsWith(`${CODEX_AGENTS_DIR}/`) || wanted.has(relative)) continue;
-    const filePath = path.join(targetDir, relative);
-    if (await fileMatchesHash(filePath, record.sha256)) {
-      await fs.remove(filePath);
-      const parent = path.dirname(filePath);
-      if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);
-    }
+  for (const [rel, record] of Object.entries(previousAgents)) {
+    if (wanted.has(rel) || !rel.startsWith('.codex/agents/')) continue;
+    const filePath = path.join(targetDir, rel);
+    if (await fileMatchesHash(filePath, record.sha256)) await fs.remove(filePath);
   }
 
   const installed = [];
+  const kept = [];
   for (const agent of agents) {
-    const relative = agentFileRelativePath(agent.name);
-    const filePath = path.join(targetDir, relative);
+    const rel = agentRelPath(agent.name);
+    const filePath = path.join(targetDir, rel);
     const content = translateAgentToCodex(agent);
-    const existingRecord = previousAgents[relative];
-    const canReplace = !(await fs.pathExists(filePath)) || await fileMatchesHash(filePath, existingRecord?.sha256);
-    if (!canReplace) {
-      if (existingRecord) nextAgents[relative] = existingRecord;
+    const record = previousAgents[rel];
+    const exists = await fs.pathExists(filePath);
+    if (exists && !(await fileMatchesHash(filePath, record?.sha256))) {
+      // Not ours, or edited since we wrote it — the user's file wins.
+      if (record) nextAgents[rel] = record;
+      kept.push(agent.name);
       continue;
     }
-    await fs.ensureDir(path.dirname(filePath));
     await fs.writeFile(filePath, content);
-    nextAgents[relative] = { sha256: sha256(content), source: `.toh/agents/${agent.name}.md`, modelIntent: agent.modelIntent };
+    nextAgents[rel] = { sha256: sha256(content), source: `.toh/agents/${agent.name}.md`, modelIntent: agent.modelIntent };
     installed.push(agent.name);
   }
-  await writeManifest(targetDir, { ...previous, agents: nextAgents, version: VERSION });
-  return installed;
+  await writeCodexManifest(targetDir, { ...previous, version: VERSION, agents: nextAgents });
+  return { installed, kept, total: agents.length };
 }
 
-function agentRoster(srcDir) {
-  const agentsDir = path.join(srcDir, 'agents');
-  return fs.pathExists(agentsDir).then(async (exists) => {
-    if (!exists) return '';
-    const rows = [];
-    for (const file of (await fs.readdir(agentsDir)).sort()) {
-      if (!file.endsWith('.md') || file === 'README.md') continue;
-      const source = path.join(agentsDir, file);
-      const { frontmatter } = parseFrontmatterDocument(await fs.readFile(source, 'utf8'), source);
-      const name = frontmatter.name || file.replace(/\.md$/, '');
-      const description = String(frontmatter.description || '').replace(/\s+/g, ' ').trim();
-      const role = description.match(/^(.*?)\.(?:\s|$)/)?.[1] || description;
-      rows.push(`| \`${name}\` | ${frontmatter.model || 'sonnet'} | ${role} |`);
+/**
+ * `toh uninstall --ide codex`: remove ONLY the native agent files this
+ * installer wrote (hash-verified) plus the manifest. AGENTS.md and
+ * .codex/config.toml are shared surfaces (ZCode reads AGENTS.md too) and are
+ * handled by the full uninstall planner in installer/uninstall.js.
+ */
+export async function uninstallCodex(targetDir, options = {}) {
+  const { dryRun = false, backup = true } = options;
+  const manifest = await readCodexManifest(targetDir);
+  const removed = [];
+  const kept = [];
+  for (const [rel, record] of Object.entries(manifest.agents || {})) {
+    if (!rel.startsWith('.codex/agents/') || !rel.endsWith('.toml')) continue;
+    const filePath = path.join(targetDir, rel);
+    if (!(await fs.pathExists(filePath))) continue;
+    if (await fileMatchesHash(filePath, record.sha256)) removed.push({ rel, filePath });
+    else kept.push(rel);
+  }
+  const result = {
+    removedAgents: removed.map((item) => path.basename(item.rel, '.toml')).sort(),
+    keptAgents: kept.map((rel) => path.basename(rel, '.toml')).sort(),
+    dryRun,
+    backupPath: null
+  };
+  if (dryRun) return result;
+
+  if (backup && removed.length > 0) {
+    const backupDir = path.join(targetDir, '.toh-uninstall-backup', `codex-agents-${Date.now()}`);
+    for (const item of removed) {
+      const destination = path.join(backupDir, item.rel);
+      await fs.ensureDir(path.dirname(destination));
+      await fs.copy(item.filePath, destination);
     }
-    return ['| Agent | Model | Role |', '|-------|-------|------|', ...rows].join('\n');
-  });
+    result.backupPath = backupDir;
+  }
+  for (const item of removed) await fs.remove(item.filePath);
+  const agentsDir = path.join(targetDir, CODEX_AGENTS_DIR);
+  if (await fs.pathExists(agentsDir) && (await fs.readdir(agentsDir)).length === 0) await fs.remove(agentsDir);
+  const manifestPath = path.join(targetDir, CODEX_MANIFEST_PATH);
+  if (await fs.pathExists(manifestPath)) await fs.remove(manifestPath);
+  return result;
 }
 
-function renderSkillTable(entries) {
-  return [
-    '| Skill | Use it to |',
-    '|-------|-----------|',
-    ...entries.map((entry) => `| \`$${entry.skillName}\` | ${entry.description} |`)
-  ].join('\n');
+/**
+ * Create memory template files for the Memory System (v1.7.0)
+ * Now includes architecture.md and components.md for Code Architecture Tracking
+ */
+async function createMemoryFiles(memoryDir, language = 'en') {
+  const timestamp = new Date().toISOString().split('T')[0];
+
+  const activeContent = language === 'th'
+    ? `# 🔥 Active Task\n\n## Current Focus\n[รอคำสั่งจากผู้ใช้]\n\n## In Progress\n- (ยังไม่มี)\n\n## Next Steps\n- รอคำสั่งจากผู้ใช้\n\n---\n*Last updated: ${timestamp}*\n`
+    : `# 🔥 Active Task\n\n## Current Focus\n[Waiting for user command]\n\n## In Progress\n- (none)\n\n## Next Steps\n- Waiting for user command\n\n---\n*Last updated: ${timestamp}*\n`;
+
+  const summaryContent = language === 'th'
+    ? `# 📋 Project Summary\n\n## Project Overview\n- Name: [ชื่อโปรเจค]\n- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (ยังไม่มี)\n\n## Important Notes\n- ใช้ Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`
+    : `# 📋 Project Summary\n\n## Project Overview\n- Name: [Project Name]\n- Tech Stack: Next.js 16, Tailwind, shadcn/ui, Zustand, Supabase\n\n## Completed Features\n- (none)\n\n## Important Notes\n- Using Toh Framework v${VERSION}\n\n---\n*Last updated: ${timestamp}*\n`;
+
+  const decisionsContent = language === 'th'
+    ? `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${timestamp} | ใช้ Toh Framework | AI-Orchestration Driven Development |\n\n---\n*Last updated: ${timestamp}*\n`
+    : `# 🧠 Key Decisions\n\n## Architecture Decisions\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${timestamp} | Use Toh Framework | AI-Orchestration Driven Development |\n\n---\n*Last updated: ${timestamp}*\n`;
+
+  // architecture.md (v1.7.0 - Code Architecture Tracking)
+  const architectureContent = `# 🏗️ Project Architecture
+
+> Semantic overview of project structure for AI context loading
+> **Update:** After any structural changes (new pages, routes, modules, services)
+
+---
+
+## 📁 Entry Points
+
+| Type | Path | Purpose |
+|------|------|---------|
+| Main | \`app/page.tsx\` | Landing/Home page |
+| Layout | \`app/layout.tsx\` | Root layout with providers |
+| API | \`app/api/\` | API routes (if any) |
+
+---
+
+## 🗂️ Core Modules
+
+### \`/app\` - Pages & Routes
+
+| Route | File | Description | Key Functions |
+|-------|------|-------------|---------------|
+| \`/\` | \`app/page.tsx\` | Landing page | - |
+
+### \`/components\` - UI Components
+
+| Folder | Purpose | Key Files |
+|--------|---------|-----------|
+| \`ui/\` | shadcn/ui components | button, card, input, etc. |
+| \`layout/\` | Layout components | Navbar, Sidebar, Footer |
+| \`features/\` | Feature-specific | Per feature components |
+
+### \`/lib\` - Utilities & Services
+
+| File | Purpose | Key Functions |
+|------|---------|---------------|
+| \`lib/utils.ts\` | Utility functions | cn(), formatDate() |
+
+---
+
+## 🔄 Data Flow Pattern
+
+User Action → Component → Zustand Store → API/Lib → Database (Supabase)
+
+---
+
+## 🔌 External Services
+
+| Service | Purpose | Config Location |
+|---------|---------|-----------------|
+| Supabase | Backend (Auth, DB) | \`lib/supabase/\` |
+
+---
+
+## 📝 Notes
+
+- Using Toh Framework v${VERSION}
+- Architecture tracking enabled
+
+---
+*Last updated: ${timestamp}*
+`;
+
+  // components.md (v1.7.0 - Component Registry)
+  const componentsContent = `# 📦 Component Registry
+
+> Quick reference for all project components, hooks, and utilities
+> **Update:** After creating/modifying any component, hook, or utility
+
+---
+
+## 📄 Pages
+
+| Route | File | Description | Key Dependencies |
+|-------|------|-------------|------------------|
+| \`/\` | \`app/page.tsx\` | Landing page | - |
+
+---
+
+## 🧩 Components
+
+### Layout Components
+
+| Component | Location | Key Props | Used By |
+|-----------|----------|-----------|---------|
+| (none yet) | - | - | - |
+
+### Feature Components
+
+| Component | Location | Key Props | Used By |
+|-----------|----------|-----------|---------|
+| (none yet) | - | - | - |
+
+---
+
+## 🪝 Custom Hooks
+
+| Hook | Location | Purpose | Returns |
+|------|----------|---------|---------|
+| (none yet) | - | - | - |
+
+---
+
+## 🏪 Zustand Stores
+
+| Store | Location | State Shape | Key Actions |
+|-------|----------|-------------|-------------|
+| (none yet) | - | - | - |
+
+---
+
+## 🛠️ Utility Functions
+
+| Function | Location | Purpose | Params |
+|----------|----------|---------|--------|
+| cn | \`lib/utils.ts\` | Merge Tailwind classes | \`...inputs\` |
+
+---
+
+## 📊 Component Statistics
+
+| Category | Count |
+|----------|-------|
+| Pages | 1 |
+| Components | 0 |
+| Hooks | 0 |
+| Stores | 0 |
+
+---
+*Last updated: ${timestamp}*
+`;
+
+  // changelog.md (v1.8.0 - Session Changelog)
+  const changelogContent = `# 📝 Session Changelog
+
+## [Current Session] - ${timestamp}
+
+### Changes Made
+| Agent | Action | File/Component |
+|-------|--------|----------------|
+| - | - | - |
+
+### Next Session TODO
+- [ ] Continue from: [last task]
+
+---
+*Auto-updated by agents after each task*
+`;
+
+  // agents-log.md (v1.8.0 - Agent Activity Log)
+  const agentsLogContent = `# 🤖 Agents Activity Log
+
+## Recent Activity
+| Time | Agent | Task | Status | Files |
+|------|-------|------|--------|-------|
+| - | - | - | - | - |
+
+## Agent Statistics
+- Total Tasks: 0
+- Success Rate: 100%
+
+---
+*Auto-updated by agents during execution*
+`;
+
+  // Seed the 7 memory files - ONLY where absent (issue #2: a reinstall
+  // must never clobber live memory; even an empty file is the user's).
+  await seedFileIfAbsent(path.join(memoryDir, 'active.md'), activeContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'summary.md'), summaryContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'decisions.md'), decisionsContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'architecture.md'), architectureContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'components.md'), componentsContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'changelog.md'), changelogContent);
+  await seedFileIfAbsent(path.join(memoryDir, 'agents-log.md'), agentsLogContent);
 }
 
-function runtimeIdentity(ide, probedSubagents) {
-  const name = ide === 'zcode' ? 'ZCode' : 'Codex CLI';
-  const capabilities = probedSubagents
-    ? 'Native subagents are available per the installed Codex feature probe; delegate independent work and keep dependent work sequential.'
-    : ide === 'zcode'
-      ? 'Native subagents are not verified for this runtime; execute the TOH LOOP sequentially.'
-      : 'Native Codex CLI subagents and workflows are available; delegate independent work and keep dependent work sequential.';
-  return `Runtime Identity: you are running in ${name}. ${capabilities} Implement -> run the story checkpoint -> quote actual output -> fix if red (max 5 tries, 3 consecutive failures = mark BLOCKED and move on) -> tick the checkbox -> next story without asking. Interrupted runs resume from the first unchecked task in .toh/plan.md unless the plan has terminal status. Close every stage with Status/Result/Evidence/exactly 3 next actions.`;
+/**
+ * Build and write the root AGENTS.md marker block.
+ *
+ * Shared surface: Codex reads AGENTS.md as project memory, and so does ZCode
+ * (Z.ai) — same filename, same marker block, three runtime sentences apart.
+ * Exported so zcode.js reuses this instead of forking a second generator.
+ *
+ * Content outside <!-- TOH-FRAMEWORK-START/END --> is always preserved.
+ * Returns the byte size of the generated block.
+ */
+export async function writeAgentsMd(targetDir, srcDir, language = 'en', ide = 'codex', options = {}) {
+  // v2.1.x (issue #2 problem 2): the Runtime Identity sentence may claim
+  // probed native subagents ONLY when the caller says codex is the SOLE
+  // reader/writer of AGENTS.md (options.allowProbedSubagents — install.js
+  // sets it to false whenever ZCode is selected now or was declared earlier)
+  // AND the live probe of the installed codex CLI verified the feature.
+  // Probe failure, ZCode co-install, or zcode-only installs all keep the
+  // conservative sentence byte-identical.
+  let probedSubagents = false;
+  if (ide === 'codex' && options.allowProbedSubagents === true) {
+    const probe = await probeCodexCapabilitiesCached();
+    probedSubagents = probe.ok === true && probe.overrides?.subagents === 'native';
+  }
+  // Read all agents — v2.1 (W1): embed a compact roster table ONLY.
+  // Full agent bodies used to be inlined here, which pushed AGENTS.md to
+  // ~117 KB while Codex silently truncates project docs at 32 KiB combined —
+  // 6/8 agents and everything after them were dropped without warning.
+  // Full specs live in .toh/agents/ and are read at runtime instead (the same
+  // .toh/ runtime-read pattern cursor.js uses).
+  const srcAgentsDir = path.join(srcDir, 'agents');
+  let agentRoster = '';
+
+  if (await fs.pathExists(srcAgentsDir)) {
+    const agentFiles = (await fs.readdir(srcAgentsDir)).sort();
+    const rows = [];
+    for (const file of agentFiles) {
+      if (file.endsWith('.md') && file !== 'README.md') {
+        const raw = await fs.readFile(path.join(srcAgentsDir, file), 'utf-8');
+        const agentName = file.replace('.md', '');
+        const fmMatch = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (!fmMatch) {
+          throw new Error(`[toh-framework] src/agents/${file} has no YAML frontmatter — cannot build the Codex agent roster.`);
+        }
+        // Agents carry superset frontmatter (name/description/tools/model/
+        // skills/triggers/...). The roster needs name, model and description
+        // only; a parse failure here is a packaging bug — let it throw.
+        const fm = yaml.load(fmMatch[1]) || {};
+        const desc = String(fm.description || '').replace(/\s+/g, ' ').trim();
+        // Role = first sentence of the description ('.md' never terminates —
+        // boundary is a period followed by whitespace/end).
+        const roleMatch = desc.match(/^(.*?)\.(?:\s|$)/);
+        const role = roleMatch ? roleMatch[1].trim() : desc;
+        // 'Delegate when' sentence (colon optional — root-cause-debugger
+        // phrases it without one), same boundary rule.
+        const delegateMatch = desc.match(/Delegate when:?\s*([\s\S]*?)(?:\.(?:\s|$)|$)/);
+        const delegateWhen = delegateMatch ? delegateMatch[1].trim() : '(see agent file)';
+        rows.push(`| \`${fm.name || agentName}\` | ${fm.model || 'sonnet'} | ${role} | ${delegateWhen} |`);
+      }
+    }
+    agentRoster = [
+      '| Agent | Model | Role | Delegate when |',
+      '|-------|-------|------|---------------|',
+      ...rows
+    ].join('\n');
+  }
+
+  // v2.0: run the assembled markdown through the shared marker transform so any
+  // <!-- tfw:claude --> blocks in embedded command/agent markdown are removed and
+  // <!-- tfw:fallback --> blocks are unwrapped for Codex (idempotent, additive).
+  const agentsMd = transformCommand(
+    language === 'th'
+      ? generateAgentsMdTH(agentRoster, ide, probedSubagents)
+      : generateAgentsMdEN(agentRoster, ide, probedSubagents),
+    ide
+  );
+
+  // W1 hard size assertion: never ship a block Codex would silently truncate.
+  const tohBlockBytes = Buffer.byteLength(agentsMd, 'utf-8');
+  if (tohBlockBytes > MAX_TOH_BLOCK_BYTES) {
+    const err = new Error(
+      `[toh-framework] Generated AGENTS.md TOH block is ${tohBlockBytes} bytes — over the ` +
+      `${MAX_TOH_BLOCK_BYTES}-byte hard budget (Codex truncates project docs at 32 KiB combined ` +
+      `with any user content). Refusing to install a silently-truncated AGENTS.md; slim the ` +
+      `generator in installer/ide-handlers/codex.js.`
+    );
+    // Hard size budget: over-budget output would be silently truncated by
+    // Codex. install.js aborts the whole install (non-zero exit) on fatal errors.
+    err.fatal = true;
+    throw err;
+  }
+
+  // Check if AGENTS.md exists
+  const agentsPath = path.join(targetDir, 'AGENTS.md');
+  
+  if (await fs.pathExists(agentsPath)) {
+    // Read existing content
+    let existing = await fs.readFile(agentsPath, 'utf-8');
+    
+    // Replace TOH section if exists, otherwise append
+    if (existing.includes('<!-- TOH-FRAMEWORK-START -->')) {
+      existing = existing.replace(
+        /<!-- TOH-FRAMEWORK-START -->[\s\S]*<!-- TOH-FRAMEWORK-END -->/,
+        agentsMd.trim()
+      );
+      await fs.writeFile(agentsPath, existing);
+    } else {
+      await fs.appendFile(agentsPath, '\n\n' + agentsMd);
+    }
+  } else {
+    await fs.writeFile(agentsPath, agentsMd);
+  }
+
+  return tohBlockBytes;
 }
 
-function generateAgentsBlock(entries, language, ide, roster, probedSubagents) {
-  const thai = language === 'th';
-  const isCodex = ide === 'codex';
-  const title = thai
-    ? `คุณคือ **Toh Framework Agent** ที่รันอยู่บน ${isCodex ? 'Codex CLI' : 'ZCode'} - ช่วย Solo Developer สร้าง SaaS จนจบ`
-    : `You are the **Toh Framework Agent** running in ${isCodex ? 'Codex CLI' : 'ZCode'}, helping solo developers build SaaS systems by themselves.`;
-  const state = thai
-    ? '- `.toh/plan.md` + `.toh/progress.md` - แผนคือไฟล์และใช้ resume จาก task แรกที่ยังไม่ติ๊ก\n- `.toh/memory/` - memory 7 ไฟล์'
-    : '- `.toh/plan.md` + `.toh/progress.md` - the plan is a file; resume from the first unchecked task\n- `.toh/memory/` - 7-file memory';
-  const commandNote = isCodex
-    ? '- Invoke a workflow with `$<skill>` or browse with `/skills`.\n- Native project agents live in `.codex/agents/*.toml` and define model, reasoning, and sandbox.\n- If the user types `/toh-*`, interpret it as a backward-compatible plain-text request, not a native slash command.'
-    : '- The same 14 workflows are available from `.agents/commands/` and `.agents/skills/`.\n- ZCode subagent support is deliberately not claimed until it is verified live.';
-  return `${AGENTS_BLOCK_START}
-# Toh Framework
+export async function setupCodex(targetDir, srcDir, language = 'en', options = {}) {
+  // Create .toh/memory directory structure (v1.1.0 - Memory System)
+  const memoryDir = path.join(targetDir, '.toh', 'memory');
+  await fs.ensureDir(path.join(memoryDir, 'archive'));
+  await createMemoryFiles(memoryDir, language);
+
+  await writeAgentsMd(targetDir, srcDir, language, 'codex', options);
+
+  // W1 belt-and-braces: project-scoped .codex/config.toml raising Codex's
+  // project-doc budget (officially supported key, per config-reference), so
+  // even a large pre-existing user AGENTS.md above our marker cannot push the
+  // combined file past the read cutoff. NEVER overwrite a user's config.toml.
+  const codexConfigPath = path.join(targetDir, '.codex', 'config.toml');
+  if (!(await fs.pathExists(codexConfigPath))) {
+    await fs.ensureDir(path.dirname(codexConfigPath));
+    await fs.writeFile(
+      codexConfigPath,
+      `# Generated by Toh Framework v${VERSION}\n` +
+      `# Raises Codex's per-project doc read budget (default 32768 bytes) so the\n` +
+      `# full AGENTS.md — including the Toh Framework block — is always loaded.\n` +
+      `# Safe to edit; the installer never overwrites an existing config.toml.\n` +
+      `project_doc_max_bytes = 131072\n`
+    );
+  }
+
+  // v2.2: native Codex agents, one TOML per Toh agent (ownership-safe).
+  const agents = await installCodexAgents(targetDir);
+  const keptNote = agents.kept.length ? `, ${agents.kept.length} kept as edited` : '';
+  return `AGENTS.md + .codex/agents/ (${agents.installed.length}/${agents.total} agents${keptNote})`;
+}
+
+function generateAgentsMdEN(agentRoster, ide = 'codex', probedSubagents = false) {
+  const rt = AGENTS_MD_RUNTIMES[ide] || AGENTS_MD_RUNTIMES.codex;
+  return `<!-- TOH-FRAMEWORK-START -->
+# 🎯 Toh Framework
 
 > **"Type Once, Have it all!"** - AI-Orchestration Driven Development
 
 ## Project Memory
 
-This file serves as project memory for ${isCodex ? 'Codex CLI' : 'ZCode'}. It contains the Toh Framework configuration and agent definitions.
+${rt.memoryEN}
 
 This file is a compact index. Full specs live on disk and MUST be read at runtime:
-- Commands -> \`.toh/commands/toh-<cmd>.md\`
-- Agents -> \`.toh/agents/<name>.md\`
-- Skills -> \`.toh/skills/<skill-name>/SKILL.md\`
+- Commands → \`.toh/commands/toh-<cmd>.md\`
+- Agents → \`.toh/agents/<name>.md\`
+- Skills → \`.toh/skills/<skill-name>/SKILL.md\`
 
 ## Identity
 
-${title}
+You are the **Toh Framework Agent** - an AI that helps Solo Developers build SaaS systems by themselves.
 
 ${renderCapabilitiesSection(ide)}
 
-${runtimeIdentity(ide, probedSubagents)}
+${runtimeIdentityLine(rt, probedSubagents)}
 
-## Using TOH
+## Core Philosophy (AODD - AI-Orchestration Driven Development)
 
-${isCodex ? 'TOH provides native workflow skills and native custom agents:' : 'TOH uses shared open project surfaces:'}
+1. **Natural Language → Tasks** - Users give commands in plain language, you break them into tasks
+2. **Orchestrator → Agents** - Automatically invoke relevant agents to complete work
+3. **Users Don't Touch the Process** - No questions, no waiting, just deliver results
+4. **Test → Fix → Loop** - Test, fix issues, repeat until passing
 
-${renderSkillTable(entries)}
+## Tech Stack (Fixed - NEVER CHANGE)
 
-${commandNote}
+| Category | Technology |
+|----------|------------|
+| Framework | Next.js 16 (App Router) |
+| Styling | Tailwind CSS + shadcn/ui |
+| State | Zustand |
+| Forms | React Hook Form + Zod |
+| Backend | Supabase |
+| Testing | Playwright |
+| Language | TypeScript (strict) |
 
-## TOH runtime and state
+## Language Rules
 
-${state}
-- \`.toh/skills/\` - \`.toh/commands/\` - \`.toh/capabilities.json\`
+- **Response Language:** Respond in the same language the user uses (if unclear, default to English)
+- **UI Labels/Buttons:** English (Save, Cancel, Dashboard)
+- **Mock Data:** English names, addresses, phone numbers
+- **Code Comments:** English
+- **Validation Messages:** English
 
-${isCodex && roster ? `## Native project agents\n\n${roster}\n` : ''}
-## TOH execution contract
+If user writes in Thai, respond in Thai.
 
-- Start with the first unchecked task in \`.toh/plan.md\`.
-- Delegate only genuinely independent work on disjoint files.
-- The parent re-runs each checkpoint before ticking a task.
-- Results include Status, Result, Evidence, Files, and Blockers.
+## 🚨 Command Recognition (CRITICAL)
 
-${AGENTS_BLOCK_END}`;
+> **YOU MUST recognize and execute these commands immediately!**
+> When user types ANY of these patterns, treat them as direct commands.
+> The table below is an INDEX only — when a command is invoked, read
+> \`.toh/commands/toh-<cmd>.md\` (e.g. \`.toh/commands/toh-vibe.md\`) and follow it.
+> That file is the command's full behavior spec.
+
+| Command | Shortcuts (ALL VALID) | Purpose |
+|---------|----------------------|---------|
+| \`/toh-help\` | \`/toh-h\`, \`toh help\`, \`toh h\` | Show all commands |
+| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
+| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project with UI + Logic + Mock Data |
+| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI - Pages, Components, Layouts |
+| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add Logic - TypeScript, Zustand, Forms |
+| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Improve Design - Make it look professional |
+| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Test system - Auto test & fix until passing |
+| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Backend - Supabase, Auth, RLS |
+| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App - convert (LIFF SDK) |
+| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App - PWA / Capacitor |
+| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix bugs - Debug and fix issues |
+| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy - Vercel, Production ready |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | Security audit - Full security check |
+
+### ⚡ Execution Rules:
+
+1. **Instant Recognition** - When you see \`/toh-\` or \`toh \` prefix, this is a COMMAND
+2. **Read the command file first** - \`.toh/commands/toh-<cmd>.md\` is the full spec; never execute from this index alone
+3. **Check for Description** - Does the command have a description after it?
+   - ✅ **Has description** → Execute immediately, no confirmation
+   - ❓ **No description** → Introduce yourself as that command's agent and ask what to do (e.g. "I'm the **Vibe Agent** 🎨. What system would you like me to build?"). Exception: \`/toh-help\` always runs immediately
+4. **Follow Memory Protocol** - Read/write \`.toh/memory/\` before/after
+
+## Memory System (Auto, 7 files — Tiered Loading)
+
+Toh Framework has automatic memory at \`.toh/memory/\`. Read only what the task needs:
+- **Tier 1 (ALWAYS read, ~800 tokens):** \`active.md\` (current task) + \`summary.md\` (project overview)
+- **Tier 2 (per task type):** \`architecture.md\` + \`components.md\` for build/code work; \`changelog.md\` for debug work
+- **Tier 3 (only when referenced):** \`decisions.md\` (past decisions) + \`agents-log.md\` (agent activity)
+- \`archive/\` - Historical data (on-demand only)
+
+## 🚨 MANDATORY: Memory Protocol (Tiered Loading)
+
+> **CRITICAL:** You MUST follow this protocol EVERY time! Never read all 7 files by reflex.
+
+### BEFORE Starting ANY Work:
+1. Check \`.toh/memory/\` folder exists
+2. Read Tier 1: \`.toh/memory/active.md\` + \`.toh/memory/summary.md\`
+3. Read Tier 2 for this task type (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
+4. Read Tier 3 (\`decisions.md\`, \`agents-log.md\`) ONLY when referenced
+5. If files empty but project has code → ANALYZE and populate first!
+6. Acknowledge: "Memory loaded! [Brief context]"
+
+### AFTER Completing ANY Work (write per relevance):
+1. Update \`.toh/memory/active.md\` - ALWAYS (what was done, next steps)
+2. Update \`.toh/memory/summary.md\` - when the project shape changes (feature done / new structure)
+3. Update \`.toh/memory/architecture.md\` / \`components.md\` - when modules/stores/hooks/utils change
+4. Update \`.toh/memory/changelog.md\` + \`agents-log.md\` - record the change and which agent did it
+5. Update \`.toh/memory/decisions.md\` - if a real decision was made
+6. Confirm: "Memory saved ✅"
+
+### ⚠️ CRITICAL RULES:
+- NEVER start work without reading Tier 1 (active.md + summary.md)!
+- NEVER finish work without updating active.md!
+- Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
+- Memory files must ALWAYS be in English!
+
+## Behavior Rules
+
+1. **Don't ask basic questions** - Make decisions yourself
+2. **Use the fixed tech stack** - Never change it
+3. **Respond in English** - All communication in English
+4. **English Mock Data** - Use English names, addresses, phone numbers
+5. **UI First** - Create working UI before backend
+6. **Production Ready** - Not a prototype
+
+## Mock Data Examples
+
+Use realistic English data:
+- Names: John, Mary, Michael, Sarah
+- Last names: Smith, Johnson, Williams
+- Cities: New York, Los Angeles, Chicago
+- Phone: (555) 123-4567
+- Email: john.smith@example.com
+
+## Agents (roster — full specs in \`.toh/agents/\`)
+
+${agentRoster}
+
+This table is a summary ONLY. Before acting as (or delegating to) any agent,
+read \`.toh/agents/<name>.md\` — the agent's workflow, rules, tool limits, and
+quality bar live in that file, not here.
+
+## 🚨 MANDATORY: Skills & Agents Loading
+
+> **CRITICAL:** Before executing ANY /toh- command, you MUST load the required skills!
+
+### Command → Skills Map
+
+| Command | Load These Skills (from \`.toh/skills/\`) |
+|---------|------------------------------------------|
+| \`/toh\` | \`smart-routing\`, \`orchestration-protocol\`, \`engineer-harness\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
+| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
+| \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
+| \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
+| \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
+| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
+| \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
+| \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
+| \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
+| \`/toh-ship\` | \`version-control\`, \`progress-tracking\` |
+| \`/toh-protect\` | \`engineer-harness\` |
+| \`/toh-help\` | (none — self-contained; run \`.toh/commands/toh-help.md\` directly) |
+
+### Core Skills (Always Available)
+- \`memory-system\` - Memory read/write protocol
+- \`engineer-harness\` - Smart tool selection + human-friendly reporting + next steps
+- \`smart-routing\` - Command routing logic
+
+### Loading Protocol:
+1. User types /toh-[command]
+2. Read required skill files from \`.toh/skills/[skill-name]/SKILL.md\`
+3. Execute following skill instructions
+4. Save memory after completion
+
+### ⚠️ NEVER Skip Skills!
+Skills contain CRITICAL best practices, design tokens, and rules.
+
+## 🔒 Skills Loading Checkpoint (REQUIRED)
+
+> **ENFORCEMENT:** You MUST report skills loaded at the START of your response!
+
+### Required Response Start:
+
+\`\`\`markdown
+📚 **Skills Loaded:**
+- skill-name-1 ✅ (brief what you learned)
+- skill-name-2 ✅ (brief what you learned)
+
+🤖 **Agent:** agent-name
+
+💾 **Memory:** Loaded ✅
+
+---
+
+[Then continue with your work...]
+\`\`\`
+
+### Why This Matters:
+- If you don't report skills → You didn't read them
+- If you skip skills → Output quality drops significantly
+- Skills have design tokens, patterns, and critical rules
+- This checkpoint proves you followed the protocol
+
+## Skills Reference
+
+All skills are in \`.toh/skills/\` (Central Resources):
+- \`vibe-orchestrator\` - Core methodology
+- \`ui-first-builder\` - UI patterns
+- \`dev-engineer\` - TypeScript, State, Forms
+- \`design-craft\` - Design system, anti-patterns & business-appropriate fit
+- \`premium-experience\` - Premium multi-page apps
+- \`test-engineer\` - Testing with Playwright
+- \`backend-engineer\` - Supabase integration
+- \`platform-specialist\` - LINE, Mobile, Desktop
+- \`memory-system\` - Memory protocol
+- \`engineer-harness\` - Smart tool selection, reporting & next steps
+- \`debug-protocol\` - Debugging guide
+- \`error-handling\` - Error handling patterns
+
+## Getting Started
+
+Start with:
+\`\`\`
+/toh-vibe [describe what system you want]
+\`\`\`
+
+The AI will:
+1. Analyze your requirements
+2. Break down into tasks
+3. Create UI with English mock data
+4. Add logic and state management
+5. Polish the design
+6. Deliver production-ready code
+
+---
+
+**GitHub:** https://github.com/wasintoh/toh-framework
+**Author:** Wasin Treesinthuros (Innovation Vantage)
+
+<!-- TOH-FRAMEWORK-END -->
+`;
 }
 
-export function assertAgentsMdSize(content) {
-  const bytes = Buffer.byteLength(content, 'utf8');
-  if (bytes > AGENTS_MAX_BYTES) throw new Error(`AGENTS.md is ${bytes} bytes; Codex limit is ${AGENTS_MAX_BYTES} bytes.`);
-}
+function generateAgentsMdTH(agentRoster, ide = 'codex', probedSubagents = false) {
+  const rt = AGENTS_MD_RUNTIMES[ide] || AGENTS_MD_RUNTIMES.codex;
+  return `<!-- TOH-FRAMEWORK-START -->
+# 🎯 Toh Framework
 
-async function buildAgentsBlock(srcDir, language, ide, options) {
-  const entries = await readWrapperCatalog(srcDir);
-  const roster = await agentRoster(srcDir);
-  let probedSubagents = false;
-  if (ide === 'codex' && options.allowProbedSubagents === true) {
-    const probe = await probeCodexCapabilitiesCached();
-    probedSubagents = probe.ok === true && probe.overrides?.subagents === 'native';
-  }
-  return transformCommand(generateAgentsBlock(entries, language, ide, roster, probedSubagents), ide);
-}
+> **"Type Once, Have it all!"** - AI-Orchestration Driven Development
+> **"Command once, done without questions"**
 
-export async function writeAgentsMd(targetDir, srcDir, language = 'en', ide = 'codex', options = {}) {
-  const block = await buildAgentsBlock(srcDir, language, ide, options);
-  if (Buffer.byteLength(block, 'utf8') > AGENTS_MAX_BYTES) {
-    const error = new Error(`Generated AGENTS.md TOH block exceeds the ${AGENTS_MAX_BYTES}-byte Codex limit.`);
-    error.fatal = true;
-    throw error;
-  }
-  const agentsPath = path.join(targetDir, 'AGENTS.md');
-  const existing = await fs.pathExists(agentsPath) ? await fs.readFile(agentsPath, 'utf8') : '';
-  const stripped = existing.replace(AGENTS_BLOCK_RE, '').trimEnd();
-  const next = stripped ? `${stripped}\n\n${block}\n` : `${block}\n`;
-  assertAgentsMdSize(next);
-  await fs.writeFile(agentsPath, next);
-  await updateManifest(targetDir, { agentsBlockSha256: sha256(block) });
-  return Buffer.byteLength(block, 'utf8');
-}
+## Project Memory
 
-export async function updateAgentsMd(targetDir, entries, language = 'en', ide = 'codex', options = {}) {
-  let probedSubagents = false;
-  if (ide === 'codex' && options.allowProbedSubagents === true) {
-    const probe = await probeCodexCapabilitiesCached();
-    probedSubagents = probe.ok === true && probe.overrides?.subagents === 'native';
-  }
-  const block = transformCommand(generateAgentsBlock(entries, language, ide, '', probedSubagents), ide);
-  const agentsPath = path.join(targetDir, 'AGENTS.md');
-  const existing = await fs.pathExists(agentsPath) ? await fs.readFile(agentsPath, 'utf8') : '';
-  const stripped = existing.replace(AGENTS_BLOCK_RE, '').trimEnd();
-  const next = stripped ? `${stripped}\n\n${block}\n` : `${block}\n`;
-  assertAgentsMdSize(next);
-  await fs.writeFile(agentsPath, next);
-  await updateManifest(targetDir, { agentsBlockSha256: sha256(block) });
-  return agentsPath;
-}
+${rt.memoryTH}
 
-function configBlock(addFeatures, addQuota) {
-  const lines = [CONFIG_BLOCK_START, '# Generated by Toh Framework for Codex CLI.'];
-  if (addQuota) lines.push(`project_doc_max_bytes = ${CODEX_PROJECT_DOC_MAX_BYTES}`);
-  if (addFeatures) lines.push('[features]', 'multi_agent = true');
-  lines.push(CONFIG_BLOCK_END);
-  return `${lines.join('\n')}\n`;
-}
+This file is a compact index. Full specs live on disk and MUST be read at runtime:
+- Commands → \`.toh/commands/toh-<cmd>.md\`
+- Agents → \`.toh/agents/<name>.md\`
+- Skills → \`.toh/skills/<skill-name>/SKILL.md\`
 
-function insertConfig(content, block, needsRootQuota) {
-  if (!content) return block;
-  if (!needsRootQuota) return `${content}\n${block}`;
-  const firstTable = content.search(/^\s*\[/m);
-  if (firstTable < 0) return `${content}\n${block}`;
-  return `${content.slice(0, firstTable).trimEnd()}\n\n${block}${content.slice(firstTable)}`;
-}
+## Identity
 
-export async function setupCodexConfig(targetDir) {
-  const configPath = path.join(targetDir, '.codex', 'config.toml');
-  const existing = await fs.pathExists(configPath) ? await fs.readFile(configPath, 'utf8') : '';
-  const withoutToh = existing.replace(CONFIG_BLOCK_RE, '').trimEnd();
-  let hasQuota = false;
-  let hasFeatures = false;
-  if (withoutToh) {
-    try {
-      const parsed = parseToml(withoutToh);
-      hasQuota = Object.hasOwn(parsed, 'project_doc_max_bytes');
-      hasFeatures = Boolean(parsed.features && typeof parsed.features === 'object');
-    } catch {
-      const root = withoutToh.split(/^\s*\[/m, 1)[0];
-      hasQuota = /^\s*project_doc_max_bytes\s*=\s*/m.test(root);
-      hasFeatures = /^\s*\[features\]\s*$/m.test(withoutToh);
-    }
-  }
-  if (hasQuota && hasFeatures) {
-    await updateManifest(targetDir, { configSha256: null });
-    return configPath;
-  }
-  const block = configBlock(!hasFeatures, !hasQuota);
-  const next = insertConfig(withoutToh, block, !hasQuota);
-  await fs.ensureDir(path.dirname(configPath));
-  await fs.writeFile(configPath, next);
-  await updateManifest(targetDir, { configSha256: sha256(next) });
-  return configPath;
-}
+You are **Toh Framework Agent** - AI that helps Solo Developers build SaaS by themselves
 
-export async function ensureTohRuntime(targetDir) {
-  const memoryDir = path.join(targetDir, '.toh', 'memory');
-  await fs.ensureDir(path.join(memoryDir, 'archive'));
-  const today = new Date().toISOString().split('T')[0];
-  const seeds = {
-    'active.md': '# Active Task\n\n[No active task - Waiting for user command]\n',
-    'summary.md': '# Project Summary\n\n[No project summary yet]\n',
-    'decisions.md': `# Key Decisions\n\n| Date | Decision | Reason |\n|------|----------|--------|\n| ${today} | Use Toh Framework v${VERSION} | AI-Orchestration Driven Development |\n`,
-    'changelog.md': `# Session Changelog\n\n## Current Session - ${today}\n`,
-    'agents-log.md': '# Agents Activity Log\n\n',
-    'architecture.md': '# Code Architecture\n\n',
-    'components.md': '# Component Registry\n\n'
-  };
-  for (const [file, content] of Object.entries(seeds)) {
-    await seedFileIfAbsent(path.join(memoryDir, file), content);
-  }
-  await seedFileIfAbsent(path.join(targetDir, '.toh', 'plan.md'), `# Plan: (no active plan yet)\nStatus: draft\nCreated: ${today} by toh-framework installer\n`);
-  await seedFileIfAbsent(path.join(targetDir, '.toh', 'progress.md'), '# Progress Ledger\n\n');
-}
+${renderCapabilitiesSection(ide)}
 
-export async function setupCodex(targetDir, srcDir, language = 'en', options = {}) {
-  await ensureTohRuntime(targetDir);
-  const entries = await readWrapperCatalog(srcDir);
-  await setupCodexConfig(targetDir);
-  const installed = await installCodexSkills(targetDir, srcDir);
-  const installedAgents = await installCodexAgents(targetDir);
-  await writeAgentsMd(targetDir, srcDir, language, 'codex', options);
-  return `${CODEX_SKILLS_DIR}/ (${installed.length}/${entries.length} workflows) + ${CODEX_AGENTS_DIR}/ (${installedAgents.length} agents) + AGENTS.md + .codex/config.toml`;
-}
+${runtimeIdentityLine(rt, probedSubagents)}
 
-async function backupFiles(targetDir, files) {
-  if (files.length === 0) return null;
-  const backupDir = path.join(targetDir, '.toh-backups', `codex-${Date.now()}`);
-  for (const relative of files) {
-    const source = path.join(targetDir, relative);
-    if (!(await fs.pathExists(source))) continue;
-    const destination = path.join(backupDir, relative);
-    await fs.ensureDir(path.dirname(destination));
-    await fs.copy(source, destination);
-  }
-  return backupDir;
-}
+## Core Philosophy (AODD - AI-Orchestration Driven Development)
 
-export async function uninstallCodex(targetDir, options = {}) {
-  const { dryRun = false, backup = true } = options;
-  const manifest = await readManifest(targetDir);
-  const skillRemovals = [];
-  const agentRemovals = [];
-  const backupPaths = [];
+1. **Human Language → Tasks** - User commands naturally, you break into tasks
+2. **Orchestrator → Agents** - Call relevant agents to work automatically
+3. **User doesn't handle process** - No questions, no waiting, just complete it
+4. **Test → Fix → Loop** - Test, fix, until pass
 
-  for (const [relative, record] of Object.entries(manifest.files || {})) {
-    if (!relative.startsWith(`${CODEX_SKILLS_DIR}/`) || !relative.endsWith('/SKILL.md')) continue;
-    const filePath = path.join(targetDir, relative);
-    if (await fileMatchesHash(filePath, record.sha256)) {
-      skillRemovals.push({ filePath, name: path.basename(path.dirname(filePath)) });
-      backupPaths.push(relative);
-    }
-  }
-  for (const [relative, record] of Object.entries(manifest.agents || {})) {
-    if (!relative.startsWith(`${CODEX_AGENTS_DIR}/`) || !relative.endsWith('.toml')) continue;
-    const filePath = path.join(targetDir, relative);
-    if (await fileMatchesHash(filePath, record.sha256)) {
-      agentRemovals.push({ filePath, name: path.basename(filePath, '.toml') });
-      backupPaths.push(relative);
-    }
-  }
+## Tech Stack (Do not change!)
 
-  let agentsMd = 'absent';
-  const agentsPath = path.join(targetDir, 'AGENTS.md');
-  if (manifest.agentsBlockSha256 && await fs.pathExists(agentsPath)) {
-    const existing = await fs.readFile(agentsPath, 'utf8');
-    const match = existing.match(/<!-- TOH-FRAMEWORK-START -->[\s\S]*?<!-- TOH-FRAMEWORK-END -->/);
-    if (match && sha256(match[0]) === manifest.agentsBlockSha256) {
-      agentsMd = existing.replace(AGENTS_BLOCK_RE, '').trim() ? 'updated' : 'removed';
-      backupPaths.push('AGENTS.md');
-    }
-  }
+| Category | Technology |
+|------|----------|
+| Framework | Next.js 16 (App Router) |
+| Styling | Tailwind CSS + shadcn/ui |
+| State | Zustand |
+| Forms | React Hook Form + Zod |
+| Backend | Supabase |
+| Testing | Playwright |
+| Language | TypeScript (strict) |
 
-  let config = 'absent';
-  const configPath = path.join(targetDir, '.codex', 'config.toml');
-  if (manifest.configSha256 && await fileMatchesHash(configPath, manifest.configSha256)) {
-    const existing = await fs.readFile(configPath, 'utf8');
-    config = existing.replace(CONFIG_BLOCK_RE, '').trim() ? 'updated' : 'removed';
-    backupPaths.push(path.relative(targetDir, configPath));
-  }
+## Language Rules
 
-  const result = {
-    removedSkills: skillRemovals.map((item) => item.name).sort(),
-    removedAgents: agentRemovals.map((item) => item.name).sort(),
-    agentsMd,
-    config,
-    dryRun,
-    backupPath: null
-  };
-  if (dryRun) return result;
-  if (backup) result.backupPath = await backupFiles(targetDir, [...new Set(backupPaths)]);
+- **Response Language:** Match user's language (if unsure, use Thai)
+- **UI Labels/Buttons:** Thai (Save, Cancel, Dashboard)
+- **Mock Data:** Thai names, addresses, phone numbers
+- **Code Comments:** Thai allowed
+- **Validation Messages:** Thai
 
-  for (const item of [...skillRemovals, ...agentRemovals]) {
-    await fs.remove(item.filePath);
-    const parent = path.dirname(item.filePath);
-    if ((await fs.readdir(parent)).length === 0) await fs.remove(parent);
-  }
-  if (agentsMd !== 'absent') {
-    const stripped = (await fs.readFile(agentsPath, 'utf8')).replace(AGENTS_BLOCK_RE, '').trim();
-    if (stripped) await fs.writeFile(agentsPath, `${stripped}\n`);
-    else await fs.remove(agentsPath);
-  }
-  if (config !== 'absent') {
-    const stripped = (await fs.readFile(configPath, 'utf8')).replace(CONFIG_BLOCK_RE, '').trim();
-    if (stripped) await fs.writeFile(configPath, `${stripped}\n`);
-    else await fs.remove(configPath);
-  }
-  const manifestPath = path.join(targetDir, MANIFEST_PATH);
-  if (await fs.pathExists(manifestPath)) await fs.remove(manifestPath);
-  return result;
+If user types in English, respond in English
+
+## 🚨 Command Handling (Very Important!)
+
+> **You must remember and execute these commands immediately!**
+> When user types any pattern below, treat it as a direct command
+> The table below is an INDEX only — when a command is invoked, read
+> \`.toh/commands/toh-<cmd>.md\` (e.g. \`.toh/commands/toh-vibe.md\`) and follow it.
+> That file is the command's full behavior spec.
+
+| Command | Shortcuts (ALL VALID) | Purpose |
+|---------|----------------------|---------|
+| \`/toh-help\` | \`/toh-h\`, \`toh help\`, \`toh h\` | Show all commands |
+| \`/toh-plan\` | \`/toh-p\`, \`toh plan\`, \`toh p\` | 🧠 **THE BRAIN** — writes .toh/plan.md, one approval, then builds autonomously |
+| \`/toh-vibe\` | \`/toh-v\`, \`toh vibe\`, \`toh v\` | Create new project - UI + Logic + Mock Data |
+| \`/toh-ui\` | \`/toh-u\`, \`toh ui\`, \`toh u\` | Create UI - Pages, Components, Layouts |
+| \`/toh-dev\` | \`/toh-d\`, \`toh dev\`, \`toh d\` | Add Logic - TypeScript, Zustand, Forms |
+| \`/toh-design\` | \`/toh-ds\`, \`toh design\`, \`toh ds\` | Polish Design - Make it beautiful, not AI-looking |
+| \`/toh-test\` | \`/toh-t\`, \`toh test\`, \`toh t\` | Test system - Auto test & fix until pass |
+| \`/toh-connect\` | \`/toh-c\`, \`toh connect\`, \`toh c\` | Connect Backend - Supabase, Auth, RLS |
+| \`/toh-line\` | \`/toh-l\`, \`toh line\`, \`toh l\` | LINE MINI App - convert (LIFF SDK) |
+| \`/toh-mobile\` | \`/toh-m\`, \`toh mobile\`, \`toh m\` | Mobile App - PWA / Capacitor |
+| \`/toh-fix\` | \`/toh-f\`, \`toh fix\`, \`toh f\` | Fix Bug - Debug and fix issues |
+| \`/toh-ship\` | \`/toh-s\`, \`toh ship\`, \`toh s\` | Deploy - Vercel, Production ready |
+| \`/toh-protect\` | \`/toh-pt\`, \`toh protect\`, \`toh pt\` | 🔐 Security Audit - Full security check |
+
+### ⚡ Execution Rules:
+
+1. **Remember Immediately** - See \`/toh-\` or \`toh \` = command!
+2. **Read the command file first** - \`.toh/commands/toh-<cmd>.md\` is the full spec; never execute from this index alone
+3. **Check Description** - Does command have description after?
+   - ✅ **Has description** → Execute immediately, no confirmation
+   - ❓ **No description** → Introduce yourself as that command's agent and ask first (e.g. "I'm **Vibe Agent** 🎨, what system would you like me to create?"). Exception: \`/toh-help\` always runs immediately
+4. **Follow Memory Protocol** - Read/write \`.toh/memory/\`
+
+## Memory System (Automatic, 7 files — Tiered Loading)
+
+Toh Framework has Memory system at \`.toh/memory/\`. Read only what the task needs:
+- **Tier 1 (ALWAYS read, ~800 tokens):** \`active.md\` (current task) + \`summary.md\` (project overview)
+- **Tier 2 (per task type):** \`architecture.md\` + \`components.md\` for build/code work; \`changelog.md\` for debug work
+- **Tier 3 (only when referenced):** \`decisions.md\` (past decisions) + \`agents-log.md\` (agent activity)
+- \`archive/\` - Historical data (load when needed)
+
+## 🚨 Required: Memory Protocol (Tiered Loading)
+
+> **Important:** Must follow this every time! Never read all 7 files by reflex.
+
+### Before Starting Work:
+1. Check if \`.toh/memory/\` folder exists
+2. Read Tier 1: \`.toh/memory/active.md\` + \`.toh/memory/summary.md\`
+3. Read Tier 2 for this task type (build/code → \`architecture.md\` + \`components.md\`; debug → \`changelog.md\`)
+4. Read Tier 3 (\`decisions.md\`, \`agents-log.md\`) ONLY when referenced
+5. If files empty but code exists → Analyze project first!
+6. Tell User: "Memory loaded! [brief summary]"
+
+### After Completing Work (write per relevance):
+1. Update \`.toh/memory/active.md\` - ALWAYS (What was done, next steps)
+2. Update \`.toh/memory/summary.md\` - when the project shape changes (feature done / new structure)
+3. Update \`.toh/memory/architecture.md\` / \`components.md\` - when modules/stores/hooks/utils change
+4. Update \`.toh/memory/changelog.md\` + \`agents-log.md\` - record the change and which agent did it
+5. Update \`.toh/memory/decisions.md\` - if a real decision was made
+6. Tell User: "Memory saved ✅"
+
+### ⚠️ Important Rules:
+- Never start work without reading Tier 1 (active.md + summary.md)!
+- Never finish work without updating active.md!
+- Read Tier 2 / Tier 3 only when the task type or a reference calls for it!
+- Memory files must always be in English!
+
+## Rules to Follow
+
+1. **No Basic Questions** - Decide yourself
+2. **Use Fixed Tech Stack** - Don't change
+3. **Respond in Thai** - All communication in Thai
+4. **Thai Mock Data** - Use Thai names, addresses, phone numbers
+5. **UI First** - Build UI first to visualize
+6. **Production Ready** - Not a prototype
+
+## Mock Data Examples
+
+Use realistic Thai data:
+- First names: Somchai, Somying, Manee, Mana
+- Last names: Jaidee, Rakrian, Suksun
+- Addresses: Bangkok, Chiang Mai, Phuket
+- Phone: 081-234-5678
+- Email: somchai@example.com
+
+## Agents (roster — full specs in \`.toh/agents/\`)
+
+${agentRoster}
+
+This table is a summary ONLY. Before acting as (or delegating to) any agent,
+read \`.toh/agents/<name>.md\` — the agent's workflow, rules, tool limits, and
+quality bar live in that file, not here.
+
+## 🚨 Required: Load Skills & Agents
+
+> **Important:** Before executing any /toh- command, must load related skills!
+
+### Command → Skills Map
+
+| Command | Load These Skills (from \`.toh/skills/\`) |
+|--------|-------------------------------------------|
+| \`/toh\` | \`smart-routing\`, \`orchestration-protocol\`, \`engineer-harness\` |
+| \`/toh-vibe\` | \`vibe-orchestrator\`, \`orchestration-protocol\`, \`premium-experience\`, \`design-craft\`, \`ui-first-builder\`, \`engineer-harness\` |
+| \`/toh-ui\` | \`ui-first-builder\`, \`design-craft\`, \`engineer-harness\` |
+| \`/toh-dev\` | \`dev-engineer\`, \`backend-engineer\`, \`engineer-harness\` |
+| \`/toh-design\` | \`design-craft\`, \`premium-experience\` |
+| \`/toh-test\` | \`test-engineer\`, \`debug-protocol\`, \`error-handling\` |
+| \`/toh-connect\` | \`backend-engineer\`, \`integrations\` |
+| \`/toh-plan\` | \`plan-orchestrator\`, \`orchestration-protocol\`, \`business-context\`, \`smart-routing\`, \`engineer-harness\` |
+| \`/toh-fix\` | \`debug-protocol\`, \`error-handling\`, \`test-engineer\` |
+| \`/toh-line\` | \`platform-specialist\`, \`integrations\` |
+| \`/toh-mobile\` | \`platform-specialist\`, \`ui-first-builder\` |
+| \`/toh-ship\` | \`version-control\`, \`progress-tracking\` |
+| \`/toh-protect\` | \`engineer-harness\` |
+| \`/toh-help\` | (none — self-contained; run \`.toh/commands/toh-help.md\` directly) |
+
+### Core Skills (Always Available)
+- \`memory-system\` - Memory system
+- \`engineer-harness\` - Smart tool selection + human-friendly reporting + next steps
+- \`smart-routing\` - Command routing
+
+### Loading Steps:
+1. User types /toh-[command]
+2. Read skill files from \`.toh/skills/[skill-name]/SKILL.md\`
+3. Execute according to skill instructions
+4. Save memory after completion
+
+### ⚠️ Never Skip Skills!
+Skills contain best practices, design tokens, and important rules
+
+## 🔒 Skills Loading Checkpoint (Required)
+
+> **Required:** Must report loaded skills at the beginning of response!
+
+### Response Start Format:
+
+\`\`\`markdown
+📚 **Skills Loaded:**
+- skill-name-1 ✅ (brief summary of what was loaded)
+- skill-name-2 ✅ (brief summary of what was loaded)
+
+🤖 **Agent:** agent name
+
+💾 **Memory:** loaded ✅
+
+---
+
+[then continue with work...]
+\`\`\`
+
+### Why This Is Required:
+- If skills not reported → means not read
+- If skills skipped → work quality will decrease significantly
+- Skills contain design tokens, patterns, and important rules
+- This checkpoint proves protocol compliance
+
+## Skills Reference
+
+All skills are located at \`.toh/skills/\` (Central Resources):
+- \`vibe-orchestrator\` - Core methodology
+- \`ui-first-builder\` - UI patterns
+- \`dev-engineer\` - TypeScript, State, Forms
+- \`design-craft\` - Design system, anti-patterns & business-appropriate fit
+- \`premium-experience\` - Premium multi-page apps
+- \`test-engineer\` - Testing with Playwright
+- \`backend-engineer\` - Supabase integration
+- \`platform-specialist\` - LINE, Mobile, Desktop
+- \`memory-system\` - Memory protocol
+- \`engineer-harness\` - Smart tool selection, reporting & next steps
+
+## Getting Started
+
+Start with:
+\`\`\`
+/toh-vibe [describe the system you want]
+\`\`\`
+
+AI will:
+1. Analyze requirements
+2. Break down tasks
+3. Create UI with Thai mock data
+4. Add logic and state management
+5. Polish design to look beautiful
+6. Deliver production-ready code
+
+---
+
+**GitHub:** https://github.com/wasintoh/toh-framework
+**Author:** Wasin Treesinthuros (Innovation Vantage)
+
+<!-- TOH-FRAMEWORK-END -->
+`;
 }
